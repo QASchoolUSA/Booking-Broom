@@ -1,0 +1,63 @@
+{
+  "primitive": {
+    "color": {
+      "blue": {
+        "500": "#0284C7",
+        "400": "#0EA5E9"
+      },
+      "green": {
+        "600": "#059669"
+      },
+      "purple": {
+        "500": "#8B5CF6"
+      },
+      "slate": {
+        "900": "#0F172A",
+        "500": "#64748B",
+        "200": "#E0F0F8",
+        "50": "#F0F9FF"
+      },
+      "red": {
+        "600": "#DC2626"
+      },
+      "amber": {
+        "500": "#F59E0B"
+      }
+    },
+    "radius": {
+      "sm": "0.375rem",
+      "md": "0.5rem",
+      "lg": "0.75rem",
+      "xl": "1rem"
+    },
+    "spacing": {
+      "safe-top": "env(safe-area-inset-top, 0px)",
+      "safe-bottom": "env(safe-area-inset-bottom, 0px)",
+      "safe-left": "env(safe-area-inset-left, 0px)",
+      "safe-right": "env(safe-area-inset-right, 0px)"
+    }
+  },
+  "semantic": {
+    "color": {
+      "primary": "{primitive.color.blue.500}",
+      "primary-foreground": "#FFFFFF",
+      "success": "{primitive.color.green.600}",
+      "background": "{primitive.color.slate.50}",
+      "foreground": "{primitive.color.slate.900}",
+      "muted-foreground": "{primitive.color.slate.500}",
+      "border": "{primitive.color.slate.200}",
+      "card": "#FFFFFF",
+      "destructive": "{primitive.color.red.600}"
+    }
+  },
+  "component": {
+    "bookingCard": {
+      "radius": "{primitive.radius.lg}",
+      "padding": "1rem"
+    },
+    "bottomNav": {
+      "height": "4rem",
+      "touchTarget": "2.75rem"
+    }
+  }
+}
