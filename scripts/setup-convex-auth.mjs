@@ -1,6 +1,7 @@
 /**
  * Generates JWT keys for @convex-dev/auth and sets Convex env vars.
  * Run: node scripts/setup-convex-auth.mjs [site-url]
+ * Production: node scripts/setup-convex-auth.mjs https://bookings.kedrik.com
  */
 import { execSync } from "child_process";
 import { exportJWK, exportPKCS8, generateKeyPair } from "jose";

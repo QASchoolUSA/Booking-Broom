@@ -1,7 +1,9 @@
 import type { MetadataRoute } from "next";
+import { APP_URL } from "@/lib/app-url";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: APP_URL,
     name: "Booking Broom",
     short_name: "Booking Broom",
     description: "Manager dashboard for cleaning site bookings",
