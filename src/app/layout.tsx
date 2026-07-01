@@ -1,14 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { APP_URL } from "@/lib/app-url";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const inter = Inter({
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-sans",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -51,11 +52,11 @@ export default function RootLayout({
 }>) {
   return (
     <ConvexAuthNextjsServerProvider>
-      <html lang="en" className={`${inter.variable} h-full`}>
+      <html lang="en" className={`${jakarta.variable} h-full`}>
         <body className="min-h-full font-sans antialiased">
           <ConvexClientProvider>
             {children}
-            <Toaster richColors position="top-center" />
+            <Toaster richColors position="top-center" closeButton />
           </ConvexClientProvider>
         </body>
       </html>

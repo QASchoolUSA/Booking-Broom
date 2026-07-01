@@ -10,16 +10,16 @@ export function SiteBadge({ site, className }: SiteBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex max-w-[140px] items-center truncate rounded-md border px-2 py-0.5 text-[11px] font-semibold leading-none",
         className
       )}
       style={{
-        backgroundColor: `${site.accent_color}18`,
-        borderColor: `${site.accent_color}40`,
+        backgroundColor: `${site.accent_color}14`,
+        borderColor: `${site.accent_color}35`,
         color: site.accent_color,
       }}
     >
-      {site.name}
+      {site.name.replace(" Cleaning", "")}
     </span>
   );
 }

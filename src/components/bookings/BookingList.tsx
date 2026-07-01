@@ -23,8 +23,10 @@ export function BookingList({
 }: BookingListProps) {
   const grouped = useMemo(() => {
     const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
     const groups: { label: string; items: BookingWithSite[] }[] = [
       { label: "Today", items: [] },
+      { label: "Yesterday", items: [] },
       { label: "Earlier", items: [] },
     ];
 
@@ -32,8 +34,10 @@ export function BookingList({
       const date = new Date(booking.created_at).toDateString();
       if (date === today) {
         groups[0].items.push(booking);
-      } else {
+      } else if (date === yesterday) {
         groups[1].items.push(booking);
+      } else {
+        groups[2].items.push(booking);
       }
     });
 
@@ -42,9 +46,9 @@ export function BookingList({
 
   if (loading) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-40 w-full rounded-xl" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-[148px] w-full rounded-xl" />
         ))}
       </div>
     );
@@ -52,12 +56,12 @@ export function BookingList({
 
   if (bookings.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card px-6 py-16 text-center">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-100 text-sky-600 dark:bg-sky-950 dark:text-sky-400">
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-card px-6 py-16 text-center shadow-sm">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <Broom size={28} weight="duotone" />
         </div>
-        <h3 className="text-lg font-semibold">{emptyTitle}</h3>
-        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+        <h3 className="text-base font-semibold">{emptyTitle}</h3>
+        <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">
           {emptyDescription}
         </p>
       </div>
@@ -68,10 +72,14 @@ export function BookingList({
     <div className="space-y-6">
       {grouped.map((group) => (
         <section key={group.label}>
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-            {group.label}
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          <div className="mb-3 flex items-center gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              {group.label}
+            </h3>
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs tabular-nums text-muted-foreground">{group.items.length}</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {group.items.map((booking) => (
               <BookingCard
                 key={booking.id}

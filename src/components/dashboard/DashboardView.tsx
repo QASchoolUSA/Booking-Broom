@@ -1,16 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlass, ArrowsClockwise } from "@phosphor-icons/react";
 import { useBookings } from "@/lib/hooks/useBookings";
-import type { BookingWithSite } from "@/lib/types";
+import type { BookingStatus, BookingWithSite } from "@/lib/types";
 import { AppShell } from "@/components/layout/AppShell";
 import { SiteFilter } from "@/components/layout/SiteFilter";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
+import { StatsCards } from "@/components/dashboard/StatsCards";
 import { BookingList } from "@/components/bookings/BookingList";
 import { BookingDetailSheet } from "@/components/bookings/BookingDetailSheet";
 import { DevSeedTool } from "@/components/bookings/DevSeedTool";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface DashboardViewProps {
   siteSlug?: string;
@@ -18,6 +21,15 @@ interface DashboardViewProps {
   emptyTitle?: string;
   emptyDescription?: string;
 }
+
+const STATUS_FILTERS: { value: BookingStatus | "all"; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "new", label: "New" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "assigned", label: "Assigned" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 export function DashboardView({
   siteSlug,
@@ -38,20 +50,31 @@ export function DashboardView({
   } = useBookings(siteSlug);
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">("all");
   const [selected, setSelected] = useState<BookingWithSite | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return bookings;
-    const q = search.toLowerCase();
-    return bookings.filter(
-      (b) =>
-        b.customer_name.toLowerCase().includes(q) ||
-        b.phone?.toLowerCase().includes(q) ||
-        b.email?.toLowerCase().includes(q) ||
-        b.service_type.toLowerCase().includes(q)
-    );
-  }, [bookings, search]);
+    let result = bookings;
+
+    if (statusFilter !== "all") {
+      result = result.filter((b) => b.status === statusFilter);
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (b) =>
+          b.customer_name.toLowerCase().includes(q) ||
+          b.phone?.toLowerCase().includes(q) ||
+          b.email?.toLowerCase().includes(q) ||
+          b.service_type.toLowerCase().includes(q) ||
+          b.address?.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [bookings, search, statusFilter]);
 
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -62,65 +85,131 @@ export function DashboardView({
     return map;
   }, [allBookings]);
 
-  const newCount = allBookings.filter((b) => b.status === "new").length;
+  const newCount = bookings.filter((b) => b.status === "new").length;
 
   return (
     <AppShell
       connectionState={connectionState}
       onRefresh={refresh}
+      pageTitle={title}
       sidebar={<SiteSidebar sites={sites} counts={counts} totalCount={allBookings.length} />}
     >
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
-            <p className="text-sm text-muted-foreground">
+      <div className="space-y-5 md:space-y-6">
+        {/* Page header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="hidden min-w-0 md:block">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               {newCount > 0
                 ? `${newCount} new booking${newCount === 1 ? "" : "s"} need attention`
-                : "All caught up"}
+                : "All caught up — no new bookings"}
             </p>
           </div>
-          <DevSeedTool sites={sites} onCreated={refresh} />
+          <div className="flex items-center gap-2 sm:shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden h-9 gap-2 sm:inline-flex"
+              onClick={refresh}
+            >
+              <ArrowsClockwise size={16} />
+              Refresh
+            </Button>
+            <DevSeedTool sites={sites} onCreated={refresh} />
+          </div>
         </div>
 
+        <StatsCards bookings={bookings} />
+
+        {/* Mobile site filter */}
         <div className="md:hidden">
-          <SiteFilter
-            sites={sites}
-            counts={counts}
-            totalCount={allBookings.length}
-          />
+          <SiteFilter sites={sites} counts={counts} totalCount={allBookings.length} />
         </div>
 
-        <div className="relative">
-          <MagnifyingGlass
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            placeholder="Search by name, phone, or service…"
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            className="min-h-11 pl-10"
-          />
+        {/* Toolbar: search + status filters */}
+        <div className="space-y-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4">
+          <div className="relative">
+            <MagnifyingGlass
+              size={18}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              placeholder="Search name, phone, email, service…"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              className="h-10 border-0 bg-muted/50 pl-10 shadow-none focus-visible:ring-1"
+            />
+          </div>
+
+          <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
+            {STATUS_FILTERS.map(({ value, label }) => {
+              const count =
+                value === "all"
+                  ? bookings.length
+                  : bookings.filter((b) => b.status === value).length;
+
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setStatusFilter(value)}
+                  className={cn(
+                    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors",
+                    statusFilter === value
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {label}
+                  <span
+                    className={cn(
+                      "rounded px-1 py-px text-[10px] font-bold tabular-nums",
+                      statusFilter === value ? "text-primary-foreground/80" : "text-muted-foreground"
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-            {error}. Check your Supabase connection and try refreshing.
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200"
+          >
+            <span className="font-medium">Connection error.</span>
+            <span>{error}. Try refreshing.</span>
           </div>
         )}
 
         {connectionState === "offline" && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            You&apos;re offline. Showing cached data. Reconnecting when back online.
+          <div
+            role="status"
+            className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+          >
+            <span className="font-medium">Offline</span>
+            <span className="text-amber-800 dark:text-amber-300">
+              — showing cached data. Reconnecting when back online.
+            </span>
           </div>
         )}
 
         <BookingList
           bookings={filtered}
           loading={loading}
-          emptyTitle={emptyTitle}
-          emptyDescription={emptyDescription}
+          emptyTitle={
+            search || statusFilter !== "all"
+              ? "No matching bookings"
+              : emptyTitle
+          }
+          emptyDescription={
+            search || statusFilter !== "all"
+              ? "Try adjusting your search or filters."
+              : emptyDescription
+          }
           onSelect={(booking) => {
             setSelected(booking);
             setSheetOpen(true);

@@ -21,6 +21,7 @@ interface AppShellProps {
   sidebar?: React.ReactNode;
   connectionState?: ConnectionState;
   onRefresh?: () => void;
+  pageTitle?: string;
 }
 
 export function AppShell({
@@ -28,6 +29,7 @@ export function AppShell({
   sidebar,
   connectionState = "connecting",
   onRefresh,
+  pageTitle,
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -46,99 +48,148 @@ export function AppShell({
     reconnecting: "Reconnecting…",
   }[connectionState];
 
+  const isLive = connectionState === "live";
+
+  const navItems = [
+    { href: "/", label: "Bookings", icon: CalendarBlank, match: (p: string) => p === "/" || p.startsWith("/sites") },
+    { href: "/settings", label: "Settings", icon: GearSix, match: (p: string) => p === "/settings" },
+  ];
+
   return (
-    <div className="flex min-h-dvh flex-col bg-[#F0F9FF] dark:bg-background">
-      {/* Header */}
-      <header
-        className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
-        style={{
-          paddingTop: "max(0.75rem, env(safe-area-inset-top))",
-        }}
-      >
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 md:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-600 text-white">
+    <div className="dashboard-bg flex min-h-dvh">
+      {/* Desktop sidebar */}
+      {sidebar && (
+        <aside
+          className="fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col border-r border-sidebar-border bg-sidebar md:flex"
+          style={{ paddingTop: "env(safe-area-inset-top)" }}
+        >
+          <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
               <Broom size={20} weight="duotone" />
             </div>
-            <div>
-              <h1 className="text-base font-bold leading-tight">Booking Broom</h1>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold tracking-tight text-sidebar-foreground">
+                Booking Broom
+              </p>
               <button
                 type="button"
                 onClick={onRefresh}
                 className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
               >
-                {connectionState === "live" ? (
-                  <WifiHigh size={14} weight="duotone" className="text-emerald-600" />
+                {isLive ? (
+                  <WifiHigh size={12} weight="duotone" className="text-emerald-600" />
                 ) : (
-                  <WifiSlash size={14} weight="duotone" className="text-amber-600" />
+                  <WifiSlash size={12} weight="duotone" className="text-amber-600" />
                 )}
-                <span
-                  className={cn(
-                    connectionState === "live" && "text-emerald-600",
-                    connectionState === "offline" && "text-amber-600"
-                  )}
-                >
+                <span className={cn(isLive && "text-emerald-600", connectionState === "offline" && "text-amber-600")}>
                   {connectionLabel}
                 </span>
-                {connectionState === "live" && (
-                  <span className="relative flex h-2 w-2">
+                {isLive && (
+                  <span className="relative ml-0.5 flex h-1.5 w-1.5">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   </span>
                 )}
               </button>
             </div>
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden md:flex"
-            onClick={handleSignOut}
-            aria-label="Sign out"
-          >
-            <SignOut size={20} />
-          </Button>
-        </div>
-      </header>
+          <div className="flex-1 overflow-y-auto px-3 py-4">{sidebar}</div>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 py-4 md:px-6 md:py-6">
-        {/* Tablet/Desktop sidebar */}
-        {sidebar && (
-          <aside className="hidden w-56 shrink-0 md:block lg:w-64">
-            <div className="sticky top-24 rounded-2xl border bg-card p-4 shadow-sm">
-              {sidebar}
+          <div className="shrink-0 border-t border-sidebar-border p-3">
+            <Button
+              variant="ghost"
+              className="h-10 w-full justify-start gap-2.5 px-3 text-muted-foreground hover:text-foreground"
+              onClick={handleSignOut}
+            >
+              <SignOut size={18} />
+              Sign out
+            </Button>
+          </div>
+        </aside>
+      )}
+
+      {/* Main column */}
+      <div className={cn("flex min-w-0 flex-1 flex-col", sidebar && "md:pl-[260px]")}>
+        {/* Mobile header */}
+        <header
+          className="sticky top-0 z-20 border-b border-border/80 bg-card/90 backdrop-blur-md md:hidden"
+          style={{ paddingTop: "env(safe-area-inset-top)" }}
+        >
+          <div className="flex h-14 items-center justify-between gap-3 px-4">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Broom size={16} weight="duotone" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="truncate text-sm font-bold leading-tight">
+                  {pageTitle ?? "Booking Broom"}
+                </h1>
+                <button
+                  type="button"
+                  onClick={onRefresh}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground"
+                >
+                  {isLive ? (
+                    <WifiHigh size={11} weight="duotone" className="text-emerald-600" />
+                  ) : (
+                    <WifiSlash size={11} weight="duotone" className="text-amber-600" />
+                  )}
+                  <span className={cn(isLive && "text-emerald-600")}>{connectionLabel}</span>
+                </button>
+              </div>
             </div>
-          </aside>
+          </div>
+        </header>
+
+        {/* Desktop top bar (when no sidebar context like settings) */}
+        {!sidebar && (
+          <header
+            className="sticky top-0 z-20 hidden border-b border-border/80 bg-card/90 backdrop-blur-md md:flex"
+            style={{ paddingTop: "env(safe-area-inset-top)" }}
+          >
+            <div className="flex h-14 w-full items-center justify-between px-6 lg:px-8">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Broom size={20} weight="duotone" />
+                </div>
+                <span className="text-sm font-bold">Booking Broom</span>
+              </div>
+              <Button variant="ghost" size="sm" className="gap-2" onClick={handleSignOut}>
+                <SignOut size={18} />
+                Sign out
+              </Button>
+            </div>
+          </header>
         )}
 
-        <main className="min-w-0 flex-1 pb-24 md:pb-6">{children}</main>
+        <main
+          className="flex-1 px-4 py-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:px-6 md:py-6 md:pb-6 lg:px-8"
+        >
+          <div className="mx-auto w-full max-w-6xl">{children}</div>
+        </main>
       </div>
 
       {/* Mobile bottom nav */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur md:hidden"
-        style={{
-          paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
-        }}
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur-md md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto flex max-w-lg items-stretch justify-around px-2 pt-2">
-          {[
-            { href: "/", label: "Bookings", icon: CalendarBlank },
-            { href: "/settings", label: "Settings", icon: GearSix },
-          ].map(({ href, label, icon: Icon }) => {
-            const isActive =
-              href === "/" ? pathname === "/" || pathname.startsWith("/sites") : pathname === href;
-
+        <div className="mx-auto flex max-w-lg items-stretch px-2 pt-1.5">
+          {navItems.map(({ href, label, icon: Icon, match }) => {
+            const isActive = match(pathname);
             return (
               <Link
                 key={href}
                 href={href}
                 className={cn(
-                  "flex min-h-11 min-w-16 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
-                  isActive ? "text-sky-600" : "text-muted-foreground"
+                  "relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                  isActive ? "text-primary" : "text-muted-foreground"
                 )}
               >
+                {isActive && (
+                  <span className="absolute inset-x-3 top-0 h-0.5 rounded-full bg-primary" />
+                )}
                 <Icon size={22} weight={isActive ? "duotone" : "regular"} />
                 {label}
               </Link>
@@ -147,7 +198,7 @@ export function AppShell({
           <button
             type="button"
             onClick={handleSignOut}
-            className="flex min-h-11 min-w-16 flex-1 flex-col items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 text-[10px] font-semibold text-muted-foreground transition-colors active:text-foreground"
           >
             <SignOut size={22} />
             Sign out

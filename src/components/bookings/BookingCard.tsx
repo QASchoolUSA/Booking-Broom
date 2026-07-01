@@ -1,11 +1,10 @@
 "use client";
 
 import { format, formatDistanceToNow, parseISO } from "date-fns";
-import { CalendarBlank, Clock, MapPin, User } from "@phosphor-icons/react";
+import { CalendarBlank, MapPin, Phone, User } from "@phosphor-icons/react";
 import type { BookingWithSite } from "@/lib/types";
 import { SiteBadge } from "@/components/bookings/SiteBadge";
 import { StatusBadge } from "@/components/bookings/StatusBadge";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 interface BookingCardProps {
@@ -18,10 +17,11 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
   const isNew = booking.status === "new";
 
   return (
-    <Card
+    <article
       className={cn(
-        "cursor-pointer transition-all duration-200 hover:shadow-md active:scale-[0.99]",
-        isNew && "border-sky-300 ring-1 ring-sky-200 dark:border-sky-700 dark:ring-sky-900",
+        "group relative flex cursor-pointer flex-col rounded-xl border bg-card p-4 shadow-sm transition-all duration-150",
+        "hover:border-primary/20 hover:shadow-md active:scale-[0.99]",
+        isNew && "border-sky-300/80 bg-sky-50/30 dark:border-sky-700/60 dark:bg-sky-950/20",
         className
       )}
       onClick={() => onSelect(booking)}
@@ -34,49 +34,57 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
         }
       }}
     >
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {booking.site && <SiteBadge site={booking.site} />}
-              <StatusBadge status={booking.status} />
-            </div>
-            <h3 className="flex items-center gap-2 truncate text-base font-semibold">
-              <User size={18} weight="duotone" className="shrink-0 text-muted-foreground" />
+      {isNew && (
+        <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-sky-500 ring-4 ring-sky-500/20" />
+      )}
+
+      <div className="flex items-start justify-between gap-3 pr-4">
+        <div className="min-w-0 flex-1 space-y-2.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {booking.site && <SiteBadge site={booking.site} />}
+            <StatusBadge status={booking.status} />
+          </div>
+
+          <div>
+            <h3 className="flex items-center gap-2 truncate text-[15px] font-semibold leading-snug">
+              <User size={16} weight="duotone" className="shrink-0 text-muted-foreground" />
               {booking.customer_name}
             </h3>
-            <p className="text-sm text-muted-foreground">{booking.service_type}</p>
+            <p className="mt-0.5 truncate text-sm text-muted-foreground">{booking.service_type}</p>
           </div>
-          <time
-            className="shrink-0 text-xs text-muted-foreground"
-            dateTime={booking.created_at}
-          >
-            {formatDistanceToNow(parseISO(booking.created_at), { addSuffix: true })}
-          </time>
         </div>
 
-        <div className="mt-3 grid gap-1.5 text-sm text-muted-foreground">
-          {booking.preferred_date && (
-            <p className="flex items-center gap-2">
-              <CalendarBlank size={16} className="shrink-0" />
-              {format(parseISO(booking.preferred_date), "MMM d, yyyy")}
-              {booking.preferred_time && ` · ${booking.preferred_time}`}
-            </p>
-          )}
-          {booking.address && (
-            <p className="flex items-start gap-2 line-clamp-2">
-              <MapPin size={16} className="mt-0.5 shrink-0" />
-              {booking.address}
-            </p>
-          )}
-          {booking.phone && (
-            <p className="flex items-center gap-2">
-              <Clock size={16} className="shrink-0" />
-              {booking.phone}
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        <time
+          className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground"
+          dateTime={booking.created_at}
+        >
+          {formatDistanceToNow(parseISO(booking.created_at), { addSuffix: true })}
+        </time>
+      </div>
+
+      <div className="mt-3 space-y-1.5 border-t border-border/60 pt-3 text-[13px] text-muted-foreground">
+        {booking.preferred_date && (
+          <p className="flex items-center gap-2 truncate">
+            <CalendarBlank size={15} className="shrink-0 opacity-70" />
+            {format(parseISO(booking.preferred_date), "MMM d, yyyy")}
+            {booking.preferred_time && (
+              <span className="text-muted-foreground/70">· {booking.preferred_time}</span>
+            )}
+          </p>
+        )}
+        {booking.address && (
+          <p className="flex items-start gap-2 line-clamp-1">
+            <MapPin size={15} className="mt-0.5 shrink-0 opacity-70" />
+            <span className="truncate">{booking.address}</span>
+          </p>
+        )}
+        {booking.phone && (
+          <p className="flex items-center gap-2 truncate">
+            <Phone size={15} className="shrink-0 opacity-70" />
+            {booking.phone}
+          </p>
+        )}
+      </div>
+    </article>
   );
 }

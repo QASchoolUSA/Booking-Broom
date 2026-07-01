@@ -98,14 +98,14 @@ export function DevSeedTool({ sites, onCreated }: DevSeedToolProps) {
         <Flask size={16} weight="duotone" />
         Test booking
       </Button>
-      <SheetContent side="bottom" className="rounded-t-2xl">
-        <SheetHeader>
+      <SheetContent side="bottom" className="rounded-t-2xl px-5 pb-8">
+        <SheetHeader className="text-left">
           <SheetTitle>Create test booking</SheetTitle>
           <SheetDescription>
             Simulates a booking from one of your cleaning sites. Development only.
           </SheetDescription>
         </SheetHeader>
-        <div className="mt-4 space-y-4">
+        <div className="mt-5 space-y-4">
           <div className="space-y-2">
             <Label>Site</Label>
             <Select value={siteSlug} onValueChange={(v) => v && setSiteSlug(v)}>

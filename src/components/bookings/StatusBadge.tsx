@@ -2,15 +2,15 @@ import type { BookingStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<BookingStatus, string> = {
-  new: "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800",
+  new: "bg-sky-100 text-sky-800 border-sky-200/80 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800",
   confirmed:
-    "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
+    "bg-emerald-100 text-emerald-800 border-emerald-200/80 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
   assigned:
-    "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800",
+    "bg-violet-100 text-violet-800 border-violet-200/80 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800",
   completed:
-    "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    "bg-slate-100 text-slate-600 border-slate-200/80 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
   cancelled:
-    "bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800",
+    "bg-red-100 text-red-700 border-red-200/80 dark:bg-red-950 dark:text-red-300 dark:border-red-800",
 };
 
 const statusLabels: Record<BookingStatus, string> = {
@@ -30,7 +30,7 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold leading-none",
         statusStyles[status],
         className
       )}
