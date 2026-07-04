@@ -89,6 +89,21 @@ export const updateInternalNotes = mutation({
   },
 });
 
+export const remove = mutation({
+  args: {
+    bookingId: v.id("bookings"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) throw new Error("Booking not found");
+
+    await ctx.db.delete(args.bookingId);
+  },
+});
+
 export const createPublic = mutation({
   args: {
     siteSlug: v.string(),
