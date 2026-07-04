@@ -7,6 +7,7 @@ import {
   Envelope,
   MapPin,
   Phone,
+  Trash,
   User,
 } from "@phosphor-icons/react";
 import type { BookingWithSite, BookingStatus } from "@/lib/types";
@@ -38,6 +39,7 @@ interface BookingDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   onStatusChange: (id: string, status: BookingStatus) => Promise<void>;
   onNotesChange: (id: string, notes: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }
 
 function DetailRow({
@@ -68,8 +70,10 @@ export function BookingDetailSheet({
   onOpenChange,
   onStatusChange,
   onNotesChange,
+  onDelete,
 }: BookingDetailSheetProps) {
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
 
   useEffect(() => {
@@ -77,6 +81,12 @@ export function BookingDetailSheet({
       setInternalNotes(booking.internal_notes ?? "");
     }
   }, [booking]);
+
+  useEffect(() => {
+    if (!open) {
+      setConfirmDelete(false);
+    }
+  }, [open]);
 
   if (!booking) return null;
 
@@ -101,6 +111,20 @@ export function BookingDetailSheet({
       toast.error(e instanceof Error ? e.message : "Failed to save notes");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setSaving(true);
+    try {
+      await onDelete(booking.id);
+      toast.success("Booking deleted");
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete booking");
+    } finally {
+      setSaving(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -219,7 +243,7 @@ export function BookingDetailSheet({
           </section>
 
           {/* Quick actions */}
-          <div className="grid grid-cols-2 gap-2 pb-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
               className="h-11"
@@ -237,6 +261,48 @@ export function BookingDetailSheet({
               Cancel
             </Button>
           </div>
+
+          <Separator />
+
+          <section>
+            {confirmDelete ? (
+              <div className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+                <p className="text-sm leading-relaxed">
+                  Permanently delete{" "}
+                  <span className="font-medium">{booking.customer_name}</span>
+                  &apos;s booking? This cannot be undone.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-11"
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={saving}
+                  >
+                    Keep booking
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="h-11"
+                    onClick={handleDelete}
+                    disabled={saving}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="destructive"
+                className="h-11 w-full gap-2"
+                onClick={() => setConfirmDelete(true)}
+                disabled={saving}
+              >
+                <Trash size={18} weight="duotone" />
+                Delete booking
+              </Button>
+            )}
+          </section>
         </div>
       </SheetContent>
     </Sheet>

@@ -47,6 +47,7 @@ export function DashboardView({
     refresh,
     updateBookingStatus,
     updateInternalNotes,
+    deleteBooking,
   } = useBookings(siteSlug);
 
   const [search, setSearch] = useState("");
@@ -220,9 +221,13 @@ export function DashboardView({
       <BookingDetailSheet
         booking={selected}
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        onOpenChange={(open) => {
+          setSheetOpen(open);
+          if (!open) setSelected(null);
+        }}
         onStatusChange={updateBookingStatus}
         onNotesChange={updateInternalNotes}
+        onDelete={deleteBooking}
       />
     </AppShell>
   );

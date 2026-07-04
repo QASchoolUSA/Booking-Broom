@@ -18,6 +18,7 @@ export function useBookings(siteSlug?: string) {
 
   const updateStatusMutation = useMutation(api.bookings.updateStatus);
   const updateNotesMutation = useMutation(api.bookings.updateInternalNotes);
+  const deleteMutation = useMutation(api.bookings.remove);
 
   const loading =
     authLoading ||
@@ -53,6 +54,12 @@ export function useBookings(siteSlug?: string) {
     });
   };
 
+  const deleteBooking = async (bookingId: string) => {
+    await deleteMutation({
+      bookingId: bookingId as Id<"bookings">,
+    });
+  };
+
   const refresh = async () => {
     // Convex useQuery auto-refreshes; no-op kept for AppShell API compatibility
   };
@@ -67,5 +74,6 @@ export function useBookings(siteSlug?: string) {
     refresh,
     updateBookingStatus,
     updateInternalNotes,
+    deleteBooking,
   };
 }
