@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "convex/_generated/api";
 import { hashApiKey } from "@/lib/api-keys";
+import { sendBookingEmails } from "@/lib/email";
 import type { CreateBookingPayload } from "@/lib/types";
 
 const ALLOWED_ORIGINS = (
@@ -68,6 +69,15 @@ export async function POST(request: Request) {
       preferredTime: body.preferred_time,
       notes: body.notes,
     });
+
+    try {
+      const emailResult = await sendBookingEmails(body);
+      if (emailResult.errors?.length) {
+        console.error("Booking email errors:", emailResult.errors);
+      }
+    } catch (error) {
+      console.error("Failed to send booking emails:", error);
+    }
 
     return NextResponse.json(
       { id: result.id, message: "Booking created" },

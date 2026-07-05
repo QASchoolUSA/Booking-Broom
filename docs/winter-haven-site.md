@@ -47,3 +47,29 @@ npx convex run internal.seed.syncSeedSites
 
 `https://cleaningwinterhaven.com` is included in default `ALLOWED_ORIGINS`.
 Add to Vercel `ALLOWED_ORIGINS` env if you override the default list.
+
+## Email notifications
+
+Booking confirmation emails are sent by **Booking Broom** (not the Winter Haven site) after each successful booking:
+
+- **Customer** — confirmation to the email on the booking form
+- **Admin** — notification to `info@cleaningwinterhaven.com`
+
+Configure SMTP on the **Booking Broom Vercel** project:
+
+```
+SMTP_HOST=mail.spacemail.com
+SMTP_PORT=465
+SMTP_USER=info@cleaningwinterhaven.com
+SMTP_PASS=<SpaceMail mailbox password>
+SMTP_FROM=Cleaning Winter Haven <info@cleaningwinterhaven.com>
+```
+
+Ensure IMAP/SMTP is enabled for the mailbox in Spacemail Manager. If email fails, the booking still succeeds.
+
+## Email notifications
+
+Booking confirmation and admin alert emails are sent by **Booking Broom** (not the Winter Haven site) when SMTP is configured on the Booking Broom deployment. See the main README → **Email notifications** for SpaceMail setup.
+
+Customer receives: "Booking request received — Cleaning Winter Haven"
+Admin (`info@cleaningwinterhaven.com`) receives: "New booking — {customer name}"

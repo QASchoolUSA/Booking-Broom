@@ -68,6 +68,11 @@ This inserts any entries from `convex/lib/apiKeys.ts` that are not yet in the da
 | `NEXT_PUBLIC_CONVEX_SITE_URL` | `https://dynamic-gnu-491.convex.site` |
 | `CONVEX_DEPLOY_KEY` | Your deploy key from [Convex dashboard](https://dashboard.convex.dev/t/nick-kudrow/bookingbroom/dynamic-gnu-491) (Settings → Deploy Key) |
 | `ALLOWED_ORIGINS` | `http://localhost:3000,https://sanfordcleaning.com,...` |
+| `SMTP_HOST` | `mail.spacemail.com` (optional — omit to disable booking emails) |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | Your SpaceMail mailbox address |
+| `SMTP_PASS` | Your SpaceMail mailbox password |
+| `SMTP_FROM` | `"Cleaning Winter Haven <info@cleaningwinterhaven.com>"` |
 
 3. Build is configured in `vercel.json` to run `npx convex deploy --cmd 'npm run build'` automatically.
 
@@ -170,6 +175,27 @@ node -e "console.log(require('crypto').createHash('sha256').update('your-secret-
 
 Add the domain to `ALLOWED_ORIGINS` in Vercel env vars.
 
+## Email notifications
+
+When a booking is submitted via the public API, Booking Broom can send:
+
+- **Customer confirmation** — to the email address in the booking (if valid)
+- **Admin notification** — to the site-specific admin address in `src/lib/site-emails.ts`
+
+Configure SpaceMail SMTP in Vercel (or `.env.local` for local dev):
+
+| Variable | Example |
+|----------|---------|
+| `SMTP_HOST` | `mail.spacemail.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | `info@cleaningwinterhaven.com` |
+| `SMTP_PASS` | your mailbox password |
+| `SMTP_FROM` | `"Cleaning Winter Haven <info@cleaningwinterhaven.com>"` |
+
+If `SMTP_HOST` is not set, bookings are still saved but no emails are sent.
+
+To add admin email for a new site, add an entry to `ADMIN_EMAILS` in `src/lib/site-emails.ts`.
+
 ## Project Structure
 
 ```
@@ -206,4 +232,29 @@ npm run dev
 
 - Assign bookings to cleaners
 - Cleaner mobile app (React Native + same Convex backend)
-- Email/SMS notifications on new bookings
+- SMS notifications on new bookings
+
+## Email notifications
+
+After a successful booking, Booking Broom sends:
+
+1. **Customer confirmation** — to the email address on the booking (if provided)
+2. **Admin notification** — to the site-specific inbox (e.g. `info@cleaningwinterhaven.com` for Winter Haven)
+
+Emails are sent from this app (Vercel/Node) via SMTP. Cleaning sites on Cloudflare Workers do not send email directly.
+
+### SMTP setup (SpaceMail)
+
+Add these env vars in **Vercel** (Booking Broom project):
+
+| Variable | Example |
+|----------|---------|
+| `SMTP_HOST` | `mail.spacemail.com` |
+| `SMTP_PORT` | `465` (SSL) or `587` (STARTTLS) |
+| `SMTP_USER` | `info@cleaningwinterhaven.com` |
+| `SMTP_PASS` | Your SpaceMail mailbox password (secret) |
+| `SMTP_FROM` | `Cleaning Winter Haven <info@cleaningwinterhaven.com>` |
+
+If `SMTP_HOST` is not set, bookings still succeed — emails are skipped (useful for local dev).
+
+Site-specific admin inboxes are configured in `src/lib/site-emails.ts`.
