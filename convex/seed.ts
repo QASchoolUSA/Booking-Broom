@@ -51,3 +51,33 @@ export const runSeed = mutation({
     return { seeded: true, count: SEED_SITES.length };
   },
 });
+
+/** Insert any SEED_SITES entries missing from the database (safe to run on existing deployments). */
+export const syncSeedSites = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    let added = 0;
+
+    for (const site of SEED_SITES) {
+      const existing = await ctx.db
+        .query("sites")
+        .withIndex("by_slug", (q) => q.eq("slug", site.slug))
+        .unique();
+
+      if (existing) continue;
+
+      await ctx.db.insert("sites", {
+        slug: site.slug,
+        name: site.name,
+        domain: site.domain,
+        accentColor: site.accentColor,
+        apiKeyHash: site.apiKeyHash,
+        createdAt: now,
+      });
+      added += 1;
+    }
+
+    return { added, total: SEED_SITES.length };
+  },
+});

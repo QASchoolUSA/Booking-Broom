@@ -35,4 +35,12 @@ export const SEED_SITES = [
     apiKeyHash:
       "4f2728558fb253055faf99f958b57d940c8f096d1c81cff29411bb5ed1baf394",
   },
+  {
+    slug: "winter-haven",
+    name: "Cleaning Winter Haven",
+    domain: "cleaningwinterhaven.com",
+    accentColor: "#0f766e",
+    apiKeyHash:
+      "8ef086466588e9db119b4f678c8dd4cbe4e0d6fbceec201b89d92f732e0efaf0",
+  },
 ] as const;

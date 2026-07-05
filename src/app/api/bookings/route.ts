@@ -6,7 +6,7 @@ import type { CreateBookingPayload } from "@/lib/types";
 
 const ALLOWED_ORIGINS = (
   process.env.ALLOWED_ORIGINS ??
-  "http://localhost:3000,https://sanfordcleaning.com,https://deltonacleaning.com,https://hainescitycleaning.com,https://celebrationcleaning.com"
+  "http://localhost:3000,https://sanfordcleaning.com,https://deltonacleaning.com,https://hainescitycleaning.com,https://celebrationcleaning.com,https://cleaningwinterhaven.com"
 )
   .split(",")
   .map((o) => o.trim());

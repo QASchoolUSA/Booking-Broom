@@ -1,6 +1,6 @@
 # Booking Broom
 
-Manager dashboard PWA for multi-site cleaning businesses. Receive bookings in real time from Sanford Cleaning, Deltona Cleaning, Haines City Cleaning, Celebration Cleaning, and more.
+Manager dashboard PWA for multi-site cleaning businesses. Receive bookings in real time from Sanford Cleaning, Deltona Cleaning, Haines City Cleaning, Celebration Cleaning, Cleaning Winter Haven, and more.
 
 ## Stack
 
@@ -48,6 +48,14 @@ node scripts/setup-convex-auth.mjs https://your-app.vercel.app
 ```bash
 npx convex run internal.seed.seedSites
 ```
+
+To add new sites to an **existing** deployment (without wiping data):
+
+```bash
+npx convex run internal.seed.syncSeedSites
+```
+
+This inserts any entries from `convex/lib/apiKeys.ts` that are not yet in the database.
 
 ### 2. Deploy to Vercel
 
@@ -133,7 +141,15 @@ async function submitBooking(formData) {
 
 ## Adding a New Site
 
-Insert a row in the Convex `sites` table via dashboard or mutation:
+1. Add the site to `convex/lib/apiKeys.ts` in `SEED_SITES` (generate hash with the command below).
+2. Add the domain to default `ALLOWED_ORIGINS` in `src/app/api/bookings/route.ts` (and Vercel env if overridden).
+3. Deploy Booking Broom, then sync to Convex:
+
+```bash
+npx convex run internal.seed.syncSeedSites
+```
+
+Or insert a row manually in the Convex `sites` table via dashboard:
 
 ```ts
 {
