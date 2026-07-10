@@ -61,6 +61,8 @@
 | Deltona Cleaning | #0EA5E9 |
 | Haines City Cleaning | #059669 |
 | Celebration Cleaning | #8B5CF6 |
+| Cleaning Winter Haven | #0f766e |
+| Cleaning Weekly | #0D9488 |
 
 ---
 

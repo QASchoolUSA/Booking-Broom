@@ -6,6 +6,7 @@ const SITE_NAMES: Record<string, string> = {
   "haines-city": "Haines City Cleaning",
   celebration: "Celebration Cleaning",
   "winter-haven": "Cleaning Winter Haven",
+  "cleaning-weekly": "Cleaning Weekly",
 };
 
 interface SitePageProps {
