@@ -43,4 +43,12 @@ export const SEED_SITES = [
     apiKeyHash:
       "8ef086466588e9db119b4f678c8dd4cbe4e0d6fbceec201b89d92f732e0efaf0",
   },
+  {
+    slug: "cleaning-weekly",
+    name: "Cleaning Weekly",
+    domain: "cleaningweekly.com",
+    accentColor: "#0D9488",
+    apiKeyHash:
+      "556a60b2e73ab2f14408eca3cb5e7717260bab1f8385e89234c372b6a4aca335",
+  },
 ] as const;

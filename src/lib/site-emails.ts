@@ -1,5 +1,8 @@
 const ADMIN_EMAILS: Record<string, string> = {
   "winter-haven": "info@cleaningwinterhaven.com",
+  "cleaning-weekly": "hello@cleaningweekly.com",
+  celebration: "info@celebrationcleaning.com",
+  sanford: "info@sanfordcleaning.com",
 };
 
 const SITE_DISPLAY_NAMES: Record<string, string> = {
@@ -8,6 +11,7 @@ const SITE_DISPLAY_NAMES: Record<string, string> = {
   deltona: "Deltona Cleaning",
   "haines-city": "Haines City Cleaning",
   celebration: "Celebration Cleaning",
+  "cleaning-weekly": "Cleaning Weekly",
 };
 
 export function getAdminEmail(siteSlug: string): string | undefined {

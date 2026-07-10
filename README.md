@@ -1,6 +1,6 @@
 # Booking Broom
 
-Manager dashboard PWA for multi-site cleaning businesses. Receive bookings in real time from Sanford Cleaning, Deltona Cleaning, Haines City Cleaning, Celebration Cleaning, Cleaning Winter Haven, and more.
+Manager dashboard PWA for multi-site cleaning businesses. Receive bookings in real time from Sanford Cleaning, Deltona Cleaning, Haines City Cleaning, Celebration Cleaning, Cleaning Winter Haven, Cleaning Weekly, and more.
 
 ## Stack
 
@@ -99,8 +99,12 @@ node scripts/setup-convex-auth.mjs https://your-app.vercel.app
 | `deltona` | Deltona Cleaning | `bb_deltona_dev_key` |
 | `haines-city` | Haines City Cleaning | `bb_haines-city_dev_key` |
 | `celebration` | Celebration Cleaning | `bb_celebration_dev_key` |
+| `winter-haven` | Cleaning Winter Haven | `bb_winter-haven_dev_key` |
+| `cleaning-weekly` | Cleaning Weekly | `bb_cleaning-weekly_dev_key` |
 
 Use the **Test booking** button in development to simulate incoming bookings.
+
+Site-specific production keys and env setup: see `docs/winter-haven-site.md`, `docs/cleaning-weekly-site.md`, `docs/celebration-site.md`, and `docs/sanford-site.md`.
 
 ## Public Booking API
 
