@@ -7,6 +7,7 @@ function mapSite(doc: {
   name: string;
   domain: string;
   accentColor: string;
+  contactEmail?: string;
   createdAt: number;
 }) {
   return {
@@ -15,6 +16,7 @@ function mapSite(doc: {
     name: doc.name,
     domain: doc.domain,
     accent_color: doc.accentColor,
+    contact_email: doc.contactEmail ?? null,
     created_at: new Date(doc.createdAt).toISOString(),
   };
 }

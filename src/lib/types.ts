@@ -11,6 +11,7 @@ export interface Site {
   name: string;
   domain: string;
   accent_color: string;
+  contact_email: string | null;
   created_at: string;
 }
 

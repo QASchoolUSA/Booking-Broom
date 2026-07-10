@@ -10,6 +10,7 @@ function mapSite(doc: Doc<"sites">) {
     name: doc.name,
     domain: doc.domain,
     accent_color: doc.accentColor,
+    contact_email: doc.contactEmail ?? null,
     created_at: new Date(doc.createdAt).toISOString(),
   };
 }

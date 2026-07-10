@@ -88,7 +88,7 @@ export default function SettingsPage() {
                 {sites.map((site) => (
                   <li
                     key={site.slug}
-                    className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5"
+                    className="flex flex-col gap-1 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
                   >
                     <span className="flex min-w-0 items-center gap-2.5 text-sm font-medium">
                       <span
@@ -97,9 +97,19 @@ export default function SettingsPage() {
                       />
                       <span className="truncate">{site.name}</span>
                     </span>
-                    <span className="hidden shrink-0 items-center gap-1 text-xs text-muted-foreground sm:flex">
-                      <House size={14} />
-                      {site.domain}
+                    <span className="flex min-w-0 flex-col gap-0.5 pl-5 text-xs text-muted-foreground sm:items-end sm:pl-0">
+                      <span className="hidden items-center gap-1 sm:flex">
+                        <House size={14} />
+                        {site.domain}
+                      </span>
+                      {site.contact_email && (
+                        <a
+                          href={`mailto:${site.contact_email}`}
+                          className="truncate text-primary hover:underline"
+                        >
+                          {site.contact_email}
+                        </a>
+                      )}
                     </span>
                   </li>
                 ))}

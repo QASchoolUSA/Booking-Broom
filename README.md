@@ -55,7 +55,8 @@ To add new sites to an **existing** deployment (without wiping data):
 npx convex run internal.seed.syncSeedSites
 ```
 
-This inserts any entries from `convex/lib/apiKeys.ts` that are not yet in the database.
+This inserts any entries from `convex/lib/apiKeys.ts` that are not yet in the database,
+and backfills `contactEmail` (and other seed fields) on existing sites.
 
 ### 2. Deploy to Vercel
 
@@ -70,9 +71,9 @@ This inserts any entries from `convex/lib/apiKeys.ts` that are not yet in the da
 | `ALLOWED_ORIGINS` | `http://localhost:3000,https://sanfordcleaning.com,...` |
 | `SMTP_HOST` | `mail.spacemail.com` (optional — omit to disable booking emails) |
 | `SMTP_PORT` | `465` |
-| `SMTP_USER` | Your SpaceMail mailbox address |
+| `SMTP_USER` | Your SpaceMail mailbox address (SMTP auth only) |
 | `SMTP_PASS` | Your SpaceMail mailbox password |
-| `SMTP_FROM` | `"Cleaning Winter Haven <info@cleaningwinterhaven.com>"` |
+| `SMTP_FROM` | Fallback From address for unknown site slugs only |
 
 3. Build is configured in `vercel.json` to run `npx convex deploy --cmd 'npm run build'` automatically.
 
@@ -183,8 +184,17 @@ Add the domain to `ALLOWED_ORIGINS` in Vercel env vars.
 
 When a booking is submitted via the public API, Booking Broom can send:
 
-- **Customer confirmation** — to the email address in the booking (if valid)
-- **Admin notification** — to the site-specific admin address in `src/lib/site-emails.ts`
+- **Customer confirmation** — to the email address in the booking (if valid), From/Reply-To set to that cleaning site’s inbox
+- **Admin notification** — to the same site-specific inbox (e.g. Sanford → `info@sanfordcleaning.com`)
+
+| Site | Admin / From email |
+|------|--------------------|
+| Sanford Cleaning | `info@sanfordcleaning.com` |
+| Deltona Cleaning | `info@deltonacleaning.com` |
+| Haines City Cleaning | `info@hainescitycleaning.com` |
+| Celebration Cleaning | `info@celebrationcleaning.com` |
+| Cleaning Winter Haven | `info@cleaningwinterhaven.com` |
+| Cleaning Weekly | `hello@cleaningweekly.com` |
 
 Configure SpaceMail SMTP in Vercel (or `.env.local` for local dev):
 
@@ -192,13 +202,19 @@ Configure SpaceMail SMTP in Vercel (or `.env.local` for local dev):
 |----------|---------|
 | `SMTP_HOST` | `mail.spacemail.com` |
 | `SMTP_PORT` | `465` |
-| `SMTP_USER` | `info@cleaningwinterhaven.com` |
+| `SMTP_USER` | Your SpaceMail mailbox used for SMTP auth |
 | `SMTP_PASS` | your mailbox password |
-| `SMTP_FROM` | `"Cleaning Winter Haven <info@cleaningwinterhaven.com>"` |
+| `SMTP_FROM` | Fallback only if the site slug is unknown |
 
 If `SMTP_HOST` is not set, bookings are still saved but no emails are sent.
 
-To add admin email for a new site, add an entry to `ADMIN_EMAILS` in `src/lib/site-emails.ts`.
+Site emails live in `src/lib/site-emails.ts` and as `contactEmail` on each seeded site in `convex/lib/apiKeys.ts`. After deploying, backfill existing deployments with:
+
+```bash
+npx convex run internal.seed.syncSeedSites
+```
+
+To add a new site’s inbox, update both files and re-run sync.
 
 ## Project Structure
 
@@ -242,8 +258,8 @@ npm run dev
 
 After a successful booking, Booking Broom sends:
 
-1. **Customer confirmation** — to the email address on the booking (if provided)
-2. **Admin notification** — to the site-specific inbox (e.g. `info@cleaningwinterhaven.com` for Winter Haven)
+1. **Customer confirmation** — to the email address on the booking (if provided), branded as that cleaning site
+2. **Admin notification** — to the site-specific inbox (e.g. `info@sanfordcleaning.com` for Sanford)
 
 Emails are sent from this app (Vercel/Node) via SMTP. Cleaning sites on Cloudflare Workers do not send email directly.
 
@@ -255,10 +271,10 @@ Add these env vars in **Vercel** (Booking Broom project):
 |----------|---------|
 | `SMTP_HOST` | `mail.spacemail.com` |
 | `SMTP_PORT` | `465` (SSL) or `587` (STARTTLS) |
-| `SMTP_USER` | `info@cleaningwinterhaven.com` |
+| `SMTP_USER` | Your SpaceMail mailbox address (auth) |
 | `SMTP_PASS` | Your SpaceMail mailbox password (secret) |
-| `SMTP_FROM` | `Cleaning Winter Haven <info@cleaningwinterhaven.com>` |
+| `SMTP_FROM` | Fallback From for unknown site slugs only |
 
 If `SMTP_HOST` is not set, bookings still succeed — emails are skipped (useful for local dev).
 
-Site-specific admin inboxes are configured in `src/lib/site-emails.ts`.
+Each cleaning website has its own From address and admin inbox in `src/lib/site-emails.ts` (mirrored as `contactEmail` on seeded Convex sites).

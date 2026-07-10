@@ -39,4 +39,6 @@ Add them to Vercel `ALLOWED_ORIGINS` if you override the default list.
 Sanford Cleaning continues to send its own SMTP booking emails from `/api/emails/confirm-booking`.
 Booking Broom can also send emails when its SMTP is configured — disable one side to avoid duplicates.
 
-Admin notifications in Booking Broom go to `info@sanfordcleaning.com`.
+When Booking Broom sends mail for a Sanford booking:
+- **From / Reply-To** — `Sanford Cleaning <info@sanfordcleaning.com>`
+- **Admin notification** — `info@sanfordcleaning.com`
