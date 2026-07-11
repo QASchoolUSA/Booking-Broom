@@ -60,7 +60,7 @@ export function AppShell({
       {/* Desktop sidebar */}
       {sidebar && (
         <aside
-          className="fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col border-r border-sidebar-border bg-sidebar md:flex"
+          className="fixed inset-y-0 left-0 z-30 hidden w-[280px] flex-col border-r border-sidebar-border bg-sidebar md:flex"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
         >
           <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-5">
@@ -94,7 +94,41 @@ export function AppShell({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-4">{sidebar}</div>
+          <div className="flex-1 overflow-y-auto px-3 py-4">
+            <nav className="mb-5 space-y-1">
+              {navItems.map(({ href, label, icon: Icon, match }) => {
+                const isActive = match(pathname);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "relative flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 pl-3.5 text-sm font-medium transition-all duration-150",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                        : "text-sidebar-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    {isActive && (
+                      <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />
+                    )}
+                    <span className="flex size-[18px] shrink-0 items-center justify-center">
+                      <Icon
+                        size={18}
+                        weight={isActive ? "duotone" : "regular"}
+                        className={cn(
+                          "size-[18px]",
+                          isActive ? "text-primary" : "text-muted-foreground"
+                        )}
+                      />
+                    </span>
+                    {label}
+                  </Link>
+                );
+              })}
+            </nav>
+            {sidebar}
+          </div>
 
           <div className="shrink-0 border-t border-sidebar-border p-3">
             <Button
@@ -102,7 +136,7 @@ export function AppShell({
               className="h-10 w-full justify-start gap-2.5 px-3 text-muted-foreground hover:text-foreground"
               onClick={handleSignOut}
             >
-              <SignOut size={18} />
+              <SignOut size={18} className="size-[18px]" />
               Sign out
             </Button>
           </div>
@@ -110,7 +144,7 @@ export function AppShell({
       )}
 
       {/* Main column */}
-      <div className={cn("flex min-w-0 flex-1 flex-col", sidebar && "md:pl-[260px]")}>
+      <div className={cn("flex min-w-0 flex-1 flex-col", sidebar && "md:pl-[280px]")}>
         {/* Mobile header */}
         <header
           className="sticky top-0 z-20 border-b border-border/80 bg-card/90 backdrop-blur-md md:hidden"
@@ -156,7 +190,7 @@ export function AppShell({
                 <span className="text-sm font-bold">Booking Broom</span>
               </div>
               <Button variant="ghost" size="sm" className="gap-2" onClick={handleSignOut}>
-                <SignOut size={18} />
+                <SignOut size={18} className="size-[18px]" />
                 Sign out
               </Button>
             </div>

@@ -8,7 +8,6 @@ import {
   MapPin,
   Phone,
   Trash,
-  User,
 } from "@phosphor-icons/react";
 import type { BookingWithSite, BookingStatus } from "@/lib/types";
 import { SiteBadge } from "@/components/bookings/SiteBadge";
@@ -42,6 +41,15 @@ interface BookingDetailSheetProps {
   onDelete: (id: string) => Promise<void>;
 }
 
+const sectionHeading =
+  "mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground";
+
+function formatPreferredTime(time: string) {
+  const trimmed = time.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
 function DetailRow({
   icon: Icon,
   label,
@@ -52,7 +60,7 @@ function DetailRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex gap-3 py-2.5">
+    <div className="flex items-start gap-3 px-3.5 py-2.5">
       <Icon size={18} className="mt-0.5 shrink-0 text-muted-foreground" weight="duotone" />
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -128,71 +136,78 @@ export function BookingDetailSheet({
     }
   };
 
+  const hasContact =
+    Boolean(booking.email) ||
+    Boolean(booking.phone) ||
+    Boolean(booking.address) ||
+    Boolean(booking.preferred_date);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full gap-0 overflow-y-auto p-0 sm:max-w-md"
-        style={{
-          paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
-        }}
+        className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
       >
-        {/* Header */}
-        <SheetHeader className="border-b bg-muted/30 px-5 pb-4 pt-5">
-          <div className="flex flex-wrap items-center gap-2 pr-8">
+        <SheetHeader className="shrink-0 border-b bg-muted/30 px-5 pb-4 pt-5 pr-12">
+          <div className="flex flex-wrap items-center gap-2">
             {booking.site && <SiteBadge site={booking.site} />}
             <StatusBadge status={booking.status} />
           </div>
-          <SheetTitle className="flex items-center gap-2 text-left text-lg">
-            <User size={20} weight="duotone" className="text-muted-foreground" />
-            {booking.customer_name
-          }</SheetTitle>
+          <SheetTitle className="min-w-0 truncate text-left text-lg font-semibold">
+            {booking.customer_name}
+          </SheetTitle>
           <SheetDescription className="text-left">
             {booking.service_type} · Received{" "}
             {format(parseISO(booking.created_at), "MMM d, yyyy 'at' h:mm a")}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-5 px-5 py-5">
-          {/* Contact details */}
-          <section>
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Contact
-            </h4>
-            <div className="divide-y divide-border rounded-xl border bg-card">
-              {booking.email && (
-                <DetailRow icon={Envelope} label="Email">
-                  <a href={`mailto:${booking.email}`} className="break-all text-primary hover:underline">
-                    {booking.email}
-                  </a>
-                </DetailRow>
-              )}
-              {booking.phone && (
-                <DetailRow icon={Phone} label="Phone">
-                  <a href={`tel:${booking.phone}`} className="text-primary hover:underline">
-                    {booking.phone}
-                  </a>
-                </DetailRow>
-              )}
-              {booking.address && (
-                <DetailRow icon={MapPin} label="Address">
-                  {booking.address}
-                </DetailRow>
-              )}
-              {booking.preferred_date && (
-                <DetailRow icon={CalendarBlank} label="Preferred date">
-                  {format(parseISO(booking.preferred_date), "EEEE, MMM d, yyyy")}
-                  {booking.preferred_time && ` · ${booking.preferred_time}`}
-                </DetailRow>
-              )}
-            </div>
-          </section>
+        <div
+          className="flex-1 space-y-6 overflow-y-auto px-5 py-5"
+          style={{
+            paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
+          }}
+        >
+          {hasContact && (
+            <section>
+              <h4 className={sectionHeading}>Contact</h4>
+              <div className="divide-y divide-border rounded-xl border bg-card">
+                {booking.email && (
+                  <DetailRow icon={Envelope} label="Email">
+                    <a
+                      href={`mailto:${booking.email}`}
+                      className="break-all text-primary hover:underline"
+                    >
+                      {booking.email}
+                    </a>
+                  </DetailRow>
+                )}
+                {booking.phone && (
+                  <DetailRow icon={Phone} label="Phone">
+                    <a href={`tel:${booking.phone}`} className="text-primary hover:underline">
+                      {booking.phone}
+                    </a>
+                  </DetailRow>
+                )}
+                {booking.address && (
+                  <DetailRow icon={MapPin} label="Address">
+                    <span className="break-words">{booking.address}</span>
+                  </DetailRow>
+                )}
+                {booking.preferred_date && (
+                  <DetailRow icon={CalendarBlank} label="Preferred date">
+                    {format(parseISO(booking.preferred_date), "EEEE, MMM d, yyyy")}
+                    {booking.preferred_time &&
+                      ` · ${formatPreferredTime(booking.preferred_time)}`}
+                  </DetailRow>
+                )}
+              </div>
+            </section>
+          )}
 
           {booking.notes && (
             <section>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Customer notes
-              </h4>
+              <h4 className={sectionHeading}>Customer notes</h4>
               <p className="rounded-xl border bg-muted/30 px-4 py-3 text-sm leading-relaxed text-foreground">
                 {booking.notes}
               </p>
@@ -201,9 +216,8 @@ export function BookingDetailSheet({
 
           <Separator />
 
-          {/* Status */}
           <section className="space-y-2">
-            <Label htmlFor="status" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            <Label htmlFor="status" className={sectionHeading}>
               Status
             </Label>
             <Select
@@ -222,11 +236,28 @@ export function BookingDetailSheet({
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <Button
+                variant="outline"
+                className="h-11 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                onClick={() => handleStatusChange("confirmed")}
+                disabled={saving || booking.status === "confirmed"}
+              >
+                Confirm
+              </Button>
+              <Button
+                variant="outline"
+                className="h-11"
+                onClick={() => handleStatusChange("cancelled")}
+                disabled={saving || booking.status === "cancelled"}
+              >
+                Cancel booking
+              </Button>
+            </div>
           </section>
 
-          {/* Internal notes */}
           <section className="space-y-2">
-            <Label htmlFor="internal-notes" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            <Label htmlFor="internal-notes" className={sectionHeading}>
               Internal notes
             </Label>
             <Textarea
@@ -241,26 +272,6 @@ export function BookingDetailSheet({
               Save notes
             </Button>
           </section>
-
-          {/* Quick actions */}
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="outline"
-              className="h-11"
-              onClick={() => handleStatusChange("confirmed")}
-              disabled={saving || booking.status === "confirmed"}
-            >
-              Confirm
-            </Button>
-            <Button
-              variant="destructive"
-              className="h-11"
-              onClick={() => handleStatusChange("cancelled")}
-              disabled={saving || booking.status === "cancelled"}
-            >
-              Cancel
-            </Button>
-          </div>
 
           <Separator />
 
@@ -293,12 +304,12 @@ export function BookingDetailSheet({
               </div>
             ) : (
               <Button
-                variant="destructive"
-                className="h-11 w-full gap-2"
+                variant="outline"
+                className="h-11 w-full gap-2 border-destructive/40 text-destructive hover:bg-destructive/5 hover:text-destructive"
                 onClick={() => setConfirmDelete(true)}
                 disabled={saving}
               >
-                <Trash size={18} weight="duotone" />
+                <Trash size={18} weight="duotone" className="size-[18px]" />
                 Delete booking
               </Button>
             )}
