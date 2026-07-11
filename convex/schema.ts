@@ -18,6 +18,8 @@ export default defineSchema({
     name: v.string(),
     domain: v.string(),
     accentColor: v.string(),
+    /** Site-specific inbox used for booking admin alerts and From/Reply-To. */
+    contactEmail: v.optional(v.string()),
     apiKeyHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_slug", ["slug"]),

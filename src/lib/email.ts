@@ -1,6 +1,10 @@
 import nodemailer from "nodemailer";
 import type { CreateBookingPayload } from "@/lib/types";
-import { getAdminEmail, getSiteDisplayName } from "@/lib/site-emails";
+import {
+  getAdminEmail,
+  getSiteDisplayName,
+  getSiteFromAddress,
+} from "@/lib/site-emails";
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -22,8 +26,17 @@ function getTransport() {
   });
 }
 
-function getFromAddress(siteName: string): string {
-  return process.env.SMTP_FROM ?? `${siteName} <${process.env.SMTP_USER ?? "noreply@example.com"}>`;
+/**
+ * Prefer the cleaning site's own From address so Sanford bookings come from
+ * Sanford Cleaning, etc. Fall back to SMTP_FROM / SMTP_USER only when the
+ * site slug is unknown.
+ */
+function getFromAddress(siteSlug: string, siteName: string): string {
+  return (
+    getSiteFromAddress(siteSlug) ??
+    process.env.SMTP_FROM ??
+    `${siteName} <${process.env.SMTP_USER ?? "noreply@example.com"}>`
+  );
 }
 
 function formatBookingDetails(payload: CreateBookingPayload): string {
@@ -82,13 +95,20 @@ export async function sendBookingEmails(
   }
 
   const siteName = getSiteDisplayName(payload.site_slug);
-  const from = getFromAddress(siteName);
+  const from = getFromAddress(payload.site_slug, siteName);
+  const replyTo = getAdminEmail(payload.site_slug);
   const errors: string[] = [];
 
   if (payload.email && isValidEmail(payload.email)) {
     const { subject, text } = buildCustomerEmail(siteName, payload);
     try {
-      await transport.sendMail({ from, to: payload.email.trim(), subject, text });
+      await transport.sendMail({
+        from,
+        to: payload.email.trim(),
+        replyTo,
+        subject,
+        text,
+      });
     } catch (err) {
       errors.push(`Customer email failed: ${err instanceof Error ? err.message : "unknown error"}`);
     }
@@ -98,7 +118,13 @@ export async function sendBookingEmails(
   if (adminEmail) {
     const { subject, text } = buildAdminEmail(siteName, payload);
     try {
-      await transport.sendMail({ from, to: adminEmail, subject, text });
+      await transport.sendMail({
+        from,
+        to: adminEmail,
+        replyTo: payload.email && isValidEmail(payload.email) ? payload.email.trim() : undefined,
+        subject,
+        text,
+      });
     } catch (err) {
       errors.push(`Admin email failed: ${err instanceof Error ? err.message : "unknown error"}`);
     }

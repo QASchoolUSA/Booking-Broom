@@ -36,5 +36,8 @@ Add them to Vercel `ALLOWED_ORIGINS` if you override the default list.
 
 ## Email notifications
 
-Admin notifications go to `info@celebrationcleaning.com` when Booking Broom SMTP is configured.
+When Booking Broom SMTP is configured, Celebration bookings use:
+- **From / Reply-To** — `Celebration Cleaning <info@celebrationcleaning.com>`
+- **Admin notification** — `info@celebrationcleaning.com`
+
 Configure SMTP on the **Booking Broom** Vercel project (see main README).

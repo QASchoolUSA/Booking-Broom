@@ -52,24 +52,19 @@ Add to Vercel `ALLOWED_ORIGINS` env if you override the default list.
 
 Booking confirmation emails are sent by **Booking Broom** (not the Winter Haven site) after each successful booking:
 
-- **Customer** — confirmation to the email on the booking form
+- **Customer** — confirmation to the email on the booking form (From: Cleaning Winter Haven)
 - **Admin** — notification to `info@cleaningwinterhaven.com`
 
-Configure SMTP on the **Booking Broom Vercel** project:
+Configure SMTP on the **Booking Broom Vercel** project (auth credentials only — From addresses are per site):
 
 ```
 SMTP_HOST=mail.spacemail.com
 SMTP_PORT=465
-SMTP_USER=info@cleaningwinterhaven.com
+SMTP_USER=<your SpaceMail mailbox>
 SMTP_PASS=<SpaceMail mailbox password>
-SMTP_FROM=Cleaning Winter Haven <info@cleaningwinterhaven.com>
 ```
 
 Ensure IMAP/SMTP is enabled for the mailbox in Spacemail Manager. If email fails, the booking still succeeds.
-
-## Email notifications
-
-Booking confirmation and admin alert emails are sent by **Booking Broom** (not the Winter Haven site) when SMTP is configured on the Booking Broom deployment. See the main README → **Email notifications** for SpaceMail setup.
 
 Customer receives: "Booking request received — Cleaning Winter Haven"
 Admin (`info@cleaningwinterhaven.com`) receives: "New booking — {customer name}"
