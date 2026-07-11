@@ -12,6 +12,7 @@ import {
   WifiSlash,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 type ConnectionState = "connecting" | "live" | "offline" | "reconnecting";
@@ -130,7 +131,8 @@ export function AppShell({
             {sidebar}
           </div>
 
-          <div className="shrink-0 border-t border-sidebar-border p-3">
+          <div className="shrink-0 space-y-0.5 border-t border-sidebar-border p-3">
+            <ThemeToggle labeled />
             <Button
               variant="ghost"
               className="h-10 w-full justify-start gap-2.5 px-3 text-muted-foreground hover:text-foreground"
@@ -173,6 +175,7 @@ export function AppShell({
                 </button>
               </div>
             </div>
+            <ThemeToggle />
           </div>
         </header>
 

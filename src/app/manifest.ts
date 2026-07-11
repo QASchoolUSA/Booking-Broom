@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Manager dashboard for cleaning site bookings",
     start_url: "/",
     display: "standalone",
-    background_color: "#F0F9FF",
-    theme_color: "#0284C7",
+    background_color: "#F7FBF8",
+    theme_color: "#16A34A",
     orientation: "any",
     icons: [
       {

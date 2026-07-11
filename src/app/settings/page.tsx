@@ -3,6 +3,8 @@
 import { useBookings } from "@/lib/hooks/useBookings";
 import { AppShell } from "@/components/layout/AppShell";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
+import { SiteHostingRow } from "@/components/settings/SiteHostingRow";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import {
   Card,
   CardContent,
@@ -13,8 +15,8 @@ import {
 import {
   DeviceMobile,
   Globe,
-  House,
   Info,
+  MoonStars,
 } from "@phosphor-icons/react";
 
 export default function SettingsPage() {
@@ -72,56 +74,52 @@ export default function SettingsPage() {
           <Card className="shadow-sm">
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
-                  <Globe size={20} weight="duotone" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <MoonStars size={20} weight="duotone" />
                 </div>
                 <div>
-                  <CardTitle>Connected sites</CardTitle>
-                  <CardDescription>
-                    {sites.length} cleaning websites sending bookings
-                  </CardDescription>
+                  <CardTitle>Appearance</CardTitle>
+                  <CardDescription>Light or night theme</CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <ul className="space-y-2">
-                {sites.map((site) => (
-                  <li
-                    key={site.slug}
-                    className="flex flex-col gap-1 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
-                  >
-                    <span className="flex min-w-0 items-center gap-2.5 text-sm font-medium">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: site.accent_color }}
-                      />
-                      <span className="truncate">{site.name}</span>
-                    </span>
-                    <span className="flex min-w-0 flex-col gap-0.5 pl-5 text-xs text-muted-foreground sm:items-end sm:pl-0">
-                      <span className="hidden items-center gap-1 sm:flex">
-                        <House size={14} />
-                        {site.domain}
-                      </span>
-                      {site.contact_email && (
-                        <a
-                          href={`mailto:${site.contact_email}`}
-                          className="truncate text-primary hover:underline"
-                        >
-                          {site.contact_email}
-                        </a>
-                      )}
-                    </span>
-                  </li>
-                ))}
-                {sites.length === 0 && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">
-                    No sites configured yet.
-                  </p>
-                )}
-              </ul>
+            <CardContent className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                Switch between light and night modes for the dashboard.
+              </p>
+              <ThemeToggle />
             </CardContent>
           </Card>
         </div>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Globe size={20} weight="duotone" />
+              </div>
+              <div>
+                <CardTitle>Connected sites</CardTitle>
+                <CardDescription>
+                  {sites.length} cleaning websites — hosting login reminders for
+                  Vercel / Cloudflare
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3">
+              {sites.map((site) => (
+                <SiteHostingRow key={site.slug} site={site} />
+              ))}
+              {sites.length === 0 && (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No sites configured yet.
+                </p>
+              )}
+            </ul>
+          </CardContent>
+        </Card>
 
         <Card className="border-dashed shadow-sm">
           <CardContent className="flex items-start gap-3 pt-6">
@@ -130,7 +128,8 @@ export default function SettingsPage() {
               <p className="font-medium text-foreground">About Booking Broom</p>
               <p className="mt-1 leading-relaxed">
                 Bookings arrive in real time from Sanford, Deltona, Haines City, Celebration,
-                and any future sites you connect. Use the sidebar to filter by site.
+                and any future sites you connect. Use the sidebar to filter by site. Hosting
+                emails are reminders only — passwords are not stored here.
               </p>
             </div>
           </CardContent>

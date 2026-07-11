@@ -27,7 +27,7 @@ export function StatsCards({ bookings, className }: StatsCardsProps) {
       label: "New",
       value: newCount,
       icon: Sparkle,
-      accent: "text-sky-700 bg-sky-100 dark:text-sky-300 dark:bg-sky-950",
+      accent: "text-primary bg-primary/10 dark:text-primary dark:bg-primary/15",
       highlight: newCount > 0,
     },
     {
@@ -51,7 +51,7 @@ export function StatsCards({ bookings, className }: StatsCardsProps) {
           key={label}
           className={cn(
             "flex items-center gap-3 rounded-xl border bg-card p-3.5 shadow-sm transition-shadow sm:p-4",
-            highlight && "border-sky-200 ring-1 ring-sky-100 dark:border-sky-800 dark:ring-sky-900"
+            highlight && "border-primary/30 ring-1 ring-primary/15"
           )}
         >
           <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", accent)}>

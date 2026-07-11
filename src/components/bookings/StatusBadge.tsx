@@ -2,7 +2,7 @@ import type { BookingStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const statusStyles: Record<BookingStatus, string> = {
-  new: "bg-sky-100 text-sky-800 border-sky-200/80 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800",
+  new: "bg-primary/10 text-primary border-primary/20 dark:bg-primary/15 dark:text-primary dark:border-primary/25",
   confirmed:
     "bg-emerald-100 text-emerald-800 border-emerald-200/80 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
   assigned:

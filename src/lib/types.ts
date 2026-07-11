@@ -5,6 +5,8 @@ export type BookingStatus =
   | "completed"
   | "cancelled";
 
+export type HostingProvider = "vercel" | "cloudflare";
+
 export interface Site {
   id: string;
   slug: string;
@@ -12,6 +14,8 @@ export interface Site {
   domain: string;
   accent_color: string;
   contact_email: string | null;
+  hosting_provider: HostingProvider | null;
+  hosting_account_email: string | null;
   created_at: string;
 }
 

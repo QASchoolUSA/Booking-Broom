@@ -21,7 +21,7 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
       className={cn(
         "group relative flex cursor-pointer flex-col rounded-xl border bg-card p-4 shadow-sm transition-all duration-150",
         "hover:border-primary/20 hover:shadow-md active:scale-[0.99]",
-        isNew && "border-sky-300/80 bg-sky-50/30 dark:border-sky-700/60 dark:bg-sky-950/20",
+        isNew && "border-primary/40 bg-primary/5 dark:border-primary/35 dark:bg-primary/10",
         className
       )}
       onClick={() => onSelect(booking)}
@@ -35,7 +35,7 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
       }}
     >
       {isNew && (
-        <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-sky-500 ring-4 ring-sky-500/20" />
+        <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-primary ring-4 ring-primary/20" />
       )}
 
       <div className="flex items-start justify-between gap-3 pr-4">

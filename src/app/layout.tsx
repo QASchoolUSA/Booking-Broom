@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { APP_URL } from "@/lib/app-url";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -40,8 +41,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#0284C7" },
-    { media: "(prefers-color-scheme: dark)", color: "#0F172A" },
+    { media: "(prefers-color-scheme: light)", color: "#16A34A" },
+    { media: "(prefers-color-scheme: dark)", color: "#0A0F0D" },
   ],
 };
 
@@ -52,12 +53,14 @@ export default function RootLayout({
 }>) {
   return (
     <ConvexAuthNextjsServerProvider>
-      <html lang="en" className={`${jakarta.variable} h-full`}>
+      <html lang="en" className={`${jakarta.variable} h-full`} suppressHydrationWarning>
         <body className="min-h-full font-sans antialiased">
-          <ConvexClientProvider>
-            {children}
-            <Toaster richColors position="top-center" closeButton />
-          </ConvexClientProvider>
+          <ThemeProvider>
+            <ConvexClientProvider>
+              {children}
+              <Toaster richColors position="top-center" closeButton />
+            </ConvexClientProvider>
+          </ThemeProvider>
         </body>
       </html>
     </ConvexAuthNextjsServerProvider>

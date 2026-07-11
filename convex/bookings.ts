@@ -11,6 +11,8 @@ function mapSite(doc: Doc<"sites">) {
     domain: doc.domain,
     accent_color: doc.accentColor,
     contact_email: doc.contactEmail ?? null,
+    hosting_provider: doc.hostingProvider ?? null,
+    hosting_account_email: doc.hostingAccountEmail ?? null,
     created_at: new Date(doc.createdAt).toISOString(),
   };
 }

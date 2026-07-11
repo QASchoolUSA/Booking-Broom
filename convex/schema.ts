@@ -20,6 +20,12 @@ export default defineSchema({
     accentColor: v.string(),
     /** Site-specific inbox used for booking admin alerts and From/Reply-To. */
     contactEmail: v.optional(v.string()),
+    /** Where the cleaning site is hosted (for ops login reminders). */
+    hostingProvider: v.optional(
+      v.union(v.literal("vercel"), v.literal("cloudflare"))
+    ),
+    /** Email used to sign in to the hosting account. */
+    hostingAccountEmail: v.optional(v.string()),
     apiKeyHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_slug", ["slug"]),
