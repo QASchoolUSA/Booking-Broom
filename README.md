@@ -225,30 +225,25 @@ The **SEO** page (`/seo`) syncs clicks, impressions, CTR, and average position f
 1. Open [Google Cloud Console](https://console.cloud.google.com/) and create (or pick) a project.
 2. Enable the **Google Search Console API**.
 3. Create an **OAuth 2.0 Client ID** (Application type: Web application).
-4. Add an authorized redirect URI:
+4. Add an authorized redirect URI pointing at this Next.js app:
 
 ```
-https://YOUR_DEPLOYMENT.convex.site/gsc/oauth/callback
+https://bookings.kedrik.com/gsc/oauth/callback
 ```
 
-Use the same host as `NEXT_PUBLIC_CONVEX_SITE_URL` / Convex HTTP actions (local anonymous backend uses `http://127.0.0.1:3211`).
+(For local testing, also add `http://localhost:3000/gsc/oauth/callback`.)
 
-5. Set Convex environment variables:
+5. Set Convex environment variables (never commit `client_secret*.json`):
 
 ```bash
 npx convex env set GOOGLE_CLIENT_ID "your-client-id.apps.googleusercontent.com"
 npx convex env set GOOGLE_CLIENT_SECRET "your-client-secret"
-# Optional: fallback redirect origin if OAuth state is missing
-npx convex env set APP_URL "http://localhost:3000"
+npx convex env set APP_URL "https://bookings.kedrik.com"
+# Optional explicit override (defaults to $APP_URL/gsc/oauth/callback)
+# npx convex env set GOOGLE_REDIRECT_URI "https://bookings.kedrik.com/gsc/oauth/callback"
 ```
 
-For anonymous local Convex:
-
-```bash
-CONVEX_AGENT_MODE=anonymous npx convex env set GOOGLE_CLIENT_ID "..."
-CONVEX_AGENT_MODE=anonymous npx convex env set GOOGLE_CLIENT_SECRET "..."
-CONVEX_AGENT_MODE=anonymous npx convex env set APP_URL "http://localhost:3000"
-```
+Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Vercel if not already.
 
 6. Ensure each cleaning site property exists in the Google account you connect (Domain or URL-prefix property). Domains are matched automatically to `sites.domain`; if a match fails, set a property override on the SEO page card.
 

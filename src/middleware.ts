@@ -5,7 +5,10 @@ import {
 } from "@convex-dev/auth/nextjs/server";
 
 const isPublicPage = createRouteMatcher(["/login"]);
-const isPublicApi = createRouteMatcher(["/api/bookings"]);
+const isPublicApi = createRouteMatcher([
+  "/api/bookings",
+  "/gsc/oauth/callback",
+]);
 
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   const isAuthenticated = await convexAuth.isAuthenticated();

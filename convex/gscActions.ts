@@ -1,4 +1,4 @@
-import { action, internalAction, httpAction } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -9,10 +9,17 @@ const GSC_SCOPE =
 
 const PERIODS = [7, 28, 90] as const;
 
+/** Must match an authorized redirect URI on the Google OAuth client (Next.js app). */
 function redirectUri(): string {
-  const siteUrl = process.env.CONVEX_SITE_URL;
-  if (!siteUrl) throw new Error("CONVEX_SITE_URL is not set");
-  return `${siteUrl.replace(/\/$/, "")}/gsc/oauth/callback`;
+  const explicit = process.env.GOOGLE_REDIRECT_URI?.trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+  const appUrl = process.env.APP_URL?.trim();
+  if (!appUrl) {
+    throw new Error(
+      "Set APP_URL or GOOGLE_REDIRECT_URI in Convex env (e.g. https://bookings.kedrik.com)"
+    );
+  }
+  return `${appUrl.replace(/\/$/, "")}/gsc/oauth/callback`;
 }
 
 function requireGoogleCreds(): { clientId: string; clientSecret: string } {
@@ -123,60 +130,62 @@ async function fetchGoogleEmail(accessToken: string): Promise<string> {
   return data.email;
 }
 
-export const oauthCallback = httpAction(async (ctx, request) => {
-  const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
-  const oauthError = url.searchParams.get("error");
+/**
+ * Completes Google OAuth after the Next.js `/gsc/oauth/callback` route receives the code.
+ * Auth is via one-time OAuth state (no user JWT on the callback).
+ */
+export const completeOAuthCallback = action({
+  args: {
+    code: v.string(),
+    state: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    | { ok: true; returnOrigin: string }
+    | { ok: false; returnOrigin: string; error: string }
+  > => {
+    const fallbackOrigin =
+      process.env.APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
 
-  const fallbackOrigin =
-    process.env.APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
-
-  const failRedirect = (origin: string, message: string) =>
-    Response.redirect(
-      `${origin}/seo?gsc=error&message=${encodeURIComponent(message)}`,
-      302
+    const consumed: { returnOrigin: string } | null = await ctx.runMutation(
+      internal.gsc.consumeOauthState,
+      { state: args.state }
     );
+    if (!consumed) {
+      return {
+        ok: false,
+        returnOrigin: fallbackOrigin,
+        error: "Invalid or expired OAuth state",
+      };
+    }
 
-  if (oauthError) {
-    return failRedirect(
-      fallbackOrigin,
-      oauthError === "access_denied"
-        ? "Google authorization was denied"
-        : oauthError
-    );
-  }
+    try {
+      const tokens = await exchangeCode(args.code);
+      const email = await fetchGoogleEmail(tokens.accessToken);
+      await ctx.runMutation(internal.gsc.upsertConnection, {
+        googleEmail: email,
+        refreshToken: tokens.refreshToken,
+        accessToken: tokens.accessToken,
+        accessTokenExpiresAt: Date.now() + tokens.expiresIn * 1000,
+      });
 
-  if (!code || !state) {
-    return failRedirect(fallbackOrigin, "Missing OAuth code or state");
-  }
+      await ctx.scheduler.runAfter(0, internal.gscActions.syncAllInternal, {});
 
-  const consumed = await ctx.runMutation(internal.gsc.consumeOauthState, {
-    state,
-  });
-  const returnOrigin = consumed?.returnOrigin ?? fallbackOrigin;
-
-  if (!consumed) {
-    return failRedirect(returnOrigin, "Invalid or expired OAuth state");
-  }
-
-  try {
-    const tokens = await exchangeCode(code);
-    const email = await fetchGoogleEmail(tokens.accessToken);
-    await ctx.runMutation(internal.gsc.upsertConnection, {
-      googleEmail: email,
-      refreshToken: tokens.refreshToken,
-      accessToken: tokens.accessToken,
-      accessTokenExpiresAt: Date.now() + tokens.expiresIn * 1000,
-    });
-
-    await ctx.scheduler.runAfter(0, internal.gscActions.syncAllInternal, {});
-
-    return Response.redirect(`${returnOrigin}/seo?gsc=connected`, 302);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "OAuth failed";
-    return failRedirect(returnOrigin, message);
-  }
+      return {
+        ok: true,
+        returnOrigin: consumed.returnOrigin,
+      };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "OAuth failed";
+      return {
+        ok: false,
+        returnOrigin: consumed.returnOrigin,
+        error: message,
+      };
+    }
+  },
 });
 
 async function refreshAccessToken(refreshToken: string): Promise<{
