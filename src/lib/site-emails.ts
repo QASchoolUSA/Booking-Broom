@@ -28,7 +28,7 @@ const SITE_EMAILS: Record<
   },
   "cleaning-weekly": {
     name: "Cleaning Weekly",
-    email: "hello@cleaningweekly.com",
+    email: "info@cleaningweekly.com",
   },
 };
 

@@ -53,7 +53,7 @@ export const SEED_SITES = [
     name: "Cleaning Weekly",
     domain: "cleaningweekly.com",
     accentColor: "#0D9488",
-    contactEmail: "hello@cleaningweekly.com",
+    contactEmail: "info@cleaningweekly.com",
     apiKeyHash:
       "556a60b2e73ab2f14408eca3cb5e7717260bab1f8385e89234c372b6a4aca335",
   },

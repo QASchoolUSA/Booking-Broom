@@ -53,6 +53,6 @@ Add them to Vercel `ALLOWED_ORIGINS` if you override the default list.
 Booking confirmation emails can be sent by **Booking Broom** after each successful booking when SMTP is configured on the Booking Broom deployment.
 
 - **Customer** — confirmation to the email on the booking form (From: Cleaning Weekly)
-- **Admin** — notification to `hello@cleaningweekly.com`
+- **Admin** — notification to `info@cleaningweekly.com`
 
 Cleaning Weekly may also send its own SMTP emails from `/api/book`. To avoid duplicate emails, disable SMTP on one side once Booking Broom SMTP is live.

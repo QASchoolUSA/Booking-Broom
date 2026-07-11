@@ -194,7 +194,7 @@ When a booking is submitted via the public API, Booking Broom can send:
 | Haines City Cleaning | `info@hainescitycleaning.com` |
 | Celebration Cleaning | `info@celebrationcleaning.com` |
 | Cleaning Winter Haven | `info@cleaningwinterhaven.com` |
-| Cleaning Weekly | `hello@cleaningweekly.com` |
+| Cleaning Weekly | `info@cleaningweekly.com` |
 
 Configure SpaceMail SMTP in Vercel (or `.env.local` for local dev):
 
