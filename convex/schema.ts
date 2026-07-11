@@ -26,6 +26,8 @@ export default defineSchema({
     ),
     /** Email used to sign in to the hosting account. */
     hostingAccountEmail: v.optional(v.string()),
+    /** Override GSC property URL when auto-match by domain fails. */
+    gscPropertyUrl: v.optional(v.string()),
     apiKeyHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_slug", ["slug"]),
@@ -47,4 +49,36 @@ export default defineSchema({
   })
     .index("by_site", ["siteId"])
     .index("by_created", ["createdAt"]),
+
+  /** Single Google Search Console OAuth connection for the manager account. */
+  gscConnections: defineTable({
+    googleEmail: v.string(),
+    refreshToken: v.string(),
+    accessToken: v.string(),
+    accessTokenExpiresAt: v.number(),
+    connectedAt: v.number(),
+    lastSyncAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+  }),
+
+  /** Short-lived OAuth CSRF state for the GSC connect flow. */
+  gscOauthStates: defineTable({
+    state: v.string(),
+    returnOrigin: v.string(),
+    createdAt: v.number(),
+  }).index("by_state", ["state"]),
+
+  /** Latest Search Console snapshot per site and period. */
+  siteSearchMetrics: defineTable({
+    siteId: v.id("sites"),
+    periodDays: v.union(v.literal(7), v.literal(28), v.literal(90)),
+    gscPropertyUrl: v.string(),
+    clicks: v.number(),
+    impressions: v.number(),
+    ctr: v.number(),
+    position: v.number(),
+    startDate: v.string(),
+    endDate: v.string(),
+    syncedAt: v.number(),
+  }).index("by_site_period", ["siteId", "periodDays"]),
 });

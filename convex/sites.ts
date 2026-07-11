@@ -12,6 +12,7 @@ function mapSite(doc: {
   contactEmail?: string;
   hostingProvider?: "vercel" | "cloudflare";
   hostingAccountEmail?: string;
+  gscPropertyUrl?: string;
   createdAt: number;
 }) {
   return {
@@ -23,6 +24,7 @@ function mapSite(doc: {
     contact_email: doc.contactEmail ?? null,
     hosting_provider: doc.hostingProvider ?? null,
     hosting_account_email: doc.hostingAccountEmail ?? null,
+    gsc_property_url: doc.gscPropertyUrl ?? null,
     created_at: new Date(doc.createdAt).toISOString(),
   };
 }

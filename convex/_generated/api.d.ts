@@ -10,8 +10,12 @@
 
 import type * as auth from "../auth.js";
 import type * as bookings from "../bookings.js";
+import type * as crons from "../crons.js";
+import type * as gsc from "../gsc.js";
+import type * as gscActions from "../gscActions.js";
 import type * as http from "../http.js";
 import type * as lib_apiKeys from "../lib/apiKeys.js";
+import type * as lib_gscMatch from "../lib/gscMatch.js";
 import type * as seed from "../seed.js";
 import type * as sites from "../sites.js";
 
@@ -24,8 +28,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   bookings: typeof bookings;
+  crons: typeof crons;
+  gsc: typeof gsc;
+  gscActions: typeof gscActions;
   http: typeof http;
   "lib/apiKeys": typeof lib_apiKeys;
+  "lib/gscMatch": typeof lib_gscMatch;
   seed: typeof seed;
   sites: typeof sites;
 }>;

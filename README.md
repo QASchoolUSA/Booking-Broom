@@ -216,6 +216,44 @@ npx convex run internal.seed.syncSeedSites
 
 To add a new site’s inbox, update both files and re-run sync.
 
+## Google Search Console (SEO page)
+
+The **SEO** page (`/seo`) syncs clicks, impressions, CTR, and average position from Google Search Console for each cleaning site.
+
+### One-time Google Cloud setup
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create (or pick) a project.
+2. Enable the **Google Search Console API**.
+3. Create an **OAuth 2.0 Client ID** (Application type: Web application).
+4. Add an authorized redirect URI:
+
+```
+https://YOUR_DEPLOYMENT.convex.site/gsc/oauth/callback
+```
+
+Use the same host as `NEXT_PUBLIC_CONVEX_SITE_URL` / Convex HTTP actions (local anonymous backend uses `http://127.0.0.1:3211`).
+
+5. Set Convex environment variables:
+
+```bash
+npx convex env set GOOGLE_CLIENT_ID "your-client-id.apps.googleusercontent.com"
+npx convex env set GOOGLE_CLIENT_SECRET "your-client-secret"
+# Optional: fallback redirect origin if OAuth state is missing
+npx convex env set APP_URL "http://localhost:3000"
+```
+
+For anonymous local Convex:
+
+```bash
+CONVEX_AGENT_MODE=anonymous npx convex env set GOOGLE_CLIENT_ID "..."
+CONVEX_AGENT_MODE=anonymous npx convex env set GOOGLE_CLIENT_SECRET "..."
+CONVEX_AGENT_MODE=anonymous npx convex env set APP_URL "http://localhost:3000"
+```
+
+6. Ensure each cleaning site property exists in the Google account you connect (Domain or URL-prefix property). Domains are matched automatically to `sites.domain`; if a match fails, set a property override on the SEO page card.
+
+7. In the app: open **SEO** → **Connect Google** → approve readonly Search Console access. Metrics sync daily at 06:00 UTC and on demand via **Sync now**.
+
 ## Project Structure
 
 ```
@@ -225,6 +263,7 @@ src/
 ├── components/
 │   ├── bookings/           # Booking cards, detail sheet
 │   ├── dashboard/          # Main dashboard view
+│   ├── seo/                # Search Console overview & site cards
 │   └── layout/             # App shell, nav, filters
 └── lib/hooks/useBookings.ts  # Convex realtime queries
 ```

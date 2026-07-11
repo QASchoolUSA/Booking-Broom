@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useBookings } from "@/lib/hooks/useBookings";
 import { AppShell } from "@/components/layout/AppShell";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
@@ -102,7 +103,14 @@ export default function SettingsPage() {
                 <CardTitle>Connected sites</CardTitle>
                 <CardDescription>
                   {sites.length} cleaning websites — hosting login reminders for
-                  Vercel / Cloudflare
+                  Vercel / Cloudflare. Search Console stats live on{" "}
+                  <Link
+                    href="/seo"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    SEO
+                  </Link>
+                  .
                 </CardDescription>
               </div>
             </div>

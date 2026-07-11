@@ -6,6 +6,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import {
   Broom,
   CalendarBlank,
+  ChartLine,
   GearSix,
   SignOut,
   WifiHigh,
@@ -53,6 +54,7 @@ export function AppShell({
 
   const navItems = [
     { href: "/", label: "Bookings", icon: CalendarBlank, match: (p: string) => p === "/" || p.startsWith("/sites") },
+    { href: "/seo", label: "SEO", icon: ChartLine, match: (p: string) => p === "/seo" || p.startsWith("/seo/") },
     { href: "/settings", label: "Settings", icon: GearSix, match: (p: string) => p === "/settings" },
   ];
 
