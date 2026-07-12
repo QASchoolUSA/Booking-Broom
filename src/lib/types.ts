@@ -40,6 +40,10 @@ export interface SitePerformanceMetrics {
   accessibility_score: number | null;
   best_practices_score: number | null;
   seo_score: number | null;
+  /** Agentic Browsing category as 0–100 (from Lighthouse fraction). */
+  agentic_browsing_score: number | null;
+  agentic_browsing_passed: number | null;
+  agentic_browsing_total: number | null;
   lcp_ms: number | null;
   cls: number | null;
   inp_ms: number | null;

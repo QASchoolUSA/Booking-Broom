@@ -252,7 +252,7 @@ Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Vercel if not alre
 
 ## PageSpeed Insights (Performance page)
 
-The **Speed** page (`/performance`) runs Google PageSpeed Insights (Lighthouse) for each cleaning site and shows performance, accessibility, best-practices, and SEO scores plus Core Web Vitals (LCP, CLS, INP/TBT, FCP).
+The **Speed** page (`/performance`) runs Google PageSpeed Insights (Lighthouse) for each cleaning site and shows performance, accessibility, best-practices, SEO, and **Agentic Browsing** scores plus Core Web Vitals (LCP, CLS, INP/TBT, FCP). Agentic Browsing is Lighthouse’s AI-agent readiness category (shown as a pass fraction such as `2/3`).
 
 ### One-time Google Cloud setup
 

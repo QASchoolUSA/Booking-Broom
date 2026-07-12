@@ -12,14 +12,25 @@ type PsiAudit = {
   score?: number | null;
 };
 
+type PsiAuditRef = {
+  id: string;
+  weight?: number;
+};
+
+type PsiCategory = {
+  score?: number | null;
+  auditRefs?: PsiAuditRef[];
+};
+
 type PsiResponse = {
   lighthouseResult?: {
     finalUrl?: string;
     categories?: {
-      performance?: { score?: number | null };
-      accessibility?: { score?: number | null };
-      "best-practices"?: { score?: number | null };
-      seo?: { score?: number | null };
+      performance?: PsiCategory;
+      accessibility?: PsiCategory;
+      "best-practices"?: PsiCategory;
+      seo?: PsiCategory;
+      "agentic-browsing"?: PsiCategory;
     };
     audits?: Record<string, PsiAudit>;
   };
@@ -35,6 +46,28 @@ type PsiResponse = {
 function scoreTo100(score: number | null | undefined): number | undefined {
   if (score == null || Number.isNaN(score)) return undefined;
   return Math.round(score * 100);
+}
+
+/** Fractional pass ratio for Agentic Browsing (weighted audits that apply). */
+function agenticFraction(
+  category: PsiCategory | undefined,
+  audits: Record<string, PsiAudit>
+): { score?: number; passed?: number; total?: number } {
+  if (!category) return {};
+  const refs = (category.auditRefs ?? []).filter((r) => (r.weight ?? 0) > 0);
+  if (refs.length === 0) {
+    return { score: scoreTo100(category.score) };
+  }
+  let passed = 0;
+  for (const ref of refs) {
+    const auditScore = audits[ref.id]?.score;
+    if (auditScore != null && auditScore >= 0.9) passed += 1;
+  }
+  return {
+    score: scoreTo100(category.score) ?? Math.round((passed / refs.length) * 100),
+    passed,
+    total: refs.length,
+  };
 }
 
 function siteUrl(domain: string, performanceUrl?: string): string {
@@ -75,6 +108,9 @@ type PagespeedResult = {
   accessibilityScore?: number;
   bestPracticesScore?: number;
   seoScore?: number;
+  agenticBrowsingScore?: number;
+  agenticBrowsingPassed?: number;
+  agenticBrowsingTotal?: number;
   lcpMs?: number;
   cls?: number;
   inpMs?: number;
@@ -94,6 +130,7 @@ async function runPagespeedOnce(
     "accessibility",
     "best-practices",
     "seo",
+    "agentic-browsing",
   ] as const) {
     params.append("category", category);
   }
@@ -118,6 +155,7 @@ async function runPagespeedOnce(
 
   const audits = lh.audits ?? {};
   const categories = lh.categories ?? {};
+  const agentic = agenticFraction(categories["agentic-browsing"], audits);
 
   return {
     url: lh.finalUrl || url,
@@ -125,6 +163,9 @@ async function runPagespeedOnce(
     accessibilityScore: scoreTo100(categories.accessibility?.score),
     bestPracticesScore: scoreTo100(categories["best-practices"]?.score),
     seoScore: scoreTo100(categories.seo?.score),
+    agenticBrowsingScore: agentic.score,
+    agenticBrowsingPassed: agentic.passed,
+    agenticBrowsingTotal: agentic.total,
     lcpMs: audits["largest-contentful-paint"]?.numericValue,
     cls: audits["cumulative-layout-shift"]?.numericValue,
     inpMs:
@@ -191,6 +232,9 @@ export const syncAllInternal = internalAction({
             accessibilityScore: result.accessibilityScore,
             bestPracticesScore: result.bestPracticesScore,
             seoScore: result.seoScore,
+            agenticBrowsingScore: result.agenticBrowsingScore,
+            agenticBrowsingPassed: result.agenticBrowsingPassed,
+            agenticBrowsingTotal: result.agenticBrowsingTotal,
             lcpMs: result.lcpMs,
             cls: result.cls,
             inpMs: result.inpMs,
@@ -298,6 +342,9 @@ export const syncSite = action({
           accessibilityScore: result.accessibilityScore,
           bestPracticesScore: result.bestPracticesScore,
           seoScore: result.seoScore,
+          agenticBrowsingScore: result.agenticBrowsingScore,
+          agenticBrowsingPassed: result.agenticBrowsingPassed,
+          agenticBrowsingTotal: result.agenticBrowsingTotal,
           lcpMs: result.lcpMs,
           cls: result.cls,
           inpMs: result.inpMs,

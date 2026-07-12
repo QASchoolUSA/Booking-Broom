@@ -54,7 +54,7 @@ export default function PerformancePage() {
           <div className="hidden md:block">
             <h2 className="text-2xl font-bold tracking-tight">Performance</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              PageSpeed Insights scores and Core Web Vitals by site
+              PageSpeed Insights scores, Agentic Browsing, and Core Web Vitals by site
             </p>
           </div>
           <Tabs

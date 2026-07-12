@@ -1,6 +1,6 @@
 "use client";
 
-import { Gauge, WarningCircle, CheckCircle, XCircle } from "@phosphor-icons/react";
+import { Gauge, WarningCircle, CheckCircle, Robot } from "@phosphor-icons/react";
 import type { SitePerformanceRow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ function avgScore(
     | "accessibility_score"
     | "best_practices_score"
     | "seo_score"
+    | "agentic_browsing_score"
 ): number | null {
   const values = rows
     .map((r) => r.metrics?.[key])
@@ -40,12 +41,9 @@ export function PerformanceOverview({
   const good = withMetrics.filter(
     (r) => (r.metrics?.performance_score ?? 0) >= 90
   ).length;
-  const needsWork = withMetrics.filter((r) => {
-    const s = r.metrics?.performance_score;
-    return s != null && s < 50;
-  }).length;
 
   const avgPerf = avgScore(withMetrics, "performance_score");
+  const avgAgent = avgScore(withMetrics, "agentic_browsing_score");
 
   const stats = [
     {
@@ -55,16 +53,16 @@ export function PerformanceOverview({
       accent: scoreTone(avgPerf),
     },
     {
+      label: "Avg agentic",
+      value: avgAgent != null ? String(avgAgent) : "—",
+      icon: Robot,
+      accent: scoreTone(avgAgent),
+    },
+    {
       label: "Good (90+)",
       value: String(good),
       icon: CheckCircle,
       accent: "text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-950",
-    },
-    {
-      label: "Poor (<50)",
-      value: String(needsWork),
-      icon: XCircle,
-      accent: "text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-950",
     },
     {
       label: "Failed audits",

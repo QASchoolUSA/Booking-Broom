@@ -32,6 +32,9 @@ function mapMetric(doc: {
   accessibilityScore?: number;
   bestPracticesScore?: number;
   seoScore?: number;
+  agenticBrowsingScore?: number;
+  agenticBrowsingPassed?: number;
+  agenticBrowsingTotal?: number;
   lcpMs?: number;
   cls?: number;
   inpMs?: number;
@@ -49,6 +52,9 @@ function mapMetric(doc: {
     accessibility_score: doc.accessibilityScore ?? null,
     best_practices_score: doc.bestPracticesScore ?? null,
     seo_score: doc.seoScore ?? null,
+    agentic_browsing_score: doc.agenticBrowsingScore ?? null,
+    agentic_browsing_passed: doc.agenticBrowsingPassed ?? null,
+    agentic_browsing_total: doc.agenticBrowsingTotal ?? null,
     lcp_ms: doc.lcpMs ?? null,
     cls: doc.cls ?? null,
     inp_ms: doc.inpMs ?? null,
@@ -156,6 +162,9 @@ export const upsertMetric = internalMutation({
     accessibilityScore: v.optional(v.number()),
     bestPracticesScore: v.optional(v.number()),
     seoScore: v.optional(v.number()),
+    agenticBrowsingScore: v.optional(v.number()),
+    agenticBrowsingPassed: v.optional(v.number()),
+    agenticBrowsingTotal: v.optional(v.number()),
     lcpMs: v.optional(v.number()),
     cls: v.optional(v.number()),
     inpMs: v.optional(v.number()),
@@ -187,6 +196,15 @@ export const upsertMetric = internalMutation({
         bestPracticesScore: args.bestPracticesScore,
       }),
       ...(args.seoScore != null && { seoScore: args.seoScore }),
+      ...(args.agenticBrowsingScore != null && {
+        agenticBrowsingScore: args.agenticBrowsingScore,
+      }),
+      ...(args.agenticBrowsingPassed != null && {
+        agenticBrowsingPassed: args.agenticBrowsingPassed,
+      }),
+      ...(args.agenticBrowsingTotal != null && {
+        agenticBrowsingTotal: args.agenticBrowsingTotal,
+      }),
       ...(args.lcpMs != null && { lcpMs: args.lcpMs }),
       ...(args.cls != null && { cls: args.cls }),
       ...(args.inpMs != null && { inpMs: args.inpMs }),

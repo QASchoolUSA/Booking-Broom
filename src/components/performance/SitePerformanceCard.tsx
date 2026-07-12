@@ -34,14 +34,19 @@ function scoreRing(score: number | null): string {
 function ScoreCircle({
   score,
   label,
+  display,
 }: {
   score: number | null;
   label: string;
+  /** Override center text (e.g. fractional "2/3" for Agentic Browsing). */
+  display?: string | null;
 }) {
   const radius = 18;
   const circumference = 2 * Math.PI * radius;
   const progress = score != null ? Math.min(100, Math.max(0, score)) / 100 : 0;
   const offset = circumference * (1 - progress);
+  const center =
+    display ?? (score != null ? String(score) : "—");
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -69,11 +74,12 @@ function ScoreCircle({
         </svg>
         <span
           className={cn(
-            "absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums",
+            "absolute inset-0 flex items-center justify-center font-bold tabular-nums",
+            display && display.length > 2 ? "text-[9px]" : "text-xs",
             scoreColor(score).split(" ")[0]
           )}
         >
-          {score != null ? score : "—"}
+          {center}
         </span>
       </div>
       <span className="text-[10px] font-medium text-muted-foreground">
@@ -210,11 +216,22 @@ export function SitePerformanceCard({ row }: SitePerformanceCardProps) {
         </div>
       ) : metrics ? (
         <>
-          <div className="mt-4 flex justify-between gap-2 px-1">
+          <div className="mt-4 flex justify-between gap-1.5 px-0.5 sm:gap-2 sm:px-1">
             <ScoreCircle score={metrics.performance_score} label="Perf" />
             <ScoreCircle score={metrics.accessibility_score} label="A11y" />
             <ScoreCircle score={metrics.best_practices_score} label="BP" />
             <ScoreCircle score={metrics.seo_score} label="SEO" />
+            <ScoreCircle
+              score={metrics.agentic_browsing_score}
+              label="Agent"
+              display={
+                metrics.agentic_browsing_passed != null &&
+                metrics.agentic_browsing_total != null &&
+                metrics.agentic_browsing_total > 0
+                  ? `${metrics.agentic_browsing_passed}/${metrics.agentic_browsing_total}`
+                  : null
+              }
+            />
           </div>
 
           {cwv && (

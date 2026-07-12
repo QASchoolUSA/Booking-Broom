@@ -99,6 +99,10 @@ export default defineSchema({
     accessibilityScore: v.optional(v.number()),
     bestPracticesScore: v.optional(v.number()),
     seoScore: v.optional(v.number()),
+    /** Lighthouse Agentic Browsing category (0–100). Display mode is fractional. */
+    agenticBrowsingScore: v.optional(v.number()),
+    agenticBrowsingPassed: v.optional(v.number()),
+    agenticBrowsingTotal: v.optional(v.number()),
     lcpMs: v.optional(v.number()),
     cls: v.optional(v.number()),
     inpMs: v.optional(v.number()),
