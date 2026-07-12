@@ -7,6 +7,7 @@ import {
   Broom,
   CalendarBlank,
   ChartLine,
+  Gauge,
   GearSix,
   SignOut,
   WifiHigh,
@@ -55,6 +56,7 @@ export function AppShell({
   const navItems = [
     { href: "/", label: "Bookings", icon: CalendarBlank, match: (p: string) => p === "/" || p.startsWith("/sites") },
     { href: "/seo", label: "SEO", icon: ChartLine, match: (p: string) => p === "/seo" || p.startsWith("/seo/") },
+    { href: "/performance", label: "Speed", icon: Gauge, match: (p: string) => p === "/performance" || p.startsWith("/performance/") },
     { href: "/settings", label: "Settings", icon: GearSix, match: (p: string) => p === "/settings" },
   ];
 

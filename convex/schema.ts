@@ -28,6 +28,8 @@ export default defineSchema({
     hostingAccountEmail: v.optional(v.string()),
     /** Override GSC property URL when auto-match by domain fails. */
     gscPropertyUrl: v.optional(v.string()),
+    /** Full URL override for PageSpeed Insights when https://{domain} is wrong. */
+    performanceUrl: v.optional(v.string()),
     apiKeyHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_slug", ["slug"]),
@@ -81,4 +83,29 @@ export default defineSchema({
     endDate: v.string(),
     syncedAt: v.number(),
   }).index("by_site_period", ["siteId", "periodDays"]),
+
+  /** Singleton row tracking the last PageSpeed Insights sync. */
+  pagespeedSyncState: defineTable({
+    lastSyncAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+  }),
+
+  /** Latest PageSpeed Insights snapshot per site and strategy. */
+  sitePerformanceMetrics: defineTable({
+    siteId: v.id("sites"),
+    strategy: v.union(v.literal("mobile"), v.literal("desktop")),
+    url: v.string(),
+    performanceScore: v.optional(v.number()),
+    accessibilityScore: v.optional(v.number()),
+    bestPracticesScore: v.optional(v.number()),
+    seoScore: v.optional(v.number()),
+    lcpMs: v.optional(v.number()),
+    cls: v.optional(v.number()),
+    inpMs: v.optional(v.number()),
+    fcpMs: v.optional(v.number()),
+    /** CrUX field data overall category when available: FAST | AVERAGE | SLOW */
+    overallCategory: v.optional(v.string()),
+    error: v.optional(v.string()),
+    syncedAt: v.number(),
+  }).index("by_site_strategy", ["siteId", "strategy"]),
 });

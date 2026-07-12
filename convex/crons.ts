@@ -9,4 +9,11 @@ crons.daily(
   internal.gscActions.syncAllInternal
 );
 
+/** PageSpeed runs are slower; weekly is enough for ops health checks. */
+crons.weekly(
+  "sync PageSpeed Insights metrics",
+  { dayOfWeek: "monday", hourUTC: 7, minuteUTC: 0 },
+  internal.pagespeedActions.syncAllInternal
+);
+
 export default crons;

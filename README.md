@@ -250,6 +250,29 @@ Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Vercel if not alre
 
 7. In the app: open **SEO** → **Connect Google** → approve readonly Search Console access. Metrics sync daily at 06:00 UTC and on demand via **Sync now**.
 
+## PageSpeed Insights (Performance page)
+
+The **Speed** page (`/performance`) runs Google PageSpeed Insights (Lighthouse) for each cleaning site and shows performance, accessibility, best-practices, and SEO scores plus Core Web Vitals (LCP, CLS, INP/TBT, FCP).
+
+### One-time Google Cloud setup
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create (or pick) a project.
+2. Enable the **PageSpeed Insights API**.
+3. Create an **API key** (restrict it to the PageSpeed Insights API if possible).
+4. Set the Convex environment variable:
+
+```bash
+npx convex env set PAGESPEED_API_KEY "your-api-key"
+# Cloud / anonymous local:
+# CONVEX_AGENT_MODE=anonymous npx convex env set PAGESPEED_API_KEY "your-api-key"
+```
+
+Without a key, the API allows a very low anonymous quota and will often fail under load.
+
+5. In the app: open **Speed** → **Run PageSpeed for all sites** (or **Sync now**). Audits run for mobile and desktop. Sync also runs weekly on Monday at 07:00 UTC.
+
+Domains are audited as `https://{domain}`; set a URL override on a site card if you need `www` or a specific path.
+
 ## Project Structure
 
 ```
@@ -260,6 +283,7 @@ src/
 │   ├── bookings/           # Booking cards, detail sheet
 │   ├── dashboard/          # Main dashboard view
 │   ├── seo/                # Search Console overview & site cards
+│   ├── performance/        # PageSpeed Insights overview & site cards
 │   └── layout/             # App shell, nav, filters
 └── lib/hooks/useBookings.ts  # Convex realtime queries
 ```

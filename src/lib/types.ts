@@ -19,7 +19,46 @@ export interface Site {
   hosting_provider: HostingProvider | null;
   hosting_account_email: string | null;
   gsc_property_url: string | null;
+  performance_url: string | null;
   created_at: string;
+}
+
+export type PagespeedStrategy = "mobile" | "desktop";
+
+export interface PagespeedSyncState {
+  id: string;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+}
+
+export interface SitePerformanceMetrics {
+  id: string;
+  site_id: string;
+  strategy: PagespeedStrategy;
+  url: string;
+  performance_score: number | null;
+  accessibility_score: number | null;
+  best_practices_score: number | null;
+  seo_score: number | null;
+  lcp_ms: number | null;
+  cls: number | null;
+  inp_ms: number | null;
+  fcp_ms: number | null;
+  overall_category: string | null;
+  error: string | null;
+  synced_at: string;
+}
+
+export interface SitePerformanceRow {
+  site: {
+    id: string;
+    slug: string;
+    name: string;
+    domain: string;
+    accent_color: string;
+    performance_url: string | null;
+  };
+  metrics: SitePerformanceMetrics | null;
 }
 
 export interface GscConnection {
