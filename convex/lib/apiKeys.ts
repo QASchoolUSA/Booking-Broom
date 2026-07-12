@@ -57,4 +57,13 @@ export const SEED_SITES = [
     apiKeyHash:
       "556a60b2e73ab2f14408eca3cb5e7717260bab1f8385e89234c372b6a4aca335",
   },
+  {
+    slug: "davenport",
+    name: "Cleaning Davenport",
+    domain: "cleaningdavenport.com",
+    accentColor: "#0b6e6e",
+    contactEmail: "info@cleaningdavenport.com",
+    apiKeyHash:
+      "293de0ab407d09360e8acdb5a6390dee8a7f2bcb06b10446e8667fdf0798f20f",
+  },
 ] as const;

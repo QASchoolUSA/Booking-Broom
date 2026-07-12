@@ -30,6 +30,10 @@ const SITE_EMAILS: Record<
     name: "Cleaning Weekly",
     email: "info@cleaningweekly.com",
   },
+  davenport: {
+    name: "Cleaning Davenport",
+    email: "info@cleaningdavenport.com",
+  },
 };
 
 export function getAdminEmail(siteSlug: string): string | undefined {

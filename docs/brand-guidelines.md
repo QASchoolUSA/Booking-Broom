@@ -63,6 +63,7 @@
 | Celebration Cleaning | #8B5CF6 |
 | Cleaning Winter Haven | #0f766e |
 | Cleaning Weekly | #0D9488 |
+| Cleaning Davenport | #0b6e6e |
 
 ---
 
