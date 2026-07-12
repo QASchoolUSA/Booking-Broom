@@ -46,11 +46,30 @@ function siteUrl(domain: string, performanceUrl?: string): string {
   return `https://${domain.replace(/^https?:\/\//i, "").replace(/\/$/, "")}`;
 }
 
-async function runPagespeed(
-  url: string,
-  strategy: Strategy,
-  apiKey: string | undefined
-): Promise<{
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatPsiError(message: string | undefined, status: number): string {
+  const raw = message || `PageSpeed request failed (${status})`;
+  if (/referer/i.test(raw) && /blocked/i.test(raw)) {
+    return (
+      `${raw} Fix: in Google Cloud → Credentials, set this API key’s ` +
+      `Application restrictions to None (server keys can’t use HTTP referrers).`
+    );
+  }
+  return raw;
+}
+
+function isRetryablePsiError(status: number, message: string | undefined): boolean {
+  if (status === 429 || status >= 500) return true;
+  // Google occasionally returns referer-blocked 403s under load even when the
+  // key is correctly unrestricted; a short retry usually succeeds.
+  if (status === 403 && message && /referer/i.test(message)) return true;
+  return false;
+}
+
+type PagespeedResult = {
   url: string;
   performanceScore?: number;
   accessibilityScore?: number;
@@ -62,7 +81,13 @@ async function runPagespeed(
   fcpMs?: number;
   overallCategory?: string;
   error?: string;
-}> {
+};
+
+async function runPagespeedOnce(
+  url: string,
+  strategy: Strategy,
+  apiKey: string | undefined
+): Promise<PagespeedResult & { status?: number }> {
   const params = new URLSearchParams({ url, strategy });
   for (const category of [
     "performance",
@@ -81,9 +106,8 @@ async function runPagespeed(
   if (!res.ok) {
     return {
       url,
-      error:
-        data.error?.message ||
-        `PageSpeed request failed (${res.status}) for ${url}`,
+      status: res.status,
+      error: formatPsiError(data.error?.message, res.status),
     };
   }
 
@@ -109,6 +133,32 @@ async function runPagespeed(
     fcpMs: audits["first-contentful-paint"]?.numericValue,
     overallCategory: data.loadingExperience?.overall_category,
   };
+}
+
+async function runPagespeed(
+  url: string,
+  strategy: Strategy,
+  apiKey: string | undefined
+): Promise<PagespeedResult> {
+  const maxAttempts = 3;
+  let last: PagespeedResult = { url, error: "PageSpeed request failed" };
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    last = await runPagespeedOnce(url, strategy, apiKey);
+    if (!last.error) return last;
+
+    const status = "status" in last ? (last as { status?: number }).status : undefined;
+    const retryable =
+      status != null && isRetryablePsiError(status, last.error);
+    if (!retryable || attempt === maxAttempts) break;
+
+    await sleep(1500 * attempt);
+  }
+
+  const { status: _status, ...result } = last as PagespeedResult & {
+    status?: number;
+  };
+  return result;
 }
 
 export const syncAllInternal = internalAction({
@@ -146,7 +196,7 @@ export const syncAllInternal = internalAction({
             inpMs: result.inpMs,
             fcpMs: result.fcpMs,
             overallCategory: result.overallCategory,
-            error: result.error,
+            error: result.error ?? null,
           });
           if (result.error) {
             errors.push(`${site.slug}/${strategy}: ${result.error}`);
@@ -161,6 +211,8 @@ export const syncAllInternal = internalAction({
             error: message,
           });
         }
+        // Brief pause between audits — PSI is sensitive to burst traffic.
+        await sleep(750);
       }
     }
 
@@ -251,7 +303,7 @@ export const syncSite = action({
           inpMs: result.inpMs,
           fcpMs: result.fcpMs,
           overallCategory: result.overallCategory,
-          error: result.error,
+          error: result.error ?? null,
         });
         if (result.error) errors.push(result.error);
       } catch (e) {
@@ -264,6 +316,7 @@ export const syncSite = action({
           error: message,
         });
       }
+      await sleep(750);
     }
 
     if (errors.length === strategies.length) {

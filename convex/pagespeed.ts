@@ -161,7 +161,8 @@ export const upsertMetric = internalMutation({
     inpMs: v.optional(v.number()),
     fcpMs: v.optional(v.number()),
     overallCategory: v.optional(v.string()),
-    error: v.optional(v.string()),
+    /** Pass null to clear a previous error after a successful sync. */
+    error: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -171,27 +172,38 @@ export const upsertMetric = internalMutation({
       )
       .unique();
 
-    const payload = {
+    const doc = {
       siteId: args.siteId,
       strategy: args.strategy,
       url: args.url,
-      performanceScore: args.performanceScore,
-      accessibilityScore: args.accessibilityScore,
-      bestPracticesScore: args.bestPracticesScore,
-      seoScore: args.seoScore,
-      lcpMs: args.lcpMs,
-      cls: args.cls,
-      inpMs: args.inpMs,
-      fcpMs: args.fcpMs,
-      overallCategory: args.overallCategory,
-      error: args.error,
       syncedAt: Date.now(),
+      ...(args.performanceScore != null && {
+        performanceScore: args.performanceScore,
+      }),
+      ...(args.accessibilityScore != null && {
+        accessibilityScore: args.accessibilityScore,
+      }),
+      ...(args.bestPracticesScore != null && {
+        bestPracticesScore: args.bestPracticesScore,
+      }),
+      ...(args.seoScore != null && { seoScore: args.seoScore }),
+      ...(args.lcpMs != null && { lcpMs: args.lcpMs }),
+      ...(args.cls != null && { cls: args.cls }),
+      ...(args.inpMs != null && { inpMs: args.inpMs }),
+      ...(args.fcpMs != null && { fcpMs: args.fcpMs }),
+      ...(args.overallCategory != null && {
+        overallCategory: args.overallCategory,
+      }),
+      ...(typeof args.error === "string" && args.error.length > 0
+        ? { error: args.error }
+        : {}),
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, payload);
+      // replace drops stale fields (e.g. previous error / scores)
+      await ctx.db.replace(existing._id, doc);
     } else {
-      await ctx.db.insert("sitePerformanceMetrics", payload);
+      await ctx.db.insert("sitePerformanceMetrics", doc);
     }
   },
 });
