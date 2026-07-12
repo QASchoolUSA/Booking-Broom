@@ -21,6 +21,15 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state");
   const oauthError = request.nextUrl.searchParams.get("error");
 
+  // If Convex Auth previously stripped `code` but left `state`, surface a clear error.
+  if (!code && state && !oauthError) {
+    return seoRedirect(appOrigin, {
+      gsc: "error",
+      message:
+        "OAuth code was missing (auth middleware may have intercepted it). Try Connect again.",
+    });
+  }
+
   if (oauthError) {
     return seoRedirect(appOrigin, {
       gsc: "error",
