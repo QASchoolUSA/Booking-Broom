@@ -35,6 +35,17 @@ import { cn } from "@/lib/utils";
 
 const UNSET = "__unset__";
 
+/** Format US digits as (321) 347-4518; keeps typing-friendly partials. */
+function formatUsPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length === 0) return "";
+  if (digits.length < 4) return `(${digits}`;
+  if (digits.length < 7) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  }
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 interface SiteOpsCardProps {
   row: SiteOpsRow;
 }
@@ -50,7 +61,9 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
   const [hostingEmail, setHostingEmail] = useState(
     site.hosting_account_email ?? ""
   );
-  const [phone, setPhone] = useState(site.phone_number ?? "");
+  const [phone, setPhone] = useState(() =>
+    formatUsPhone(site.phone_number ?? "")
+  );
   const [emailConfigured, setEmailConfigured] = useState(
     site.email_configured
   );
@@ -60,7 +73,7 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
   useEffect(() => {
     setProvider(site.hosting_provider);
     setHostingEmail(site.hosting_account_email ?? "");
-    setPhone(site.phone_number ?? "");
+    setPhone(formatUsPhone(site.phone_number ?? ""));
     setEmailConfigured(site.email_configured);
   }, [
     site.hosting_provider,
@@ -73,7 +86,7 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
   const dirty =
     provider !== site.hosting_provider ||
     hostingEmail.trim() !== (site.hosting_account_email ?? "") ||
-    phone.trim() !== (site.phone_number ?? "") ||
+    formatUsPhone(phone) !== formatUsPhone(site.phone_number ?? "") ||
     emailConfigured !== site.email_configured;
 
   const siteHref = `https://${site.domain.replace(/^https?:\/\//i, "").replace(/\/$/, "")}`;
@@ -85,7 +98,7 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
         siteId: site.id as Id<"sites">,
         hostingProvider: provider,
         hostingAccountEmail: hostingEmail.trim() || null,
-        phoneNumber: phone.trim() || null,
+        phoneNumber: formatUsPhone(phone) || null,
         emailConfigured,
       });
       toast.success(`Saved ops info for ${site.name}`);
@@ -261,7 +274,8 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
               autoComplete="off"
               placeholder="(407) 555-0100"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(formatUsPhone(e.target.value))}
+              inputMode="numeric"
               className="h-9 pl-9"
             />
           </div>
