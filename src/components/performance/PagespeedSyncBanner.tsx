@@ -69,7 +69,7 @@ export function PagespeedSyncBanner({
   };
 
   if (syncState === undefined) {
-    return <Skeleton className="h-28 w-full rounded-xl" />;
+    return <Skeleton className="h-16 w-full rounded-xl" />;
   }
 
   if (!syncState && !hasMetrics) {
@@ -107,9 +107,9 @@ export function PagespeedSyncBanner({
     : "Never synced";
 
   return (
-    <Card className="shadow-sm">
-      <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1">
+    <Card size="sm" className="shadow-sm">
+      <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-0.5">
           <p className="text-sm font-medium text-foreground">
             PageSpeed Insights
           </p>
