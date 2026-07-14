@@ -14,7 +14,6 @@ import {
   WifiSlash,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 type ConnectionState = "connecting" | "live" | "offline" | "reconnecting";
@@ -135,8 +134,7 @@ export function AppShell({
             {sidebar}
           </div>
 
-          <div className="shrink-0 space-y-0.5 border-t border-sidebar-border p-3">
-            <ThemeToggle labeled />
+          <div className="shrink-0 border-t border-sidebar-border p-3">
             <Button
               variant="ghost"
               className="h-10 w-full justify-start gap-2.5 px-3 text-muted-foreground hover:text-foreground"
@@ -156,7 +154,7 @@ export function AppShell({
           className="sticky top-0 z-20 border-b border-border/80 bg-card/90 backdrop-blur-md md:hidden"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
         >
-          <div className="flex h-14 items-center justify-between gap-3 px-4">
+          <div className="flex h-14 items-center gap-3 px-4">
             <div className="flex min-w-0 items-center gap-2.5">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <Broom size={16} weight="duotone" />
@@ -179,7 +177,6 @@ export function AppShell({
                 </button>
               </div>
             </div>
-            <ThemeToggle />
           </div>
         </header>
 
