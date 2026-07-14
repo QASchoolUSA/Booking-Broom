@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import {
   ArrowsClockwise,
-  EnvelopeSimple,
   ArrowSquareOut,
   Phone,
   WifiHigh,
@@ -57,7 +56,6 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
   );
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [sendingTest, setSendingTest] = useState(false);
 
   useEffect(() => {
     setProvider(site.hosting_provider);
@@ -113,26 +111,6 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
       toast.error(e instanceof Error ? e.message : "Health check failed");
     } finally {
       setChecking(false);
-    }
-  };
-
-  const handleTestEmail = async () => {
-    setSendingTest(true);
-    try {
-      const res = await fetch("/api/sites/test-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site_slug: site.slug }),
-      });
-      const data = (await res.json()) as { ok?: boolean; to?: string; error?: string };
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to send test email");
-      }
-      toast.success(`Test email sent to ${data.to}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to send test email");
-    } finally {
-      setSendingTest(false);
     }
   };
 
@@ -320,27 +298,14 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
           </span>
         </label>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            disabled={!dirty || saving}
-            onClick={handleSave}
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            disabled={sendingTest || !site.contact_email}
-            onClick={handleTestEmail}
-          >
-            <EnvelopeSimple size={14} />
-            {sendingTest ? "Sending…" : "Send test email"}
-          </Button>
-        </div>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!dirty || saving}
+          onClick={handleSave}
+        >
+          {saving ? "Saving…" : "Save"}
+        </Button>
       </CardContent>
     </Card>
   );
