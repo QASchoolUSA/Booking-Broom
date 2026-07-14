@@ -22,4 +22,11 @@ crons.weekly(
   internal.pagespeedActions.syncAllInternal
 );
 
+/** HTTP + site-name check for each cleaning website. */
+crons.interval(
+  "check site health",
+  { hours: 3 },
+  internal.siteHealthActions.checkAllInternal
+);
+
 export default crons;

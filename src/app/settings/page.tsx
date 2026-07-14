@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useBookings } from "@/lib/hooks/useBookings";
 import { AppShell } from "@/components/layout/AppShell";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
-import { SiteHostingRow } from "@/components/settings/SiteHostingRow";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import {
   Card,
@@ -14,11 +13,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  ArrowRight,
   DeviceMobile,
   Globe,
   Info,
   MoonStars,
 } from "@phosphor-icons/react";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
   const { sites, allBookings, connectionState } = useBookings();
@@ -102,30 +104,23 @@ export default function SettingsPage() {
               <div>
                 <CardTitle>Connected sites</CardTitle>
                 <CardDescription>
-                  {sites.length} cleaning websites — hosting login reminders for
-                  Vercel / Cloudflare. Search Console stats live on{" "}
-                  <Link
-                    href="/seo"
-                    className="font-medium text-primary underline-offset-2 hover:underline"
-                  >
-                    SEO
-                  </Link>
-                  .
+                  {sites.length} cleaning websites — hosting, phone, email setup,
+                  and uptime live on Sites.
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-3">
-              {sites.map((site) => (
-                <SiteHostingRow key={site.slug} site={site} />
-              ))}
-              {sites.length === 0 && (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  No sites configured yet.
-                </p>
+            <Link
+              href="/websites"
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "inline-flex gap-2"
               )}
-            </ul>
+            >
+              Manage hosting & contacts on Sites
+              <ArrowRight size={16} />
+            </Link>
           </CardContent>
         </Card>
 

@@ -18,9 +18,45 @@ export interface Site {
   contact_email: string | null;
   hosting_provider: HostingProvider | null;
   hosting_account_email: string | null;
+  phone_number: string | null;
+  email_configured: boolean;
   gsc_property_url: string | null;
   performance_url: string | null;
   created_at: string;
+}
+
+export type SiteHealthStatusValue = "online" | "offline";
+
+export interface SiteHealthSyncState {
+  id: string;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+}
+
+export interface SiteHealthStatus {
+  id: string;
+  site_id: string;
+  status: SiteHealthStatusValue;
+  checked_url: string;
+  http_status: number | null;
+  error: string | null;
+  checked_at: string;
+}
+
+export interface SiteOpsRow {
+  site: {
+    id: string;
+    slug: string;
+    name: string;
+    domain: string;
+    accent_color: string;
+    contact_email: string | null;
+    hosting_provider: HostingProvider | null;
+    hosting_account_email: string | null;
+    phone_number: string | null;
+    email_configured: boolean;
+  };
+  health: SiteHealthStatus | null;
 }
 
 export type PagespeedStrategy = "mobile" | "desktop";

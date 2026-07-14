@@ -1,21 +1,10 @@
 import { query, mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 
 const hostingProvider = v.union(v.literal("vercel"), v.literal("cloudflare"));
 
-function mapSite(doc: {
-  _id: string;
-  slug: string;
-  name: string;
-  domain: string;
-  accentColor: string;
-  contactEmail?: string;
-  hostingProvider?: "vercel" | "cloudflare";
-  hostingAccountEmail?: string;
-  gscPropertyUrl?: string;
-  performanceUrl?: string;
-  createdAt: number;
-}) {
+function mapSite(doc: Doc<"sites">) {
   return {
     id: doc._id,
     slug: doc.slug,
@@ -25,6 +14,8 @@ function mapSite(doc: {
     contact_email: doc.contactEmail ?? null,
     hosting_provider: doc.hostingProvider ?? null,
     hosting_account_email: doc.hostingAccountEmail ?? null,
+    phone_number: doc.phoneNumber ?? null,
+    email_configured: doc.emailConfigured ?? false,
     gsc_property_url: doc.gscPropertyUrl ?? null,
     performance_url: doc.performanceUrl ?? null,
     created_at: new Date(doc.createdAt).toISOString(),
@@ -62,6 +53,33 @@ export const updateHosting = mutation({
     await ctx.db.patch(args.siteId, {
       hostingProvider: args.hostingProvider ?? undefined,
       hostingAccountEmail: email ?? undefined,
+    });
+  },
+});
+
+export const updateOps = mutation({
+  args: {
+    siteId: v.id("sites"),
+    hostingProvider: v.union(hostingProvider, v.null()),
+    hostingAccountEmail: v.union(v.string(), v.null()),
+    phoneNumber: v.union(v.string(), v.null()),
+    emailConfigured: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const site = await ctx.db.get(args.siteId);
+    if (!site) throw new Error("Site not found");
+
+    const hostingEmail = args.hostingAccountEmail?.trim() || null;
+    const phone = args.phoneNumber?.trim() || null;
+
+    await ctx.db.patch(args.siteId, {
+      hostingProvider: args.hostingProvider ?? undefined,
+      hostingAccountEmail: hostingEmail ?? undefined,
+      phoneNumber: phone ?? undefined,
+      emailConfigured: args.emailConfigured,
     });
   },
 });

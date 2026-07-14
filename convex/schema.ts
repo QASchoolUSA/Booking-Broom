@@ -26,6 +26,10 @@ export default defineSchema({
     ),
     /** Email used to sign in to the hosting account. */
     hostingAccountEmail: v.optional(v.string()),
+    /** Public contact phone shown on / for this cleaning site. */
+    phoneNumber: v.optional(v.string()),
+    /** Manual ops checklist: booking inbox / SMTP for this site is set up. */
+    emailConfigured: v.optional(v.boolean()),
     /** Override GSC property URL when auto-match by domain fails. */
     gscPropertyUrl: v.optional(v.string()),
     /** Full URL override for PageSpeed Insights when https://{domain} is wrong. */
@@ -145,4 +149,20 @@ export default defineSchema({
     error: v.optional(v.string()),
     syncedAt: v.number(),
   }).index("by_site_strategy", ["siteId", "strategy"]),
+
+  /** Singleton row tracking the last site uptime / HTML health check sync. */
+  siteHealthSyncState: defineTable({
+    lastSyncAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+  }),
+
+  /** Latest HTTP health check per cleaning site. */
+  siteHealthStatus: defineTable({
+    siteId: v.id("sites"),
+    status: v.union(v.literal("online"), v.literal("offline")),
+    checkedUrl: v.string(),
+    httpStatus: v.optional(v.number()),
+    error: v.optional(v.string()),
+    checkedAt: v.number(),
+  }).index("by_site", ["siteId"]),
 });

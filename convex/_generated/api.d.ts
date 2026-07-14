@@ -19,6 +19,8 @@ import type * as lib_gscMatch from "../lib/gscMatch.js";
 import type * as pagespeed from "../pagespeed.js";
 import type * as pagespeedActions from "../pagespeedActions.js";
 import type * as seed from "../seed.js";
+import type * as siteHealth from "../siteHealth.js";
+import type * as siteHealthActions from "../siteHealthActions.js";
 import type * as sites from "../sites.js";
 
 import type {
@@ -39,6 +41,8 @@ declare const fullApi: ApiFromModules<{
   pagespeed: typeof pagespeed;
   pagespeedActions: typeof pagespeedActions;
   seed: typeof seed;
+  siteHealth: typeof siteHealth;
+  siteHealthActions: typeof siteHealthActions;
   sites: typeof sites;
 }>;
 
