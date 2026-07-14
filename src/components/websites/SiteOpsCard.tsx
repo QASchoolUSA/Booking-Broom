@@ -35,17 +35,6 @@ import { cn } from "@/lib/utils";
 
 const UNSET = "__unset__";
 
-/** Format US digits as (321) 347-4518; keeps typing-friendly partials. */
-function formatUsPhone(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 10);
-  if (digits.length === 0) return "";
-  if (digits.length < 4) return `(${digits}`;
-  if (digits.length < 7) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-  }
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
-
 interface SiteOpsCardProps {
   row: SiteOpsRow;
 }
@@ -61,9 +50,6 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
   const [hostingEmail, setHostingEmail] = useState(
     site.hosting_account_email ?? ""
   );
-  const [phone, setPhone] = useState(() =>
-    formatUsPhone(site.phone_number ?? "")
-  );
   const [emailConfigured, setEmailConfigured] = useState(
     site.email_configured
   );
@@ -73,12 +59,10 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
   useEffect(() => {
     setProvider(site.hosting_provider);
     setHostingEmail(site.hosting_account_email ?? "");
-    setPhone(formatUsPhone(site.phone_number ?? ""));
     setEmailConfigured(site.email_configured);
   }, [
     site.hosting_provider,
     site.hosting_account_email,
-    site.phone_number,
     site.email_configured,
     site.id,
   ]);
@@ -86,10 +70,14 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
   const dirty =
     provider !== site.hosting_provider ||
     hostingEmail.trim() !== (site.hosting_account_email ?? "") ||
-    formatUsPhone(phone) !== formatUsPhone(site.phone_number ?? "") ||
     emailConfigured !== site.email_configured;
 
   const siteHref = `https://${site.domain.replace(/^https?:\/\//i, "").replace(/\/$/, "")}`;
+  const phoneDigits = site.phone_number?.replace(/\D/g, "") ?? "";
+  const phoneTel =
+    phoneDigits.length === 10 ? `tel:+1${phoneDigits}` : site.phone_number
+      ? `tel:${site.phone_number}`
+      : null;
 
   const handleSave = async () => {
     setSaving(true);
@@ -98,7 +86,6 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
         siteId: site.id as Id<"sites">,
         hostingProvider: provider,
         hostingAccountEmail: hostingEmail.trim() || null,
-        phoneNumber: formatUsPhone(phone) || null,
         emailConfigured,
       });
       toast.success(`Saved ops info for ${site.name}`);
@@ -114,7 +101,11 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
     try {
       const result = await checkSite({ siteId: site.id as Id<"sites"> });
       if (result.status === "online") {
-        toast.success(`${site.name} is online`);
+        toast.success(
+          result.phone_number
+            ? `${site.name} is online · ${result.phone_number}`
+            : `${site.name} is online`
+        );
       } else {
         toast.warning(`${site.name} looks offline`, {
           description: result.error ?? undefined,
@@ -256,45 +247,40 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <Label
-            htmlFor={`phone-${site.slug}`}
-            className="text-xs text-muted-foreground"
-          >
-            Phone number
-          </Label>
-          <div className="relative">
-            <Phone
-              size={14}
-              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              id={`phone-${site.slug}`}
-              type="tel"
-              autoComplete="off"
-              placeholder="(407) 555-0100"
-              value={phone}
-              onChange={(e) => setPhone(formatUsPhone(e.target.value))}
-              inputMode="numeric"
-              className="h-9 pl-9"
-            />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Phone size={12} />
+              Phone
+            </p>
+            {site.phone_number && phoneTel ? (
+              <a
+                href={phoneTel}
+                className="mt-0.5 block text-sm text-primary hover:underline"
+              >
+                {site.phone_number}
+              </a>
+            ) : (
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Not found yet — run Check now
+              </p>
+            )}
           </div>
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
-          <p className="text-xs font-medium text-muted-foreground">
-            Booking inbox
-          </p>
-          {site.contact_email ? (
-            <a
-              href={`mailto:${site.contact_email}`}
-              className="mt-0.5 block text-sm text-primary hover:underline"
-            >
-              {site.contact_email}
-            </a>
-          ) : (
-            <p className="mt-0.5 text-sm text-muted-foreground">Not set</p>
-          )}
+          <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+            <p className="text-xs font-medium text-muted-foreground">
+              Booking inbox
+            </p>
+            {site.contact_email ? (
+              <a
+                href={`mailto:${site.contact_email}`}
+                className="mt-0.5 block truncate text-sm text-primary hover:underline"
+              >
+                {site.contact_email}
+              </a>
+            ) : (
+              <p className="mt-0.5 text-sm text-muted-foreground">Not set</p>
+            )}
+          </div>
         </div>
 
         <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5">

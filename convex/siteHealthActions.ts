@@ -2,6 +2,7 @@ import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { extractPhoneFromHtml } from "./lib/phone";
 
 const BODY_CAP = 512_000;
 const FETCH_TIMEOUT_MS = 15_000;
@@ -11,6 +12,7 @@ type HealthCheckResult = {
   checkedUrl: string;
   httpStatus?: number;
   error?: string;
+  phoneNumber?: string | null;
 };
 
 function siteUrl(domain: string): string {
@@ -38,11 +40,17 @@ async function checkSiteHealth(
     const httpStatus = res.status;
     const raw = await res.text();
     const body = raw.length > BODY_CAP ? raw.slice(0, BODY_CAP) : raw;
+    const phoneNumber = extractPhoneFromHtml(body);
     const needle = siteName.trim().toLowerCase();
     const hasName = needle.length > 0 && body.toLowerCase().includes(needle);
 
     if (res.ok && hasName) {
-      return { status: "online", checkedUrl, httpStatus };
+      return {
+        status: "online",
+        checkedUrl,
+        httpStatus,
+        phoneNumber: phoneNumber ?? null,
+      };
     }
 
     const reasons: string[] = [];
@@ -56,6 +64,7 @@ async function checkSiteHealth(
       checkedUrl,
       httpStatus,
       error: reasons.join("; "),
+      phoneNumber: phoneNumber ?? null,
     };
   } catch (e) {
     const message =
@@ -68,6 +77,7 @@ async function checkSiteHealth(
       status: "offline",
       checkedUrl,
       error: message,
+      phoneNumber: null,
     };
   } finally {
     clearTimeout(timer);
@@ -100,6 +110,12 @@ export const checkAllInternal = internalAction({
           httpStatus: result.httpStatus,
           error: result.error ?? null,
         });
+        if (result.phoneNumber) {
+          await ctx.runMutation(internal.sites.setPhoneNumber, {
+            siteId: site._id,
+            phoneNumber: result.phoneNumber,
+          });
+        }
         if (result.status === "offline") {
           errors.push(`${site.slug}: ${result.error ?? "offline"}`);
         }
@@ -154,6 +170,7 @@ export const checkSite = action({
     ok: true;
     status: "online" | "offline";
     error: string | null;
+    phone_number: string | null;
   }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
@@ -171,11 +188,18 @@ export const checkSite = action({
       httpStatus: result.httpStatus,
       error: result.error ?? null,
     });
+    if (result.phoneNumber) {
+      await ctx.runMutation(internal.sites.setPhoneNumber, {
+        siteId: site._id,
+        phoneNumber: result.phoneNumber,
+      });
+    }
 
     return {
       ok: true as const,
       status: result.status,
       error: result.error ?? null,
+      phone_number: result.phoneNumber ?? null,
     };
   },
 });

@@ -1,4 +1,4 @@
-import { query, mutation, internalQuery } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 
@@ -62,7 +62,6 @@ export const updateOps = mutation({
     siteId: v.id("sites"),
     hostingProvider: v.union(hostingProvider, v.null()),
     hostingAccountEmail: v.union(v.string(), v.null()),
-    phoneNumber: v.union(v.string(), v.null()),
     emailConfigured: v.boolean(),
   },
   handler: async (ctx, args) => {
@@ -73,13 +72,27 @@ export const updateOps = mutation({
     if (!site) throw new Error("Site not found");
 
     const hostingEmail = args.hostingAccountEmail?.trim() || null;
-    const phone = args.phoneNumber?.trim() || null;
 
     await ctx.db.patch(args.siteId, {
       hostingProvider: args.hostingProvider ?? undefined,
       hostingAccountEmail: hostingEmail ?? undefined,
-      phoneNumber: phone ?? undefined,
       emailConfigured: args.emailConfigured,
+    });
+  },
+});
+
+export const setPhoneNumber = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+    phoneNumber: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const site = await ctx.db.get(args.siteId);
+    if (!site) return;
+
+    const phone = args.phoneNumber?.trim() || null;
+    await ctx.db.patch(args.siteId, {
+      phoneNumber: phone ?? undefined,
     });
   },
 });

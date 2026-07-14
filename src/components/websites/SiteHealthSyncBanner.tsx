@@ -83,8 +83,9 @@ export function SiteHealthSyncBanner({
             <div className="min-w-0 flex-1">
               <CardTitle>Site uptime</CardTitle>
               <CardDescription className="mt-1">
-                Fetch each cleaning site and confirm the page HTML includes the
-                site name. Checks also run automatically every 3 hours.
+                Fetch each cleaning site, confirm the page includes the site
+                name, and pull the contact phone from the HTML. Checks also run
+                automatically every 3 hours.
               </CardDescription>
             </div>
           </div>

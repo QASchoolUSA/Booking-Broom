@@ -26,7 +26,7 @@ export default defineSchema({
     ),
     /** Email used to sign in to the hosting account. */
     hostingAccountEmail: v.optional(v.string()),
-    /** Public contact phone shown on / for this cleaning site. */
+    /** Public contact phone scraped from the cleaning site HTML. */
     phoneNumber: v.optional(v.string()),
     /** Manual ops checklist: booking inbox / SMTP for this site is set up. */
     emailConfigured: v.optional(v.boolean()),
