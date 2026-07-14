@@ -7,7 +7,7 @@ export type BookingStatus =
 
 export type HostingProvider = "vercel" | "cloudflare";
 
-export type SeoPeriodDays = 7 | 28 | 90;
+export type SeoPeriodDays = 1 | 2 | 7 | 28 | 90;
 
 export interface Site {
   id: string;
@@ -87,6 +87,14 @@ export interface SiteSearchMetrics {
   synced_at: string;
 }
 
+export interface SeoMetricDelta {
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  compared_to: string;
+}
+
 export interface SiteSeoRow {
   site: {
     id: string;
@@ -97,6 +105,7 @@ export interface SiteSeoRow {
     gsc_property_url: string | null;
   };
   metrics: SiteSearchMetrics | null;
+  delta: SeoMetricDelta | null;
 }
 
 export interface Booking {

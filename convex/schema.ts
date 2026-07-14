@@ -70,10 +70,19 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
-  /** Latest Search Console snapshot per site and period. */
+  /**
+   * Latest Search Console snapshot per site and period.
+   * periodDays: 1 = today, 2 = yesterday, 7/28/90 = rolling windows.
+   */
   siteSearchMetrics: defineTable({
     siteId: v.id("sites"),
-    periodDays: v.union(v.literal(7), v.literal(28), v.literal(90)),
+    periodDays: v.union(
+      v.literal(1),
+      v.literal(2),
+      v.literal(7),
+      v.literal(28),
+      v.literal(90)
+    ),
     gscPropertyUrl: v.string(),
     clicks: v.number(),
     impressions: v.number(),
@@ -83,6 +92,30 @@ export default defineSchema({
     endDate: v.string(),
     syncedAt: v.number(),
   }).index("by_site_period", ["siteId", "periodDays"]),
+
+  /** Daily GSC snapshots retained for ~7 days for delta comparisons. */
+  siteSearchMetricsHistory: defineTable({
+    siteId: v.id("sites"),
+    periodDays: v.union(
+      v.literal(1),
+      v.literal(2),
+      v.literal(7),
+      v.literal(28),
+      v.literal(90)
+    ),
+    /** UTC calendar day of the sync that wrote this row (YYYY-MM-DD). */
+    snapshotDate: v.string(),
+    gscPropertyUrl: v.string(),
+    clicks: v.number(),
+    impressions: v.number(),
+    ctr: v.number(),
+    position: v.number(),
+    startDate: v.string(),
+    endDate: v.string(),
+    syncedAt: v.number(),
+  })
+    .index("by_site_period_date", ["siteId", "periodDays", "snapshotDate"])
+    .index("by_synced_at", ["syncedAt"]),
 
   /** Singleton row tracking the last PageSpeed Insights sync. */
   pagespeedSyncState: defineTable({

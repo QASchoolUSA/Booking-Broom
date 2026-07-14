@@ -9,6 +9,12 @@ crons.daily(
   internal.gscActions.syncAllInternal
 );
 
+crons.daily(
+  "prune Google Search Console metrics history",
+  { hourUTC: 7, minuteUTC: 0 },
+  internal.gsc.pruneHistory
+);
+
 /** PageSpeed runs are slower; weekly is enough for ops health checks. */
 crons.weekly(
   "sync PageSpeed Insights metrics",

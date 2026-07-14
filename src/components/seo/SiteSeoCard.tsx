@@ -6,6 +6,12 @@ import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import { toast } from "sonner";
 import type { SiteSeoRow } from "@/lib/types";
+import {
+  deltaClassName,
+  formatSignedCtr,
+  formatSignedNumber,
+  type MetricDirection,
+} from "@/lib/seoDeltas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +37,7 @@ function formatPosition(pos: number): string {
 }
 
 export function SiteSeoCard({ row }: SiteSeoCardProps) {
-  const { site, metrics } = row;
+  const { site, metrics, delta } = row;
   const updateProperty = useMutation(api.gsc.updateGscProperty);
   const [editing, setEditing] = useState(false);
   const [propertyUrl, setPropertyUrl] = useState(site.gsc_property_url ?? "");
@@ -59,10 +65,34 @@ export function SiteSeoCard({ row }: SiteSeoCardProps) {
 
   const metricCells = metrics
     ? [
-        { label: "Clicks", value: formatNumber(metrics.clicks) },
-        { label: "Impressions", value: formatNumber(metrics.impressions) },
-        { label: "CTR", value: formatCtr(metrics.ctr) },
-        { label: "Avg position", value: formatPosition(metrics.position) },
+        {
+          label: "Clicks",
+          value: formatNumber(metrics.clicks),
+          deltaText: delta ? formatSignedNumber(delta.clicks) : null,
+          direction: "higher-better" as MetricDirection,
+          deltaValue: delta?.clicks ?? 0,
+        },
+        {
+          label: "Impressions",
+          value: formatNumber(metrics.impressions),
+          deltaText: delta ? formatSignedNumber(delta.impressions) : null,
+          direction: "higher-better" as MetricDirection,
+          deltaValue: delta?.impressions ?? 0,
+        },
+        {
+          label: "CTR",
+          value: formatCtr(metrics.ctr),
+          deltaText: delta ? formatSignedCtr(delta.ctr) : null,
+          direction: "higher-better" as MetricDirection,
+          deltaValue: delta?.ctr ?? 0,
+        },
+        {
+          label: "Avg position",
+          value: formatPosition(metrics.position),
+          deltaText: delta ? formatSignedNumber(delta.position, 1) : null,
+          direction: "lower-better" as MetricDirection,
+          deltaValue: delta?.position ?? 0,
+        },
       ]
     : null;
 
@@ -94,6 +124,16 @@ export function SiteSeoCard({ row }: SiteSeoCardProps) {
               <p className="text-lg font-bold tabular-nums leading-none tracking-tight">
                 {cell.value}
               </p>
+              {cell.deltaText && (
+                <p
+                  className={cn(
+                    "mt-1",
+                    deltaClassName(cell.deltaValue, cell.direction)
+                  )}
+                >
+                  {cell.deltaText}
+                </p>
+              )}
               <p className="mt-1 text-[11px] font-medium text-muted-foreground">
                 {cell.label}
               </p>

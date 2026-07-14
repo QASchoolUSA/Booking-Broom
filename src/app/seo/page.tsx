@@ -17,6 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { SeoPeriodDays, SiteSeoRow } from "@/lib/types";
 
 const PERIODS: { value: SeoPeriodDays; label: string }[] = [
+  { value: 1, label: "Today" },
+  { value: 2, label: "Yesterday" },
   { value: 7, label: "7 days" },
   { value: 28, label: "28 days" },
   { value: 90, label: "90 days" },
@@ -89,12 +91,13 @@ function SeoPageContent() {
           <Tabs
             value={String(period)}
             onValueChange={(v) => {
-              if (v === "7" || v === "28" || v === "90") {
-                setPeriod(Number(v) as SeoPeriodDays);
+              const n = Number(v);
+              if (n === 1 || n === 2 || n === 7 || n === 28 || n === 90) {
+                setPeriod(n);
               }
             }}
           >
-            <TabsList>
+            <TabsList className="max-w-full overflow-x-auto">
               {PERIODS.map((p) => (
                 <TabsTrigger key={p.value} value={String(p.value)}>
                   {p.label}

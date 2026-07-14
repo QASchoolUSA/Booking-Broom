@@ -7,7 +7,8 @@ import { dateRangeForPeriod, matchGscProperty } from "./lib/gscMatch";
 const GSC_SCOPE =
   "https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/userinfo.email";
 
-const PERIODS = [7, 28, 90] as const;
+/** 1 = today, 2 = yesterday, 7/28/90 = rolling windows. */
+const PERIODS = [1, 2, 7, 28, 90] as const;
 
 /** Must match an authorized redirect URI on the Google OAuth client (Next.js app). */
 function redirectUri(): string {

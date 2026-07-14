@@ -45,13 +45,36 @@ export function formatDateUTC(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** GSC data lags ~2–3 days; end date is 3 days ago UTC. */
-export function dateRangeForPeriod(periodDays: 7 | 28 | 90): {
+/** periodDays: 1 = today, 2 = yesterday, 7/28/90 = rolling windows. */
+export type GscPeriodDays = 1 | 2 | 7 | 28 | 90;
+
+export const PERIOD_TODAY = 1 as const;
+export const PERIOD_YESTERDAY = 2 as const;
+
+/**
+ * Date ranges for GSC queries.
+ * Today/yesterday use UTC calendar days (may be empty due to GSC lag).
+ * Rolling windows end 3 days ago UTC to account for GSC lag.
+ */
+export function dateRangeForPeriod(periodDays: GscPeriodDays): {
   startDate: string;
   endDate: string;
 } {
-  const end = new Date();
-  end.setUTCHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  if (periodDays === PERIOD_TODAY) {
+    const d = formatDateUTC(today);
+    return { startDate: d, endDate: d };
+  }
+  if (periodDays === PERIOD_YESTERDAY) {
+    const yesterday = new Date(today);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const d = formatDateUTC(yesterday);
+    return { startDate: d, endDate: d };
+  }
+
+  const end = new Date(today);
   end.setUTCDate(end.getUTCDate() - 3);
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - (periodDays - 1));
