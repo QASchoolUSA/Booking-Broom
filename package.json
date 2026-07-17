@@ -2,10 +2,11 @@
   "name": "booking-broom",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.5.0",
   "scripts": {
     "dev": "SERWIST_SUPPRESS_TURBOPACK_WARNING=1 next dev --webpack",
     "build": "next build",
-    "build:vercel": "convex deploy --cmd 'npm run build'",
+    "build:vercel": "convex deploy --cmd 'pnpm run build'",
     "start": "next start",
     "lint": "eslint",
     "icons": "node scripts/generate-icons.mjs",

@@ -40,7 +40,7 @@ BOOKING_BROOM_API_KEY=bb_cleaning-weekly_dev_key
 After deploying Booking Broom code changes:
 
 ```bash
-npx convex run internal.seed.syncSeedSites
+pnpm exec convex run internal.seed.syncSeedSites
 ```
 
 ## CORS

@@ -10,7 +10,7 @@ const siteUrl = process.argv[2] ?? "http://localhost:3000";
 
 async function setEnv(name, value) {
   const escaped = value.replace(/"/g, '\\"');
-  execSync(`npx convex env set -- ${name} "${escaped}"`, {
+  execSync(`pnpm exec convex env set -- ${name} "${escaped}"`, {
     stdio: "inherit",
     cwd: new URL("..", import.meta.url).pathname,
   });

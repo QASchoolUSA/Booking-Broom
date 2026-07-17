@@ -17,8 +17,8 @@ Manager dashboard PWA for multi-site cleaning businesses. Receive bookings in re
 2. Run in the project root:
 
 ```bash
-npm install
-npx convex dev
+pnpm install
+pnpm exec convex dev
 ```
 
 This logs you in, creates a deployment, writes `NEXT_PUBLIC_CONVEX_URL` to `.env.local`, and syncs your backend.
@@ -26,7 +26,7 @@ This logs you in, creates a deployment, writes `NEXT_PUBLIC_CONVEX_URL` to `.env
 3. In a **second terminal**, start Next.js:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 4. Open [http://localhost:3000/login](http://localhost:3000/login) and click **Create manager account** (first-time only), then sign in.
@@ -46,13 +46,13 @@ node scripts/setup-convex-auth.mjs https://your-app.vercel.app
 6. Seed your cleaning sites (run once):
 
 ```bash
-npx convex run internal.seed.seedSites
+pnpm exec convex run internal.seed.seedSites
 ```
 
 To add new sites to an **existing** deployment (without wiping data):
 
 ```bash
-npx convex run internal.seed.syncSeedSites
+pnpm exec convex run internal.seed.syncSeedSites
 ```
 
 This inserts any entries from `convex/lib/apiKeys.ts` that are not yet in the database,
@@ -75,7 +75,7 @@ and backfills `contactEmail` (and other seed fields) on existing sites.
 | `SMTP_PASS` | Your SpaceMail mailbox password |
 | `SMTP_FROM` | Fallback From address for unknown site slugs only |
 
-3. Build is configured in `vercel.json` to run `npx convex deploy --cmd 'npm run build'` automatically.
+3. Build is configured in `vercel.json` to run `pnpm exec convex deploy --cmd 'pnpm run build'` automatically.
 
 4. After first deploy, run auth setup with your **live Vercel URL** (if not done already):
 
@@ -156,7 +156,7 @@ async function submitBooking(formData) {
 3. Deploy Booking Broom, then sync to Convex:
 
 ```bash
-npx convex run internal.seed.syncSeedSites
+pnpm exec convex run internal.seed.syncSeedSites
 ```
 
 Or insert a row manually in the Convex `sites` table via dashboard:
@@ -212,7 +212,7 @@ If `SMTP_HOST` is not set, bookings are still saved but no emails are sent.
 Site emails live in `src/lib/site-emails.ts` and as `contactEmail` on each seeded site in `convex/lib/apiKeys.ts`. After deploying, backfill existing deployments with:
 
 ```bash
-npx convex run internal.seed.syncSeedSites
+pnpm exec convex run internal.seed.syncSeedSites
 ```
 
 To add a new site’s inbox, update both files and re-run sync.
@@ -237,11 +237,11 @@ https://bookings.kedrik.com/gsc/oauth/callback
 5. Set Convex environment variables (never commit `client_secret*.json`):
 
 ```bash
-npx convex env set GOOGLE_CLIENT_ID "your-client-id.apps.googleusercontent.com"
-npx convex env set GOOGLE_CLIENT_SECRET "your-client-secret"
-npx convex env set APP_URL "https://bookings.kedrik.com"
+pnpm exec convex env set GOOGLE_CLIENT_ID "your-client-id.apps.googleusercontent.com"
+pnpm exec convex env set GOOGLE_CLIENT_SECRET "your-client-secret"
+pnpm exec convex env set APP_URL "https://bookings.kedrik.com"
 # Optional explicit override (defaults to $APP_URL/gsc/oauth/callback)
-# npx convex env set GOOGLE_REDIRECT_URI "https://bookings.kedrik.com/gsc/oauth/callback"
+# pnpm exec convex env set GOOGLE_REDIRECT_URI "https://bookings.kedrik.com/gsc/oauth/callback"
 ```
 
 Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Vercel if not already.
@@ -262,9 +262,9 @@ The **Speed** page (`/performance`) runs Google PageSpeed Insights (Lighthouse) 
 4. Set the Convex environment variable:
 
 ```bash
-npx convex env set PAGESPEED_API_KEY "your-api-key"
+pnpm exec convex env set PAGESPEED_API_KEY "your-api-key"
 # Cloud / anonymous local:
-# CONVEX_AGENT_MODE=anonymous npx convex env set PAGESPEED_API_KEY "your-api-key"
+# CONVEX_AGENT_MODE=anonymous pnpm exec convex env set PAGESPEED_API_KEY "your-api-key"
 ```
 
 Without a key, the API allows a very low anonymous quota and will often fail under load.
@@ -294,10 +294,10 @@ Two terminals required:
 
 ```bash
 # Terminal 1 — Convex backend (always-on cloud, syncs on save)
-npx convex dev
+pnpm exec convex dev
 
 # Terminal 2 — Next.js frontend
-npm run dev
+pnpm dev
 ```
 
 ## Cost

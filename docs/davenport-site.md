@@ -46,13 +46,13 @@ BOOKING_BROOM_URL=http://localhost:3000
 After deploying Booking Broom code changes:
 
 ```bash
-npx convex run internal.seed.syncSeedSites
+pnpm exec convex run internal.seed.syncSeedSites
 ```
 
 Local anonymous backend:
 
 ```bash
-CONVEX_AGENT_MODE=anonymous npx convex run internal.seed.syncSeedSites
+CONVEX_AGENT_MODE=anonymous pnpm exec convex run internal.seed.syncSeedSites
 ```
 
 ## CORS

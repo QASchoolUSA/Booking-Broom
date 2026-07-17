@@ -25,6 +25,9 @@
 *.pem
 client_secret*.json
 
+# graphify knowledge graph (regenerate locally with `graphify update .`)
+graphify-out/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
