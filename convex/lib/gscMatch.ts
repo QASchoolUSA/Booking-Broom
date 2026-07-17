@@ -52,9 +52,17 @@ export const PERIOD_TODAY = 1 as const;
 export const PERIOD_YESTERDAY = 2 as const;
 
 /**
+ * GSC Search Analytics typically lags ~2–3 days behind wall-clock.
+ * All period ranges end at UTC today minus this lag so Today/Yesterday
+ * mean the latest available Search Console days (not calendar today).
+ */
+export const GSC_DATA_LAG_DAYS = 3;
+
+/**
  * Date ranges for GSC queries.
- * Today/yesterday use UTC calendar days (may be empty due to GSC lag).
- * Rolling windows end 3 days ago UTC to account for GSC lag.
+ * Today = latest available day (todayUTC − lag).
+ * Yesterday = day before that (todayUTC − lag − 1).
+ * Rolling windows end at the same lag-adjusted day.
  */
 export function dateRangeForPeriod(periodDays: GscPeriodDays): {
   startDate: string;
@@ -63,19 +71,21 @@ export function dateRangeForPeriod(periodDays: GscPeriodDays): {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
 
+  const latest = new Date(today);
+  latest.setUTCDate(latest.getUTCDate() - GSC_DATA_LAG_DAYS);
+
   if (periodDays === PERIOD_TODAY) {
-    const d = formatDateUTC(today);
+    const d = formatDateUTC(latest);
     return { startDate: d, endDate: d };
   }
   if (periodDays === PERIOD_YESTERDAY) {
-    const yesterday = new Date(today);
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-    const d = formatDateUTC(yesterday);
+    const previous = new Date(latest);
+    previous.setUTCDate(previous.getUTCDate() - 1);
+    const d = formatDateUTC(previous);
     return { startDate: d, endDate: d };
   }
 
-  const end = new Date(today);
-  end.setUTCDate(end.getUTCDate() - 3);
+  const end = latest;
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - (periodDays - 1));
   return {

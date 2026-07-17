@@ -260,7 +260,12 @@ async function querySearchAnalytics(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ startDate, endDate }),
+      body: JSON.stringify({
+        startDate,
+        endDate,
+        // Match GSC Performance UI: include fresh/partial recent rows.
+        dataState: "all",
+      }),
     }
   );
   const data = (await res.json()) as {
