@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "seo-geo-aeo": {
+      "source": "SNLabat/SEO-GEO-AEO-Skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "0b4b119228fae4b9cf8af91b0406804733e86de5e2d90ddb146684b3eaece274"
+    }
+  }
+}
