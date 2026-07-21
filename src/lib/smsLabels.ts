@@ -10,7 +10,8 @@ export function cleanSubAccountLabel(subAccount: string | null | undefined): str
 
 /**
  * Primary label for a DID in filters/sidebar.
- * Prefer Voip.ms description; else cleaned sub-account; never the raw phone digits.
+ * Prefer stored description (synced from Caller ID Prefix / note),
+ * else cleaned sub-account; never the raw phone digits.
  */
 export function didDisplayLabel(did: Pick<SmsDid, "description" | "sub_account" | "did" | "formatted">): string {
   const desc = did.description?.trim() ?? "";

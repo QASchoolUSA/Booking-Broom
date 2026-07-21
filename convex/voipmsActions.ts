@@ -51,6 +51,8 @@ export const syncDidsInternal = internalAction({
         await ctx.runMutation(internal.sms.upsertDidInternal, {
           did: did.did,
           description: resolveDidLabel({
+            calleridPrefix: did.calleridPrefix,
+            note: did.note,
             description: did.description,
             subAccount: did.subAccount,
             did: did.did,

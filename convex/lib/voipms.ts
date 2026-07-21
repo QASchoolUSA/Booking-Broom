@@ -7,7 +7,11 @@ const API_URL = "https://voip.ms/api/v1/rest.php";
 
 export type VoipmsDid = {
   did: string;
+  /** Voip.ms "Note" / description (often location-ish). */
   description: string;
+  /** Voip.ms "Caller ID name prefix" — the label users set per DID. */
+  calleridPrefix: string;
+  note: string;
   subAccount?: string;
   smsAvailable: boolean;
   smsEnabled: boolean;
@@ -103,6 +107,10 @@ function mapDid(
   return {
     did: normalized,
     description: String(raw.description ?? "").trim(),
+    calleridPrefix: String(
+      raw.callerid_prefix ?? raw.calleridprefix ?? ""
+    ).trim(),
+    note: String(raw.note ?? "").trim(),
     subAccount: subAccount || undefined,
     smsAvailable: truthyFlag(raw.sms_available),
     smsEnabled: truthyFlag(raw.sms_enabled),
@@ -122,20 +130,31 @@ export function cleanSubAccountLabel(subAccount: string | undefined): string {
   return (withoutId || raw).trim();
 }
 
+function isJustDidDigits(label: string, did?: string): boolean {
+  const digits = (did ?? "").replace(/\D/g, "").slice(-10);
+  if (!label.trim() || !digits) return false;
+  return label.replace(/\D/g, "") === digits;
+}
+
 /**
- * Label to store/display for a DID: Voip.ms description, else cleaned sub-account.
- * Never falls back to the phone digits.
+ * Label to store/display for a DID.
+ * Prefers Caller ID Prefix (portal "Caller ID name prefix"), then note,
+ * then description, then cleaned sub-account. Never the raw phone digits.
  */
 export function resolveDidLabel(opts: {
+  calleridPrefix?: string;
+  note?: string;
   description?: string;
   subAccount?: string;
   did?: string;
 }): string {
-  const desc = opts.description?.trim() ?? "";
-  // Ignore descriptions that are just the DID digits.
-  const digits = (opts.did ?? "").replace(/\D/g, "").slice(-10);
-  if (desc && (!digits || desc.replace(/\D/g, "") !== digits)) {
-    return desc;
+  const candidates = [
+    opts.calleridPrefix?.trim() ?? "",
+    opts.note?.trim() ?? "",
+    opts.description?.trim() ?? "",
+  ];
+  for (const label of candidates) {
+    if (label && !isJustDidDigits(label, opts.did)) return label;
   }
   return cleanSubAccountLabel(opts.subAccount);
 }
@@ -167,6 +186,8 @@ export async function listDids(): Promise<VoipmsDid[]> {
     byDid.set(did.did, {
       ...existing,
       ...did,
+      calleridPrefix: did.calleridPrefix || existing.calleridPrefix,
+      note: did.note || existing.note,
       description: did.description || existing.description,
       subAccount: did.subAccount || existing.subAccount,
     });
