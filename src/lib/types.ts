@@ -197,6 +197,10 @@ export interface SmsThread {
   sub_account: string | null;
   contact: string;
   contact_formatted: string;
+  /** CRM short title for this conversation. */
+  label: string | null;
+  /** Free-text note for context when revisiting. */
+  note: string | null;
   last_body: string;
   last_sent_at: string;
   last_direction: "in" | "out";

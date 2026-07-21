@@ -201,4 +201,15 @@ export default defineSchema({
     lastSyncError: v.optional(v.string()),
     lastDidSyncAt: v.optional(v.number()),
   }),
+
+  /**
+   * CRM-style label/note for a conversation (your DID + customer number).
+   */
+  smsConversationMeta: defineTable({
+    did: v.string(),
+    contact: v.string(),
+    label: v.optional(v.string()),
+    note: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_did_contact", ["did", "contact"]),
 });

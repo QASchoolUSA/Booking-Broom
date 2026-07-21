@@ -1,15 +1,30 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAction } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { CaretLeft, MagicWand, PaperPlaneTilt } from "@phosphor-icons/react";
+import {
+  CaretLeft,
+  MagicWand,
+  NotePencil,
+  PaperPlaneTilt,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { SmsMessage, SmsThread } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 interface ConversationViewProps {
   thread: SmsThread | null;
@@ -26,9 +41,14 @@ export function ConversationView({
 }: ConversationViewProps) {
   const sendMessage = useAction(api.voipmsActions.sendMessage);
   const rewriteDraft = useAction(api.smsRewrite.rewriteSmsDraft);
+  const upsertMeta = useMutation(api.sms.upsertConversationMeta);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [rewriting, setRewriting] = useState(false);
+  const [metaOpen, setMetaOpen] = useState(false);
+  const [labelDraft, setLabelDraft] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingMeta, setSavingMeta] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +58,15 @@ export function ConversationView({
 
   useEffect(() => {
     setDraft("");
+    setMetaOpen(false);
   }, [thread?.did, thread?.contact]);
+
+  useEffect(() => {
+    if (metaOpen && thread) {
+      setLabelDraft(thread.label ?? "");
+      setNoteDraft(thread.note ?? "");
+    }
+  }, [metaOpen, thread?.label, thread?.note, thread]);
 
   if (!thread) {
     return (
@@ -96,6 +124,24 @@ export function ConversationView({
     }
   };
 
+  const handleSaveMeta = async () => {
+    setSavingMeta(true);
+    try {
+      await upsertMeta({
+        did: thread.did,
+        contact: thread.contact,
+        label: labelDraft,
+        note: noteDraft,
+      });
+      toast.success("Conversation updated");
+      setMetaOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSavingMeta(false);
+    }
+  };
+
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col bg-card", className)}>
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2.5 md:px-4">
@@ -113,13 +159,30 @@ export function ConversationView({
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">
-            {thread.contact_formatted}
+            {thread.label || thread.contact_formatted}
           </p>
           <p className="truncate text-xs text-muted-foreground">
+            {thread.label ? `${thread.contact_formatted} · ` : ""}
             via {thread.did_description || thread.did_formatted}
             {thread.sub_account ? ` · ${thread.sub_account}` : ""}
           </p>
+          {thread.note && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground/90">
+              {thread.note}
+            </p>
+          )}
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={() => setMetaOpen(true)}
+          aria-label="Edit label and note"
+          title="Label & note"
+        >
+          <NotePencil size={18} weight="duotone" />
+        </Button>
       </div>
 
       <div
@@ -243,6 +306,65 @@ export function ConversationView({
           {rewriting ? " · Rewriting…" : " · Wand rewrites with Groq"}
         </p>
       </div>
+
+      <Sheet open={metaOpen} onOpenChange={setMetaOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Label & note</SheetTitle>
+            <SheetDescription>
+              Name this conversation so you recognize it later. Notes stay on
+              this number for this line only.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="conv-label">Label</Label>
+              <Input
+                id="conv-label"
+                value={labelDraft}
+                onChange={(e) => setLabelDraft(e.target.value)}
+                placeholder="e.g. Jane – deep clean quote"
+                maxLength={120}
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="conv-note">Note</Label>
+              <Textarea
+                id="conv-note"
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="Context you’ll want later…"
+                rows={5}
+                maxLength={2000}
+                className="resize-none"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {noteDraft.length}/2000 · Clear both fields and save to remove
+              </p>
+            </div>
+          </div>
+          <SheetFooter className="flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setMetaOpen(false)}
+              disabled={savingMeta}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="flex-1"
+              onClick={() => void handleSaveMeta()}
+              disabled={savingMeta}
+            >
+              {savingMeta ? "Saving…" : "Save"}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

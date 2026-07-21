@@ -1,5 +1,6 @@
 import {
   query,
+  mutation,
   internalQuery,
   internalMutation,
 } from "./_generated/server";
@@ -103,6 +104,12 @@ export const listThreads = query({
     const didDocs = await ctx.db.query("smsDids").collect();
     const didMap = new Map(didDocs.map((d) => [d.did, d]));
 
+    const metaDocs = await ctx.db.query("smsConversationMeta").collect();
+    const metaMap = new Map<string, Doc<"smsConversationMeta">>();
+    for (const m of metaDocs) {
+      metaMap.set(`${m.did}:${m.contact}`, m);
+    }
+
     const seen = new Set<string>();
     const threads: Array<{
       did: string;
@@ -111,6 +118,8 @@ export const listThreads = query({
       sub_account: string | null;
       contact: string;
       contact_formatted: string;
+      label: string | null;
+      note: string | null;
       last_body: string;
       last_sent_at: string;
       last_direction: "in" | "out";
@@ -123,6 +132,7 @@ export const listThreads = query({
       if (seen.has(key)) continue;
       seen.add(key);
       const didDoc = didMap.get(msg.did);
+      const meta = metaMap.get(key);
       threads.push({
         did: msg.did,
         did_description: didDoc?.description ?? "",
@@ -130,6 +140,8 @@ export const listThreads = query({
         sub_account: didDoc?.subAccount ?? null,
         contact: msg.contact,
         contact_formatted: formatUsPhone(msg.contact) ?? msg.contact,
+        label: meta?.label?.trim() ? meta.label.trim() : null,
+        note: meta?.note?.trim() ? meta.note.trim() : null,
         last_body: msg.body,
         last_sent_at: new Date(msg.sentAt).toISOString(),
         last_direction: msg.direction,
@@ -139,6 +151,56 @@ export const listThreads = query({
     }
 
     return threads;
+  },
+});
+
+export const upsertConversationMeta = mutation({
+  args: {
+    did: v.string(),
+    contact: v.string(),
+    label: v.optional(v.string()),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const did = normalizeUsDigits(args.did);
+    const contact = normalizeUsDigits(args.contact);
+    if (!did || !contact) throw new Error("Invalid phone number");
+
+    const label = (args.label ?? "").trim().slice(0, 120);
+    const note = (args.note ?? "").trim().slice(0, 2000);
+    const now = Date.now();
+
+    const existing = await ctx.db
+      .query("smsConversationMeta")
+      .withIndex("by_did_contact", (q) =>
+        q.eq("did", did).eq("contact", contact)
+      )
+      .unique();
+
+    if (!label && !note) {
+      if (existing) await ctx.db.delete(existing._id);
+      return null;
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        label: label || undefined,
+        note: note || undefined,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+
+    return await ctx.db.insert("smsConversationMeta", {
+      did,
+      contact,
+      label: label || undefined,
+      note: note || undefined,
+      updatedAt: now,
+    });
   },
 });
 

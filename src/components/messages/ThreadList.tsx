@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { Image as ImageIcon } from "@phosphor-icons/react";
+import { Image as ImageIcon, NotePencil } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { SmsThread } from "@/lib/types";
 
@@ -33,6 +33,7 @@ export function ThreadList({
       {threads.map((thread) => {
         const key = threadKey(thread);
         const active = selectedKey === key;
+        const title = thread.label || thread.contact_formatted;
         return (
           <li key={key}>
             <button
@@ -45,7 +46,7 @@ export function ThreadList({
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="truncate text-[15px] font-semibold text-foreground">
-                  {thread.contact_formatted}
+                  {title}
                 </span>
                 <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                   {formatDistanceToNow(new Date(thread.last_sent_at), {
@@ -54,9 +55,16 @@ export function ThreadList({
                 </span>
               </div>
               <p className="truncate text-xs text-muted-foreground">
+                {thread.label ? `${thread.contact_formatted} · ` : ""}
                 {thread.did_description || thread.did_formatted}
                 {thread.sub_account ? ` · ${thread.sub_account}` : ""}
               </p>
+              {thread.note && (
+                <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground/90">
+                  <NotePencil size={12} className="shrink-0" />
+                  <span className="truncate">{thread.note}</span>
+                </p>
+              )}
               <p className="mt-0.5 flex items-center gap-1 truncate text-sm text-foreground/75">
                 {thread.has_media && (
                   <ImageIcon

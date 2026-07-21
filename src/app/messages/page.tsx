@@ -18,7 +18,7 @@ export default function MessagesPage() {
   const { connectionState } = useBookings();
   const { isAuthenticated } = useConvexAuth();
   const [selectedDid, setSelectedDid] = useState<string | null>(null);
-  const [selectedThread, setSelectedThread] = useState<SmsThread | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const syncState = useQuery(
     api.sms.getSyncState,
@@ -38,6 +38,14 @@ export default function MessagesPage() {
   );
   const threads = (threadsRaw ?? []) as SmsThread[];
 
+  const selectedThread = useMemo(
+    () =>
+      selectedKey
+        ? (threads.find((t) => `${t.did}:${t.contact}` === selectedKey) ?? null)
+        : null,
+    [threads, selectedKey]
+  );
+
   const messagesRaw = useQuery(
     api.sms.listMessages,
     isAuthenticated && selectedThread
@@ -46,16 +54,8 @@ export default function MessagesPage() {
   );
   const messages = messagesRaw as SmsMessage[] | undefined;
 
-  const selectedKey = useMemo(
-    () =>
-      selectedThread
-        ? `${selectedThread.did}:${selectedThread.contact}`
-        : null,
-    [selectedThread]
-  );
-
   const showInbox = dids.length > 0 || Boolean(syncState);
-  const mobileInThread = Boolean(selectedThread);
+  const mobileInThread = Boolean(selectedKey);
 
   return (
     <AppShell
@@ -70,7 +70,7 @@ export default function MessagesPage() {
           selectedDid={selectedDid}
           onSelect={(did) => {
             setSelectedDid(did);
-            setSelectedThread(null);
+            setSelectedKey(null);
           }}
         />
       }
@@ -111,7 +111,7 @@ export default function MessagesPage() {
                   selectedDid={selectedDid}
                   onSelect={(did) => {
                     setSelectedDid(did);
-                    setSelectedThread(null);
+                    setSelectedKey(null);
                   }}
                 />
               </div>
@@ -132,7 +132,9 @@ export default function MessagesPage() {
                 <ThreadList
                   threads={threads}
                   selectedKey={selectedKey}
-                  onSelect={setSelectedThread}
+                  onSelect={(thread) =>
+                    setSelectedKey(`${thread.did}:${thread.contact}`)
+                  }
                 />
               </div>
             </div>
@@ -147,7 +149,7 @@ export default function MessagesPage() {
               <ConversationView
                 thread={selectedThread}
                 messages={messages}
-                onBack={() => setSelectedThread(null)}
+                onBack={() => setSelectedKey(null)}
               />
             </div>
           </div>
