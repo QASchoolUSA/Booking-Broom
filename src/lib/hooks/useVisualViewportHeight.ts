@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 
 export type VisualViewportState = {
+  /** Current visual viewport height in px. */
   height: number;
-  offsetTop: number;
   /** True when the visual viewport is meaningfully shorter than the layout viewport. */
   keyboardOpen: boolean;
 };
 
 /**
- * Tracks window.visualViewport for mobile keyboard-aware layouts.
+ * Tracks window.visualViewport height for mobile keyboard-aware layouts.
+ * Resize-only (no scroll) to avoid layout jumps from offsetTop updates.
  * Returns null when disabled, on desktop, or if the API is unavailable.
  */
 export function useVisualViewportHeight(
@@ -32,19 +33,16 @@ export function useVisualViewportHeight(
 
     const update = () => {
       const height = vv.height;
-      const offsetTop = vv.offsetTop;
       const keyboardOpen = Math.max(0, window.innerHeight - height) > 80;
-      setState({ height, offsetTop, keyboardOpen });
+      setState({ height, keyboardOpen });
     };
 
     update();
     vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
     window.addEventListener("resize", update);
 
     return () => {
       vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
     };
   }, [enabled]);

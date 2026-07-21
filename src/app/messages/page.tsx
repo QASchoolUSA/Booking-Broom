@@ -21,10 +21,6 @@ import { didDisplayLabel } from "@/lib/smsLabels";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-/** AppShell mobile top bar: h-14 + safe-area padding. */
-const MOBILE_SHELL_HEADER_OFFSET =
-  "3.5rem + env(safe-area-inset-top, 0px)";
-
 export default function MessagesPage() {
   const { connectionState } = useBookings();
   const { isAuthenticated } = useConvexAuth();
@@ -74,27 +70,10 @@ export default function MessagesPage() {
   const mobileInThread = Boolean(selectedKey);
   const vv = useVisualViewportHeight(isMobile && mobileInThread);
 
-  const mobileThreadPaneStyle =
-    vv && isMobile && mobileInThread
-      ? vv.keyboardOpen
-        ? ({
-            // Fill the visual viewport so the thread header + composer stay on-screen.
-            position: "fixed",
-            left: 0,
-            right: 0,
-            top: vv.offsetTop,
-            height: vv.height,
-            zIndex: 30,
-          } as const)
-        : ({
-            // Leave room for AppShell’s mobile top bar when the keyboard is closed.
-            position: "fixed",
-            left: 0,
-            right: 0,
-            top: `calc(${vv.offsetTop}px + ${MOBILE_SHELL_HEADER_OFFSET})`,
-            height: `calc(${vv.height}px - (${MOBILE_SHELL_HEADER_OFFSET}))`,
-            zIndex: 30,
-          } as const)
+  // Only constrain height while the keyboard is open — otherwise flex/dvh owns sizing.
+  const threadPaneStyle =
+    vv?.keyboardOpen && isMobile && mobileInThread
+      ? ({ height: vv.height, maxHeight: vv.height } as const)
       : undefined;
 
   return (
@@ -103,6 +82,7 @@ export default function MessagesPage() {
       pageTitle="Messages"
       contentWidth="full"
       hideMobileNav={mobileInThread}
+      hideMobileHeader={mobileInThread}
       hideMobileNavPad
       sidebar={
         <DidSidebar
@@ -215,14 +195,13 @@ export default function MessagesPage() {
               </div>
             </div>
 
-            {/* Chat pane — sized to visual viewport on mobile when keyboard is open */}
+            {/* Chat pane — normal-flow flex; VV height only while keyboard is open */}
             <div
               className={cn(
                 "min-h-0 flex-1 flex-col overflow-hidden",
-                mobileInThread ? "flex" : "hidden md:flex",
-                mobileThreadPaneStyle && "md:static md:inset-auto md:z-auto"
+                mobileInThread ? "flex" : "hidden md:flex"
               )}
-              style={mobileThreadPaneStyle}
+              style={threadPaneStyle}
             >
               <ConversationView
                 thread={
@@ -249,6 +228,7 @@ export default function MessagesPage() {
                 onBack={() => setSelectedKey(null)}
                 onConversationDeleted={() => setSelectedKey(null)}
                 keyboardOpen={Boolean(vv?.keyboardOpen)}
+                immersiveMobile={mobileInThread}
                 className="h-full min-h-0"
               />
             </div>

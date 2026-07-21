@@ -32,6 +32,8 @@ interface AppShellProps {
   hideMobileNavPad?: boolean;
   /** Hide the mobile bottom tab bar (e.g. while viewing a conversation). */
   hideMobileNav?: boolean;
+  /** Hide the mobile top branding header (e.g. immersive chat thread). */
+  hideMobileHeader?: boolean;
 }
 
 export function AppShell({
@@ -43,6 +45,7 @@ export function AppShell({
   contentWidth = "default",
   hideMobileNavPad = false,
   hideMobileNav = false,
+  hideMobileHeader = false,
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -170,6 +173,7 @@ export function AppShell({
         )}
       >
         {/* Mobile header */}
+        {!hideMobileHeader && (
         <header
           className="chrome-surface sticky top-0 z-20 border-b border-border md:hidden"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
@@ -199,6 +203,7 @@ export function AppShell({
             </div>
           </div>
         </header>
+        )}
 
         {/* Desktop top bar (when no sidebar context like settings) */}
         {!sidebar && (

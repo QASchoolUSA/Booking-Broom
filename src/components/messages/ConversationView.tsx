@@ -42,6 +42,8 @@ interface ConversationViewProps {
   onConversationDeleted?: () => void;
   /** When true, reduce composer bottom safe-area (keyboard already lifts the viewport). */
   keyboardOpen?: boolean;
+  /** Mobile full-screen thread: thread header owns the safe-area inset. */
+  immersiveMobile?: boolean;
   className?: string;
 }
 
@@ -51,6 +53,7 @@ export function ConversationView({
   onBack,
   onConversationDeleted,
   keyboardOpen = false,
+  immersiveMobile = false,
   className,
 }: ConversationViewProps) {
   const sendMessage = useAction(api.voipmsActions.sendMessage);
@@ -67,16 +70,21 @@ export function ConversationView({
   const [savingMeta, setSavingMeta] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingThread, setDeletingThread] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
+  const scrollToLatest = (behavior: ScrollBehavior = "auto") => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  };
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToLatest("smooth");
   }, [messages?.length, thread?.contact, thread?.did]);
 
   useEffect(() => {
     if (!keyboardOpen) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToLatest("auto");
   }, [keyboardOpen]);
 
   useEffect(() => {
@@ -208,13 +216,16 @@ export function ConversationView({
     }
   };
 
-  const scrollToLatest = () => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col bg-card", className)}>
-      <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2.5 md:px-4">
+      <div
+        className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2.5 md:px-4"
+        style={
+          immersiveMobile
+            ? { paddingTop: "max(0.625rem, env(safe-area-inset-top))" }
+            : undefined
+        }
+      >
         {onBack && (
           <Button
             type="button"
@@ -361,7 +372,6 @@ export function ConversationView({
               </div>
             );
           })}
-          <div ref={bottomRef} />
         </div>
       </div>
 
@@ -383,9 +393,7 @@ export function ConversationView({
             className="max-h-28 min-h-[44px] flex-1 resize-none py-2.5 text-[15px]"
             disabled={rewriting}
             onFocus={() => {
-              // Let the keyboard finish resizing the visual viewport, then pin to latest.
-              requestAnimationFrame(() => scrollToLatest());
-              window.setTimeout(scrollToLatest, 100);
+              requestAnimationFrame(() => scrollToLatest("auto"));
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
