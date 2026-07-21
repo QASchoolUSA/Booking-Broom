@@ -40,7 +40,7 @@ interface ConversationViewProps {
   messages: SmsMessage[] | undefined;
   onBack?: () => void;
   onConversationDeleted?: () => void;
-  /** Mobile full-screen thread: ios-chat pinned composer + safe-area header. */
+  /** Mobile full-screen thread: shell tracks visualViewport; composer in normal flow. */
   immersiveMobile?: boolean;
   className?: string;
 }
@@ -68,6 +68,7 @@ export function ConversationView({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingThread, setDeletingThread] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const focusScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -76,6 +77,23 @@ export function ConversationView({
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior });
+  };
+
+  /** Focus without letting iOS scroll the document to the input. */
+  const focusComposerWithoutScroll = (
+    e?: React.TouchEvent | React.MouseEvent
+  ) => {
+    if (!immersiveMobile) return;
+    const el = composerInputRef.current;
+    if (!el) return;
+    // mouseDown: preventDefault so Safari doesn't run scroll-to-focus.
+    if (e && "button" in e) {
+      e.preventDefault();
+    }
+    el.focus({ preventScroll: true });
+    if (window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
   };
 
   useEffect(() => {
@@ -296,11 +314,7 @@ export function ConversationView({
 
       <div
         ref={scrollerRef}
-        className={cn(
-          "min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 py-3 md:px-4",
-          // Room for the fixed ios-chat composer so the latest messages stay visible.
-          immersiveMobile && "pb-[7.5rem]"
-        )}
+        className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 py-3 md:px-4"
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           {messages === undefined && (
@@ -390,20 +404,16 @@ export function ConversationView({
       </div>
 
       <div
-        className={cn(
-          "border-t border-border bg-card px-3 pt-2.5 md:px-4",
-          immersiveMobile ? "chat-composer-pin" : "shrink-0"
-        )}
-        style={
-          immersiveMobile
-            ? undefined
-            : {
-                paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
-              }
-        }
+        className="shrink-0 border-t border-border bg-card px-3 pt-2.5 md:px-4"
+        style={{
+          paddingBottom: immersiveMobile
+            ? "calc(0.75rem + var(--vvs, 0px))"
+            : "max(0.75rem, env(safe-area-inset-bottom))",
+        }}
       >
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <Textarea
+            ref={composerInputRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Text message"
@@ -411,14 +421,21 @@ export function ConversationView({
             maxLength={160}
             className="max-h-28 min-h-[44px] flex-1 resize-none py-2.5 text-base"
             disabled={rewriting}
+            onTouchStart={() => focusComposerWithoutScroll()}
+            onMouseDown={(e) => focusComposerWithoutScroll(e)}
             onFocus={() => {
+              if (window.scrollY !== 0) {
+                window.scrollTo(0, 0);
+              }
               requestAnimationFrame(() => scrollToLatest("auto"));
               if (focusScrollTimerRef.current) {
                 clearTimeout(focusScrollTimerRef.current);
               }
-              // After the keyboard animation settles, pin to latest messages.
               focusScrollTimerRef.current = setTimeout(() => {
                 scrollToLatest("auto");
+                if (window.scrollY !== 0) {
+                  window.scrollTo(0, 0);
+                }
                 focusScrollTimerRef.current = null;
               }, 300);
             }}

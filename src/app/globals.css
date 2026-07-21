@@ -178,32 +178,30 @@
     background-color: var(--card);
   }
 
-  /* ios-chat: lock document pan while a mobile thread owns the visual viewport */
+  /* Lock document while a mobile thread owns the visual viewport */
   .chat-keyboard-lock,
   .chat-keyboard-lock body {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
     overflow: hidden !important;
     overscroll-behavior: none;
     touch-action: none;
   }
 
   .chat-screen {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--vv-top, 0px);
     display: flex;
     flex-direction: column;
     height: var(--vvh, 100dvh);
     overflow: hidden;
     overscroll-behavior: contain;
     background-color: var(--card);
-  }
-
-  .chat-composer-pin {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: var(--vvh, 100dvh);
-    z-index: 50;
-    transform: translateY(-100%);
-    touch-action: none;
-    padding-bottom: calc(0.75rem + var(--vvs, 0px));
+    z-index: 40;
   }
 
   .scrollbar-none {

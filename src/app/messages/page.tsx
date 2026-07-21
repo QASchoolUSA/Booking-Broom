@@ -233,7 +233,7 @@ export default function MessagesPage() {
 
       {/* Mobile immersive thread — ios-chat shell sized to --vvh */}
       {iosChatShell && (
-        <div className="chat-screen fixed inset-x-0 top-0 z-40 md:hidden">
+        <div className="chat-screen md:hidden">
           <ConversationView
             thread={threadForView}
             messages={messages}
