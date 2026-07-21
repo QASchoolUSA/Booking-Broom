@@ -22,7 +22,7 @@ export function ThreadList({
 }: ThreadListProps) {
   if (threads.length === 0) {
     return (
-      <div className="flex h-full min-h-[200px] items-center justify-center p-6 text-center text-sm text-muted-foreground">
+      <div className="flex flex-1 items-center justify-center px-6 py-16 text-center text-sm text-muted-foreground">
         No conversations yet. Sync messages or wait for an inbound SMS.
       </div>
     );
@@ -39,27 +39,30 @@ export function ThreadList({
               type="button"
               onClick={() => onSelect(thread)}
               className={cn(
-                "flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors",
-                active ? "bg-primary/5" : "hover:bg-muted/50"
+                "flex w-full flex-col gap-0.5 px-4 py-3.5 text-left transition-colors active:bg-muted/70",
+                active ? "bg-primary/8 md:bg-primary/5" : "hover:bg-muted/50"
               )}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-sm font-semibold text-foreground">
+                <span className="truncate text-[15px] font-semibold text-foreground">
                   {thread.contact_formatted}
                 </span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
+                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                   {formatDistanceToNow(new Date(thread.last_sent_at), {
                     addSuffix: true,
                   })}
                 </span>
               </div>
               <p className="truncate text-xs text-muted-foreground">
-                via {thread.did_description || thread.did_formatted}
+                {thread.did_description || thread.did_formatted}
                 {thread.sub_account ? ` · ${thread.sub_account}` : ""}
               </p>
-              <p className="flex items-center gap-1 truncate text-sm text-foreground/80">
+              <p className="mt-0.5 flex items-center gap-1 truncate text-sm text-foreground/75">
                 {thread.has_media && (
-                  <ImageIcon size={14} className="shrink-0 text-muted-foreground" />
+                  <ImageIcon
+                    size={14}
+                    className="shrink-0 text-muted-foreground"
+                  />
                 )}
                 <span className="truncate">
                   {thread.last_direction === "out" ? "You: " : ""}

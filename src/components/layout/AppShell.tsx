@@ -26,6 +26,12 @@ interface AppShellProps {
   connectionState?: ConnectionState;
   onRefresh?: () => void;
   pageTitle?: string;
+  /** Full-bleed content (no max-width) for messenger-style pages. */
+  contentWidth?: "default" | "full";
+  /** Hide bottom padding reserved for mobile nav (e.g. when a chat composer owns it). */
+  hideMobileNavPad?: boolean;
+  /** Hide the mobile bottom tab bar (e.g. while viewing a conversation). */
+  hideMobileNav?: boolean;
 }
 
 export function AppShell({
@@ -34,6 +40,9 @@ export function AppShell({
   connectionState = "connecting",
   onRefresh,
   pageTitle,
+  contentWidth = "default",
+  hideMobileNavPad = false,
+  hideMobileNav = false,
 }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -64,7 +73,12 @@ export function AppShell({
   ];
 
   return (
-    <div className="dashboard-bg flex min-h-dvh">
+    <div
+      className={cn(
+        "dashboard-bg flex",
+        contentWidth === "full" ? "h-dvh overflow-hidden" : "min-h-dvh"
+      )}
+    >
       {/* Desktop sidebar */}
       {sidebar && (
         <aside
@@ -152,7 +166,12 @@ export function AppShell({
       )}
 
       {/* Main column */}
-      <div className={cn("flex min-w-0 flex-1 flex-col", sidebar && "md:pl-[280px]")}>
+      <div
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col",
+          sidebar && "md:pl-[280px]"
+        )}
+      >
         {/* Mobile header */}
         <header
           className="sticky top-0 z-20 border-b border-border/80 bg-card/90 backdrop-blur-md md:hidden"
@@ -206,13 +225,29 @@ export function AppShell({
         )}
 
         <main
-          className="flex-1 px-4 py-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:px-6 md:py-6 md:pb-6 lg:px-8"
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            contentWidth === "full"
+              ? "px-0 py-0 md:px-0 md:py-0"
+              : "px-4 py-4 md:px-6 md:py-6 lg:px-8",
+            hideMobileNavPad
+              ? "pb-0 md:pb-0"
+              : "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-6"
+          )}
         >
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+          <div
+            className={cn(
+              "mx-auto flex min-h-0 w-full flex-1 flex-col",
+              contentWidth === "full" ? "max-w-none" : "max-w-6xl"
+            )}
+          >
+            {children}
+          </div>
         </main>
       </div>
 
       {/* Mobile bottom nav */}
+      {!hideMobileNav && (
       <nav
         className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur-md md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -247,6 +282,7 @@ export function AppShell({
           </button>
         </div>
       </nav>
+      )}
     </div>
   );
 }
