@@ -107,10 +107,7 @@ export function AppShell({
                   {connectionLabel}
                 </span>
                 {isLive && (
-                  <span className="relative ml-0.5 flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  </span>
+                  <span className="ml-0.5 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 )}
               </button>
             </div>
@@ -174,7 +171,7 @@ export function AppShell({
       >
         {/* Mobile header */}
         <header
-          className="sticky top-0 z-20 border-b border-border/80 bg-card/90 backdrop-blur-md md:hidden"
+          className="chrome-surface sticky top-0 z-20 border-b border-border md:hidden"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
         >
           <div className="flex h-14 items-center gap-3 px-4">
@@ -206,7 +203,7 @@ export function AppShell({
         {/* Desktop top bar (when no sidebar context like settings) */}
         {!sidebar && (
           <header
-            className="sticky top-0 z-20 hidden border-b border-border/80 bg-card/90 backdrop-blur-md md:flex"
+            className="chrome-surface sticky top-0 z-20 hidden border-b border-border md:flex"
             style={{ paddingTop: "env(safe-area-inset-top)" }}
           >
             <div className="flex h-14 w-full items-center justify-between px-6 lg:px-8">
@@ -249,7 +246,7 @@ export function AppShell({
       {/* Mobile bottom nav */}
       {!hideMobileNav && (
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur-md md:hidden"
+        className="chrome-surface fixed inset-x-0 bottom-0 z-30 border-t border-border md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="mx-auto flex max-w-lg items-stretch px-2 pt-1.5">
@@ -260,7 +257,7 @@ export function AppShell({
                 key={href}
                 href={href}
                 className={cn(
-                  "relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                  "relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1.5 text-[11px] font-semibold leading-tight tracking-tight transition-colors",
                   isActive ? "text-primary" : "text-muted-foreground"
                 )}
               >
@@ -275,7 +272,7 @@ export function AppShell({
           <button
             type="button"
             onClick={handleSignOut}
-            className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 text-[10px] font-semibold text-muted-foreground transition-colors active:text-foreground"
+            className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1.5 text-[11px] font-semibold leading-tight tracking-tight text-muted-foreground transition-colors active:text-foreground"
           >
             <SignOut size={22} />
             Sign out

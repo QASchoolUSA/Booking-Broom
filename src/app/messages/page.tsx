@@ -5,6 +5,10 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { Plus } from "@phosphor-icons/react";
 import { useBookings } from "@/lib/hooks/useBookings";
+import {
+  useIsMobileMd,
+  useVisualViewportHeight,
+} from "@/lib/hooks/useVisualViewportHeight";
 import { AppShell } from "@/components/layout/AppShell";
 import { DidSidebar } from "@/components/messages/DidSidebar";
 import { DidFilterChips } from "@/components/messages/DidFilterChips";
@@ -17,12 +21,17 @@ import { didDisplayLabel } from "@/lib/smsLabels";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
+/** AppShell mobile top bar: h-14 + safe-area padding. */
+const MOBILE_SHELL_HEADER_OFFSET =
+  "3.5rem + env(safe-area-inset-top, 0px)";
+
 export default function MessagesPage() {
   const { connectionState } = useBookings();
   const { isAuthenticated } = useConvexAuth();
   const [selectedDid, setSelectedDid] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  const isMobile = useIsMobileMd();
 
   const syncState = useQuery(
     api.sms.getSyncState,
@@ -63,6 +72,30 @@ export default function MessagesPage() {
 
   const showInbox = dids.length > 0 || Boolean(syncState);
   const mobileInThread = Boolean(selectedKey);
+  const vv = useVisualViewportHeight(isMobile && mobileInThread);
+
+  const mobileThreadPaneStyle =
+    vv && isMobile && mobileInThread
+      ? vv.keyboardOpen
+        ? ({
+            // Fill the visual viewport so the thread header + composer stay on-screen.
+            position: "fixed",
+            left: 0,
+            right: 0,
+            top: vv.offsetTop,
+            height: vv.height,
+            zIndex: 30,
+          } as const)
+        : ({
+            // Leave room for AppShell’s mobile top bar when the keyboard is closed.
+            position: "fixed",
+            left: 0,
+            right: 0,
+            top: `calc(${vv.offsetTop}px + ${MOBILE_SHELL_HEADER_OFFSET})`,
+            height: `calc(${vv.height}px - (${MOBILE_SHELL_HEADER_OFFSET}))`,
+            zIndex: 30,
+          } as const)
+      : undefined;
 
   return (
     <AppShell
@@ -182,12 +215,14 @@ export default function MessagesPage() {
               </div>
             </div>
 
-            {/* Chat pane — full screen on mobile when thread selected */}
+            {/* Chat pane — sized to visual viewport on mobile when keyboard is open */}
             <div
               className={cn(
-                "min-h-0 flex-1 flex-col",
-                mobileInThread ? "flex" : "hidden md:flex"
+                "min-h-0 flex-1 flex-col overflow-hidden",
+                mobileInThread ? "flex" : "hidden md:flex",
+                mobileThreadPaneStyle && "md:static md:inset-auto md:z-auto"
               )}
+              style={mobileThreadPaneStyle}
             >
               <ConversationView
                 thread={
@@ -213,6 +248,8 @@ export default function MessagesPage() {
                 messages={messages}
                 onBack={() => setSelectedKey(null)}
                 onConversationDeleted={() => setSelectedKey(null)}
+                keyboardOpen={Boolean(vv?.keyboardOpen)}
+                className="h-full min-h-0"
               />
             </div>
           </div>

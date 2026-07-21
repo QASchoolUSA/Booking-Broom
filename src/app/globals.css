@@ -7,8 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: ui-monospace, monospace;
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -47,25 +48,25 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Light: white + bright green IT dashboard */
+/* Light: crisp white + bright green IT dashboard */
 :root {
-  --background: #f7fbf8;
-  --foreground: #0f1a14;
+  --background: #f4f8f5;
+  --foreground: #0a1210;
   --card: #ffffff;
-  --card-foreground: #0f1a14;
+  --card-foreground: #0a1210;
   --popover: #ffffff;
-  --popover-foreground: #0f1a14;
+  --popover-foreground: #0a1210;
   --primary: #16a34a;
   --primary-foreground: #ffffff;
-  --secondary: #e8f8ee;
+  --secondary: #e4f6ea;
   --secondary-foreground: #14532d;
-  --muted: #f0f4f1;
-  --muted-foreground: #5b6b61;
-  --accent: #e8f8ee;
+  --muted: #eef3ef;
+  --muted-foreground: #3f5248;
+  --accent: #e4f6ea;
   --accent-foreground: #15803d;
   --destructive: #dc2626;
-  --border: #d9e5dc;
-  --input: #d9e5dc;
+  --border: #c9d9cf;
+  --input: #c9d9cf;
   --ring: #16a34a;
   --chart-1: #16a34a;
   --chart-2: #0d9488;
@@ -74,47 +75,47 @@
   --chart-5: #64748b;
   --radius: 0.625rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #1f2d25;
+  --sidebar-foreground: #121c17;
   --sidebar-primary: #16a34a;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef9f1;
+  --sidebar-accent: #eaf7ee;
   --sidebar-accent-foreground: #15803d;
-  --sidebar-border: #d9e5dc;
+  --sidebar-border: #c9d9cf;
   --sidebar-ring: #16a34a;
 }
 
-/* Night: charcoal + phosphor green */
+/* Night: charcoal + phosphor green — higher contrast body text */
 .dark {
-  --background: #0a0f0d;
-  --foreground: #e8f5ec;
-  --card: #121a16;
-  --card-foreground: #e8f5ec;
-  --popover: #121a16;
-  --popover-foreground: #e8f5ec;
+  --background: #080c0a;
+  --foreground: #f0faf3;
+  --card: #101714;
+  --card-foreground: #f0faf3;
+  --popover: #101714;
+  --popover-foreground: #f0faf3;
   --primary: #4ade80;
   --primary-foreground: #052e16;
-  --secondary: #1a2620;
-  --secondary-foreground: #bbf7d0;
-  --muted: #15201b;
-  --muted-foreground: #8fa89a;
-  --accent: #1a2620;
+  --secondary: #18241e;
+  --secondary-foreground: #d1fae5;
+  --muted: #141c18;
+  --muted-foreground: #a3bdb0;
+  --accent: #18241e;
   --accent-foreground: #86efac;
   --destructive: #f87171;
-  --border: #24302a;
-  --input: #24302a;
+  --border: #2a3831;
+  --input: #2a3831;
   --ring: #4ade80;
   --chart-1: #4ade80;
   --chart-2: #2dd4bf;
   --chart-3: #a3e635;
   --chart-4: #60a5fa;
   --chart-5: #94a3b8;
-  --sidebar: #0e1512;
-  --sidebar-foreground: #dceee3;
+  --sidebar: #0c1210;
+  --sidebar-foreground: #e8f5ec;
   --sidebar-primary: #4ade80;
   --sidebar-primary-foreground: #052e16;
-  --sidebar-accent: #1a2620;
+  --sidebar-accent: #18241e;
   --sidebar-accent-foreground: #86efac;
-  --sidebar-border: #1f2b25;
+  --sidebar-border: #24312b;
   --sidebar-ring: #4ade80;
 }
 
@@ -122,12 +123,41 @@
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+
   html {
     @apply font-sans;
     -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+    -webkit-text-size-adjust: 100%;
+    /* Sharper glyphs on retina; avoid the soft “washed” look of heavy antialias alone */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01" on, "cv11" on, "kern" on;
+    font-kerning: normal;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-synthesis: none;
+    letter-spacing: -0.011em;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-heading {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+
+  /* Prefer crisp solid chrome when the user asks for reduced transparency */
+  @media (prefers-reduced-transparency: reduce) {
+    .chrome-surface {
+      background-color: var(--card) !important;
+      backdrop-filter: none !important;
+    }
   }
 }
 
@@ -135,14 +165,17 @@
   .dashboard-bg {
     background-color: var(--background);
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -20%, rgb(22 163 74 / 0.1), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(34 197 94 / 0.06), transparent);
+      radial-gradient(ellipse 70% 40% at 50% -25%, rgb(22 163 74 / 0.07), transparent 70%);
   }
 
   .dark .dashboard-bg {
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -20%, rgb(74 222 128 / 0.08), transparent),
-      radial-gradient(ellipse 50% 35% at 0% 100%, rgb(74 222 128 / 0.04), transparent);
+      radial-gradient(ellipse 70% 40% at 50% -25%, rgb(74 222 128 / 0.05), transparent 70%);
+  }
+
+  /* Opaque sticky/fixed chrome — no backdrop-filter (clearer + cheaper on mobile GPUs) */
+  .chrome-surface {
+    background-color: var(--card);
   }
 
   .scrollbar-none {

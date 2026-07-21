@@ -40,6 +40,8 @@ interface ConversationViewProps {
   messages: SmsMessage[] | undefined;
   onBack?: () => void;
   onConversationDeleted?: () => void;
+  /** When true, reduce composer bottom safe-area (keyboard already lifts the viewport). */
+  keyboardOpen?: boolean;
   className?: string;
 }
 
@@ -48,6 +50,7 @@ export function ConversationView({
   messages,
   onBack,
   onConversationDeleted,
+  keyboardOpen = false,
   className,
 }: ConversationViewProps) {
   const sendMessage = useAction(api.voipmsActions.sendMessage);
@@ -70,6 +73,11 @@ export function ConversationView({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages?.length, thread?.contact, thread?.did]);
+
+  useEffect(() => {
+    if (!keyboardOpen) return;
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [keyboardOpen]);
 
   useEffect(() => {
     setDraft("");
@@ -200,8 +208,12 @@ export function ConversationView({
     }
   };
 
+  const scrollToLatest = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col bg-card", className)}>
+    <div className={cn("flex h-full min-h-0 flex-1 flex-col bg-card", className)}>
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2.5 md:px-4">
         {onBack && (
           <Button
@@ -356,7 +368,9 @@ export function ConversationView({
       <div
         className="shrink-0 border-t border-border bg-card px-3 pt-2.5 md:px-4"
         style={{
-          paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
+          paddingBottom: keyboardOpen
+            ? "0.75rem"
+            : "max(0.75rem, env(safe-area-inset-bottom))",
         }}
       >
         <div className="mx-auto flex max-w-2xl items-end gap-2">
@@ -368,6 +382,11 @@ export function ConversationView({
             maxLength={160}
             className="max-h-28 min-h-[44px] flex-1 resize-none py-2.5 text-[15px]"
             disabled={rewriting}
+            onFocus={() => {
+              // Let the keyboard finish resizing the visual viewport, then pin to latest.
+              requestAnimationFrame(() => scrollToLatest());
+              window.setTimeout(scrollToLatest, 100);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

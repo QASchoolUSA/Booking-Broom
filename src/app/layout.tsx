@@ -9,8 +9,11 @@ import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-jakarta",
   display: "swap",
+  preload: true,
+  adjustFontFallback: true,
 });
 
 export const metadata: Metadata = {
@@ -38,8 +41,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: "cover",
+  // Chrome Android: resize layout when the virtual keyboard opens (helps chat UIs).
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#16A34A" },
     { media: "(prefers-color-scheme: dark)", color: "#0A0F0D" },
@@ -54,7 +58,7 @@ export default function RootLayout({
   return (
     <ConvexAuthNextjsServerProvider>
       <html lang="en" className={`${jakarta.variable} h-full`} suppressHydrationWarning>
-        <body className="min-h-full font-sans antialiased">
+        <body className="min-h-full font-sans">
           <ThemeProvider>
             <ConvexClientProvider>
               {children}

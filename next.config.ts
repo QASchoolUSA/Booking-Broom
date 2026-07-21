@@ -9,6 +9,10 @@ const withSerwist = withSerwistInit({
 
 const nextConfig: NextConfig = {
   turbopack: {},
+  experimental: {
+    // lucide-react + date-fns are already optimized by Next.js defaults
+    optimizePackageImports: ["@phosphor-icons/react"],
+  },
 };
 
 export default withSerwist(nextConfig);

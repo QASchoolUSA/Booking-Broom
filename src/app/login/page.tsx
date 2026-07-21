@@ -51,7 +51,7 @@ export default function LoginPage() {
       >
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_60%)]" />
         <div className="relative">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
             <Broom size={26} weight="duotone" />
           </div>
           <h1 className="mt-8 text-3xl font-bold tracking-tight xl:text-4xl">
