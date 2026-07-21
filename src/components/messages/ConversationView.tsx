@@ -40,9 +40,7 @@ interface ConversationViewProps {
   messages: SmsMessage[] | undefined;
   onBack?: () => void;
   onConversationDeleted?: () => void;
-  /** When true, reduce composer bottom safe-area (keyboard already lifts the viewport). */
-  keyboardOpen?: boolean;
-  /** Mobile full-screen thread: thread header owns the safe-area inset. */
+  /** Mobile full-screen thread: ios-chat pinned composer + safe-area header. */
   immersiveMobile?: boolean;
   className?: string;
 }
@@ -52,7 +50,6 @@ export function ConversationView({
   messages,
   onBack,
   onConversationDeleted,
-  keyboardOpen = false,
   immersiveMobile = false,
   className,
 }: ConversationViewProps) {
@@ -71,6 +68,9 @@ export function ConversationView({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingThread, setDeletingThread] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const focusScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   const scrollToLatest = (behavior: ScrollBehavior = "auto") => {
     const el = scrollerRef.current;
@@ -83,14 +83,17 @@ export function ConversationView({
   }, [messages?.length, thread?.contact, thread?.did]);
 
   useEffect(() => {
-    if (!keyboardOpen) return;
-    scrollToLatest("auto");
-  }, [keyboardOpen]);
-
-  useEffect(() => {
     setDraft("");
     setMetaOpen(false);
   }, [thread?.did, thread?.contact]);
+
+  useEffect(() => {
+    return () => {
+      if (focusScrollTimerRef.current) {
+        clearTimeout(focusScrollTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (metaOpen && thread) {
@@ -217,7 +220,14 @@ export function ConversationView({
   };
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-1 flex-col bg-card", className)}>
+    <div
+      className={cn(
+        immersiveMobile
+          ? "flex h-full min-h-0 flex-col bg-card"
+          : "flex h-full min-h-0 flex-1 flex-col bg-card",
+        className
+      )}
+    >
       <div
         className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2.5 md:px-4"
         style={
@@ -286,7 +296,11 @@ export function ConversationView({
 
       <div
         ref={scrollerRef}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 md:px-4"
+        className={cn(
+          "min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 py-3 md:px-4",
+          // Room for the fixed ios-chat composer so the latest messages stay visible.
+          immersiveMobile && "pb-[7.5rem]"
+        )}
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           {messages === undefined && (
@@ -376,12 +390,17 @@ export function ConversationView({
       </div>
 
       <div
-        className="shrink-0 border-t border-border bg-card px-3 pt-2.5 md:px-4"
-        style={{
-          paddingBottom: keyboardOpen
-            ? "0.75rem"
-            : "max(0.75rem, env(safe-area-inset-bottom))",
-        }}
+        className={cn(
+          "border-t border-border bg-card px-3 pt-2.5 md:px-4",
+          immersiveMobile ? "chat-composer-pin" : "shrink-0"
+        )}
+        style={
+          immersiveMobile
+            ? undefined
+            : {
+                paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
+              }
+        }
       >
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <Textarea
@@ -394,6 +413,20 @@ export function ConversationView({
             disabled={rewriting}
             onFocus={() => {
               requestAnimationFrame(() => scrollToLatest("auto"));
+              if (focusScrollTimerRef.current) {
+                clearTimeout(focusScrollTimerRef.current);
+              }
+              // After the keyboard animation settles, pin to latest messages.
+              focusScrollTimerRef.current = setTimeout(() => {
+                scrollToLatest("auto");
+                focusScrollTimerRef.current = null;
+              }, 300);
+            }}
+            onBlur={() => {
+              if (focusScrollTimerRef.current) {
+                clearTimeout(focusScrollTimerRef.current);
+                focusScrollTimerRef.current = null;
+              }
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

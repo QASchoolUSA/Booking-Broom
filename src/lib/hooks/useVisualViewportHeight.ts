@@ -1,71 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
-export type VisualViewportState = {
-  /** Current visual viewport height in px. */
-  height: number;
-  /** True when the visual viewport is meaningfully shorter than the layout viewport. */
-  keyboardOpen: boolean;
-};
-
-/** Ignore Safari chrome flicker smaller than this (px). */
-const HEIGHT_EPSILON = 24;
+import { useEffect, useState } from "react";
 
 /**
- * Tracks window.visualViewport height for mobile keyboard-aware layouts.
- * Resize-only (no scroll) to avoid layout jumps from offsetTop updates.
- * Returns null when disabled, on desktop, or if the API is unavailable.
+ * Mirrors visualViewport into CSS vars for ios-chat-style mobile layouts.
+ * While enabled:
+ *   --vvh = visualViewport.height
+ *   --vvs = 0px when keyboard-shrunk, else env(safe-area-inset-bottom)
+ * Also toggles `chat-keyboard-lock` on <html> to prevent document pan.
  */
-export function useVisualViewportHeight(
-  enabled: boolean
-): VisualViewportState | null {
-  const [state, setState] = useState<VisualViewportState | null>(null);
-  const lastRef = useRef<VisualViewportState | null>(null);
-
+export function useChatVisualViewport(enabled: boolean): void {
   useEffect(() => {
     if (!enabled || typeof window === "undefined") {
-      setState(null);
-      lastRef.current = null;
       return;
     }
 
+    const root = document.documentElement;
     const vv = window.visualViewport;
-    if (!vv) {
-      setState(null);
-      lastRef.current = null;
-      return;
-    }
 
-    const update = () => {
-      const height = vv.height;
-      const keyboardOpen = Math.max(0, window.innerHeight - height) > 80;
-      const prev = lastRef.current;
+    root.classList.add("chat-keyboard-lock");
 
-      if (
-        prev !== null &&
-        prev.keyboardOpen === keyboardOpen &&
-        Math.abs(prev.height - height) < HEIGHT_EPSILON
-      ) {
-        return;
-      }
-
-      const next = { height, keyboardOpen };
-      lastRef.current = next;
-      setState(next);
+    const sync = () => {
+      const height = vv?.height ?? window.innerHeight;
+      const keyboardOpen =
+        Math.max(0, window.innerHeight - height) > 80;
+      root.style.setProperty("--vvh", `${height}px`);
+      root.style.setProperty(
+        "--vvs",
+        keyboardOpen ? "0px" : "env(safe-area-inset-bottom, 0px)"
+      );
     };
 
-    update();
-    vv.addEventListener("resize", update);
-    window.addEventListener("resize", update);
+    sync();
+    vv?.addEventListener("resize", sync);
+    window.addEventListener("resize", sync);
 
     return () => {
-      vv.removeEventListener("resize", update);
-      window.removeEventListener("resize", update);
+      vv?.removeEventListener("resize", sync);
+      window.removeEventListener("resize", sync);
+      root.classList.remove("chat-keyboard-lock");
+      root.style.removeProperty("--vvh");
+      root.style.removeProperty("--vvs");
     };
   }, [enabled]);
-
-  return state;
 }
 
 /** True below the app `md` breakpoint (768px). */

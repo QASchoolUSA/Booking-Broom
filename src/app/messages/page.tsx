@@ -6,8 +6,8 @@ import { api } from "convex/_generated/api";
 import { Plus } from "@phosphor-icons/react";
 import { useBookings } from "@/lib/hooks/useBookings";
 import {
+  useChatVisualViewport,
   useIsMobileMd,
-  useVisualViewportHeight,
 } from "@/lib/hooks/useVisualViewportHeight";
 import { AppShell } from "@/components/layout/AppShell";
 import { DidSidebar } from "@/components/messages/DidSidebar";
@@ -68,13 +68,30 @@ export default function MessagesPage() {
 
   const showInbox = dids.length > 0 || Boolean(syncState);
   const mobileInThread = Boolean(selectedKey);
-  const vv = useVisualViewportHeight(isMobile && mobileInThread);
+  const iosChatShell = isMobile && mobileInThread;
 
-  // Only constrain height while the keyboard is open — otherwise flex/dvh owns sizing.
-  const threadPaneStyle =
-    vv?.keyboardOpen && isMobile && mobileInThread
-      ? ({ height: vv.height, maxHeight: vv.height } as const)
-      : undefined;
+  // Always sync --vvh/--vvs while the immersive mobile thread is open.
+  useChatVisualViewport(iosChatShell);
+
+  const threadForView =
+    selectedThread ??
+    (selectedKey
+      ? ({
+          did: selectedKey.split(":")[0]!,
+          contact: selectedKey.split(":")[1]!,
+          did_description: "",
+          did_formatted: selectedKey.split(":")[0]!,
+          sub_account: null,
+          contact_formatted: selectedKey.split(":")[1]!,
+          label: null,
+          note: null,
+          last_body: "",
+          last_sent_at: new Date().toISOString(),
+          last_direction: "out",
+          last_type: "sms",
+          has_media: false,
+        } satisfies SmsThread)
+      : null);
 
   return (
     <AppShell
@@ -195,46 +212,38 @@ export default function MessagesPage() {
               </div>
             </div>
 
-            {/* Chat pane — normal-flow flex; VV height only while keyboard is open */}
+            {/* Desktop chat pane */}
             <div
               className={cn(
                 "min-h-0 flex-1 flex-col overflow-hidden",
-                mobileInThread ? "flex" : "hidden md:flex"
+                iosChatShell ? "hidden" : mobileInThread ? "flex" : "hidden md:flex"
               )}
-              style={threadPaneStyle}
             >
               <ConversationView
-                thread={
-                  selectedThread ??
-                  (selectedKey
-                    ? ({
-                        did: selectedKey.split(":")[0]!,
-                        contact: selectedKey.split(":")[1]!,
-                        did_description: "",
-                        did_formatted: selectedKey.split(":")[0]!,
-                        sub_account: null,
-                        contact_formatted: selectedKey.split(":")[1]!,
-                        label: null,
-                        note: null,
-                        last_body: "",
-                        last_sent_at: new Date().toISOString(),
-                        last_direction: "out",
-                        last_type: "sms",
-                        has_media: false,
-                      } satisfies SmsThread)
-                    : null)
-                }
+                thread={threadForView}
                 messages={messages}
                 onBack={() => setSelectedKey(null)}
                 onConversationDeleted={() => setSelectedKey(null)}
-                keyboardOpen={Boolean(vv?.keyboardOpen)}
-                immersiveMobile={mobileInThread}
                 className="h-full min-h-0"
               />
             </div>
           </div>
         )}
       </div>
+
+      {/* Mobile immersive thread — ios-chat shell sized to --vvh */}
+      {iosChatShell && (
+        <div className="chat-screen fixed inset-x-0 top-0 z-40 md:hidden">
+          <ConversationView
+            thread={threadForView}
+            messages={messages}
+            onBack={() => setSelectedKey(null)}
+            onConversationDeleted={() => setSelectedKey(null)}
+            immersiveMobile
+            className="min-h-0"
+          />
+        </div>
+      )}
 
       <ComposeMessageSheet
         open={composeOpen}
