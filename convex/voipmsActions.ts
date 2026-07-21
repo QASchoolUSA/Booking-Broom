@@ -12,6 +12,7 @@ import {
   getSms,
   listDids,
   parseVoipmsDate,
+  resolveDidLabel,
   sendSms,
   setSmsCallback,
   type VoipmsMmsRow,
@@ -49,7 +50,11 @@ export const syncDidsInternal = internalAction({
         const siteId = matchSiteId(did.did, sites);
         await ctx.runMutation(internal.sms.upsertDidInternal, {
           did: did.did,
-          description: did.description || did.did,
+          description: resolveDidLabel({
+            description: did.description,
+            subAccount: did.subAccount,
+            did: did.did,
+          }),
           subAccount: did.subAccount,
           smsEnabled: did.smsEnabled || did.smsAvailable,
           siteId,

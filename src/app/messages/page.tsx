@@ -11,6 +11,7 @@ import { SmsSyncBanner } from "@/components/messages/SmsSyncBanner";
 import { ThreadList } from "@/components/messages/ThreadList";
 import { ConversationView } from "@/components/messages/ConversationView";
 import type { SmsDid, SmsMessage, SmsSyncState, SmsThread } from "@/lib/types";
+import { didDisplayLabel } from "@/lib/smsLabels";
 import { cn } from "@/lib/utils";
 
 export default function MessagesPage() {
@@ -119,7 +120,10 @@ export default function MessagesPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Conversations
                   {selectedDid
-                    ? ` · ${dids.find((d) => d.did === selectedDid)?.description || selectedDid}`
+                    ? (() => {
+                        const d = dids.find((x) => x.did === selectedDid);
+                        return d ? ` · ${didDisplayLabel(d)}` : "";
+                      })()
                     : ""}
                 </p>
               </div>

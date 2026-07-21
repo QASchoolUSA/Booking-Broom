@@ -114,6 +114,32 @@ function mapDid(
   };
 }
 
+/** Strip Voip.ms account id prefix, e.g. 100001_sanford → sanford. */
+export function cleanSubAccountLabel(subAccount: string | undefined): string {
+  if (!subAccount?.trim()) return "";
+  const raw = subAccount.trim();
+  const withoutId = raw.replace(/^\d+_/, "");
+  return (withoutId || raw).trim();
+}
+
+/**
+ * Label to store/display for a DID: Voip.ms description, else cleaned sub-account.
+ * Never falls back to the phone digits.
+ */
+export function resolveDidLabel(opts: {
+  description?: string;
+  subAccount?: string;
+  did?: string;
+}): string {
+  const desc = opts.description?.trim() ?? "";
+  // Ignore descriptions that are just the DID digits.
+  const digits = (opts.did ?? "").replace(/\D/g, "").slice(-10);
+  if (desc && (!digits || desc.replace(/\D/g, "") !== digits)) {
+    return desc;
+  }
+  return cleanSubAccountLabel(opts.subAccount);
+}
+
 /** List sub-account usernames (e.g. 100001_sanford). */
 export async function listSubAccounts(): Promise<string[]> {
   try {

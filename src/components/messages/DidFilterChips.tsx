@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { SmsDid } from "@/lib/types";
+import { didDisplayLabel } from "@/lib/smsLabels";
 
 interface DidFilterChipsProps {
   dids: SmsDid[];
@@ -31,7 +32,7 @@ export function DidFilterChips({
       {dids.map((did) => (
         <Chip
           key={did.id}
-          label={did.description || did.formatted}
+          label={didDisplayLabel(did)}
           active={selectedDid === did.did}
           onClick={() => onSelect(did.did)}
         />

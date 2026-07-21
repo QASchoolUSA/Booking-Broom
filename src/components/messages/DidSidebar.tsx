@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { SmsDid } from "@/lib/types";
+import { didDisplayLabel, didLabelUsesSubAccount } from "@/lib/smsLabels";
 
 interface DidSidebarProps {
   dids: SmsDid[];
@@ -29,6 +30,9 @@ export function DidSidebar({ dids, selectedDid, onSelect }: DidSidebarProps) {
       </button>
       {dids.map((did) => {
         const active = selectedDid === did.did;
+        const label = didDisplayLabel(did);
+        const showSub =
+          Boolean(did.sub_account) && !didLabelUsesSubAccount(did);
         return (
           <button
             key={did.id}
@@ -41,12 +45,10 @@ export function DidSidebar({ dids, selectedDid, onSelect }: DidSidebarProps) {
                 : "text-sidebar-foreground hover:bg-muted/60"
             )}
           >
-            <span className="truncate text-sm font-medium">
-              {did.description || did.formatted}
-            </span>
+            <span className="truncate text-sm font-medium">{label}</span>
             <span className="truncate text-xs text-muted-foreground">
               {did.formatted}
-              {did.sub_account ? ` · ${did.sub_account}` : ""}
+              {showSub ? ` · ${did.sub_account}` : ""}
             </span>
           </button>
         );
