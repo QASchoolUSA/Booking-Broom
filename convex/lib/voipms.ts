@@ -305,6 +305,16 @@ export async function sendSms(opts: {
   return { smsId };
 }
 
+/** Best-effort delete of one SMS on Voip.ms (by message id). */
+export async function deleteSms(id: string): Promise<void> {
+  await voipmsCall("deleteSMS", { id });
+}
+
+/** Best-effort delete of one MMS on Voip.ms (by message id). */
+export async function deleteMms(id: string): Promise<void> {
+  await voipmsCall("deleteMMS", { id });
+}
+
 /** Configure SMS URL callback for a DID (enables webhook inbound). */
 export async function setSmsCallback(opts: {
   did: string;

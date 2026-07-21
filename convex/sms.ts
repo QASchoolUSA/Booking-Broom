@@ -362,3 +362,63 @@ export const listSitesForPhoneMatchInternal = internalQuery({
     }));
   },
 });
+
+export const getMessageInternal = internalQuery({
+  args: { messageId: v.id("smsMessages") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.messageId);
+  },
+});
+
+export const listConversationMessagesInternal = internalQuery({
+  args: {
+    did: v.string(),
+    contact: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("smsMessages")
+      .withIndex("by_did_contact_sentAt", (q) =>
+        q.eq("did", args.did).eq("contact", args.contact)
+      )
+      .collect();
+  },
+});
+
+export const deleteMessageInternal = internalMutation({
+  args: { messageId: v.id("smsMessages") },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.messageId);
+    if (!doc) return false;
+    await ctx.db.delete(args.messageId);
+    return true;
+  },
+});
+
+export const deleteConversationInternal = internalMutation({
+  args: {
+    did: v.string(),
+    contact: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const messages = await ctx.db
+      .query("smsMessages")
+      .withIndex("by_did_contact_sentAt", (q) =>
+        q.eq("did", args.did).eq("contact", args.contact)
+      )
+      .collect();
+    for (const msg of messages) {
+      await ctx.db.delete(msg._id);
+    }
+
+    const meta = await ctx.db
+      .query("smsConversationMeta")
+      .withIndex("by_did_contact", (q) =>
+        q.eq("did", args.did).eq("contact", args.contact)
+      )
+      .unique();
+    if (meta) await ctx.db.delete(meta._id);
+
+    return { deletedMessages: messages.length };
+  },
+});

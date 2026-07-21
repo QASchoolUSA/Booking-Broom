@@ -3,13 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Id } from "convex/_generated/dataModel";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
   CaretLeft,
+  DotsThreeVertical,
   MagicWand,
   NotePencil,
   PaperPlaneTilt,
+  Trash,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { SmsMessage, SmsThread } from "@/lib/types";
@@ -25,11 +28,18 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ConversationViewProps {
   thread: SmsThread | null;
   messages: SmsMessage[] | undefined;
   onBack?: () => void;
+  onConversationDeleted?: () => void;
   className?: string;
 }
 
@@ -37,10 +47,13 @@ export function ConversationView({
   thread,
   messages,
   onBack,
+  onConversationDeleted,
   className,
 }: ConversationViewProps) {
   const sendMessage = useAction(api.voipmsActions.sendMessage);
   const rewriteDraft = useAction(api.smsRewrite.rewriteSmsDraft);
+  const deleteMessage = useAction(api.voipmsActions.deleteMessage);
+  const deleteConversation = useAction(api.voipmsActions.deleteConversation);
   const upsertMeta = useMutation(api.sms.upsertConversationMeta);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -49,6 +62,8 @@ export function ConversationView({
   const [labelDraft, setLabelDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [savingMeta, setSavingMeta] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingThread, setDeletingThread] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -142,6 +157,49 @@ export function ConversationView({
     }
   };
 
+  const handleDeleteMessage = async (msg: SmsMessage) => {
+    if (
+      !confirm(
+        "Delete this message from your inbox? We’ll also try to remove it from Voip.ms."
+      )
+    ) {
+      return;
+    }
+    setDeletingId(msg.id);
+    try {
+      await deleteMessage({ messageId: msg.id as Id<"smsMessages"> });
+      toast.success("Message deleted");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteConversation = async () => {
+    if (
+      !confirm(
+        "Delete this entire conversation from your inbox? We’ll also try to remove messages from Voip.ms. This cannot be undone."
+      )
+    ) {
+      return;
+    }
+    setDeletingThread(true);
+    try {
+      await deleteConversation({
+        did: thread.did,
+        contact: thread.contact,
+      });
+      toast.success("Conversation deleted");
+      onConversationDeleted?.();
+      onBack?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
+    } finally {
+      setDeletingThread(false);
+    }
+  };
+
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col bg-card", className)}>
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2.5 md:px-4">
@@ -183,6 +241,24 @@ export function ConversationView({
         >
           <NotePencil size={18} weight="duotone" />
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            disabled={deletingThread}
+            aria-label="Conversation actions"
+          >
+            <DotsThreeVertical size={18} weight="bold" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => void handleDeleteConversation()}
+            >
+              <Trash size={16} />
+              Delete conversation
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div
@@ -206,41 +282,65 @@ export function ConversationView({
               <div
                 key={msg.id}
                 className={cn(
-                  "flex flex-col gap-1",
+                  "group flex flex-col gap-1",
                   outbound ? "items-end" : "items-start"
                 )}
               >
                 <div
                   className={cn(
-                    "max-w-[88%] rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-sm md:max-w-[75%]",
-                    outbound
-                      ? "rounded-br-md bg-primary text-primary-foreground"
-                      : "rounded-bl-md bg-muted text-foreground"
+                    "flex max-w-[92%] items-end gap-1 md:max-w-[80%]",
+                    outbound ? "flex-row" : "flex-row-reverse"
                   )}
                 >
-                  {msg.body && (
-                    <p className="whitespace-pre-wrap break-words">{msg.body}</p>
-                  )}
-                  {msg.media_urls.length > 0 && (
-                    <div className={cn("space-y-2", msg.body && "mt-2")}>
-                      {msg.media_urls.map((url) => (
-                        <a
-                          key={url}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block overflow-hidden rounded-lg"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={url}
-                            alt="MMS attachment"
-                            className="max-h-52 max-w-full object-contain"
-                          />
-                        </a>
-                      ))}
-                    </div>
-                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-8 w-8 shrink-0 text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100",
+                      deletingId === msg.id && "opacity-100"
+                    )}
+                    disabled={deletingId === msg.id}
+                    onClick={() => void handleDeleteMessage(msg)}
+                    aria-label="Delete message"
+                    title="Delete message"
+                  >
+                    <Trash size={14} />
+                  </Button>
+                  <div
+                    className={cn(
+                      "rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-sm",
+                      outbound
+                        ? "rounded-br-md bg-primary text-primary-foreground"
+                        : "rounded-bl-md bg-muted text-foreground"
+                    )}
+                  >
+                    {msg.body && (
+                      <p className="whitespace-pre-wrap break-words">
+                        {msg.body}
+                      </p>
+                    )}
+                    {msg.media_urls.length > 0 && (
+                      <div className={cn("space-y-2", msg.body && "mt-2")}>
+                        {msg.media_urls.map((url) => (
+                          <a
+                            key={url}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block overflow-hidden rounded-lg"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt="MMS attachment"
+                              className="max-h-52 max-w-full object-contain"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <span className="px-1 text-[10px] tabular-nums text-muted-foreground">
                   {format(new Date(msg.sent_at), "MMM d, h:mm a")}

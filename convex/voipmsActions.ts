@@ -6,6 +6,8 @@ import { normalizeUsDigits } from "./lib/phone";
 import {
   buildWebhookUrl,
   defaultSyncDateRange,
+  deleteMms,
+  deleteSms,
   directionFromType,
   extractMmsMediaUrls,
   getMms,
@@ -299,5 +301,77 @@ export const sendMessage = action({
     });
 
     return { ok: true, voipmsId };
+  },
+});
+
+async function bestEffortVoipmsDelete(
+  voipmsId: string,
+  type: "sms" | "mms"
+): Promise<void> {
+  // Local-only / synthetic ids (e.g. Date.now) aren't on Voip.ms.
+  if (!/^\d+$/.test(voipmsId) || voipmsId.length > 12) return;
+  try {
+    if (type === "mms") await deleteMms(voipmsId);
+    else await deleteSms(voipmsId);
+  } catch {
+    // Best-effort: local delete still proceeds.
+  }
+}
+
+export const deleteMessage = action({
+  args: {
+    messageId: v.id("smsMessages"),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const msg = await ctx.runQuery(internal.sms.getMessageInternal, {
+      messageId: args.messageId,
+    });
+    if (!msg) return { ok: true };
+
+    await bestEffortVoipmsDelete(msg.voipmsId, msg.type);
+
+    await ctx.runMutation(internal.sms.deleteMessageInternal, {
+      messageId: args.messageId,
+    });
+    return { ok: true };
+  },
+});
+
+export const deleteConversation = action({
+  args: {
+    did: v.string(),
+    contact: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; deletedMessages: number }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const did = normalizeUsDigits(args.did);
+    const contact = normalizeUsDigits(args.contact);
+    if (!did || !contact) throw new Error("Invalid phone number");
+
+    const messages = await ctx.runQuery(
+      internal.sms.listConversationMessagesInternal,
+      { did, contact }
+    );
+
+    for (const msg of messages) {
+      await bestEffortVoipmsDelete(msg.voipmsId, msg.type);
+    }
+
+    const result = await ctx.runMutation(
+      internal.sms.deleteConversationInternal,
+      { did, contact }
+    );
+    return { ok: true, deletedMessages: result.deletedMessages };
   },
 });
