@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type VisualViewportState = {
   /** Current visual viewport height in px. */
@@ -8,6 +8,9 @@ export type VisualViewportState = {
   /** True when the visual viewport is meaningfully shorter than the layout viewport. */
   keyboardOpen: boolean;
 };
+
+/** Ignore Safari chrome flicker smaller than this (px). */
+const HEIGHT_EPSILON = 24;
 
 /**
  * Tracks window.visualViewport height for mobile keyboard-aware layouts.
@@ -18,23 +21,38 @@ export function useVisualViewportHeight(
   enabled: boolean
 ): VisualViewportState | null {
   const [state, setState] = useState<VisualViewportState | null>(null);
+  const lastRef = useRef<VisualViewportState | null>(null);
 
   useEffect(() => {
     if (!enabled || typeof window === "undefined") {
       setState(null);
+      lastRef.current = null;
       return;
     }
 
     const vv = window.visualViewport;
     if (!vv) {
       setState(null);
+      lastRef.current = null;
       return;
     }
 
     const update = () => {
       const height = vv.height;
       const keyboardOpen = Math.max(0, window.innerHeight - height) > 80;
-      setState({ height, keyboardOpen });
+      const prev = lastRef.current;
+
+      if (
+        prev !== null &&
+        prev.keyboardOpen === keyboardOpen &&
+        Math.abs(prev.height - height) < HEIGHT_EPSILON
+      ) {
+        return;
+      }
+
+      const next = { height, keyboardOpen };
+      lastRef.current = next;
+      setState(next);
     };
 
     update();

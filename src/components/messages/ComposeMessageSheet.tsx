@@ -177,7 +177,7 @@ export function ComposeMessageSheet({
               placeholder="Type your message…"
               rows={4}
               maxLength={160}
-              className="resize-none"
+              className="min-h-[96px] resize-none text-base md:text-sm"
               disabled={rewriting}
             />
             <div className="flex items-center justify-between gap-2">

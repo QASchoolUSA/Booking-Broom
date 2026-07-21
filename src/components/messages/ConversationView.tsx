@@ -390,7 +390,7 @@ export function ConversationView({
             placeholder="Text message"
             rows={1}
             maxLength={160}
-            className="max-h-28 min-h-[44px] flex-1 resize-none py-2.5 text-[15px]"
+            className="max-h-28 min-h-[44px] flex-1 resize-none py-2.5 text-base"
             disabled={rewriting}
             onFocus={() => {
               requestAnimationFrame(() => scrollToLatest("auto"));
