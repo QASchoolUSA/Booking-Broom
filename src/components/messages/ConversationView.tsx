@@ -5,7 +5,7 @@ import { useAction } from "convex/react";
 import { api } from "convex/_generated/api";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { CaretLeft, PaperPlaneTilt } from "@phosphor-icons/react";
+import { CaretLeft, MagicWand, PaperPlaneTilt } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { SmsMessage, SmsThread } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -25,8 +25,10 @@ export function ConversationView({
   className,
 }: ConversationViewProps) {
   const sendMessage = useAction(api.voipmsActions.sendMessage);
+  const rewriteDraft = useAction(api.smsRewrite.rewriteSmsDraft);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -70,6 +72,27 @@ export function ConversationView({
       toast.error(e instanceof Error ? e.message : "Failed to send");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRewrite = async () => {
+    const text = draft.trim();
+    if (!text || rewriting || sending) return;
+    setRewriting(true);
+    try {
+      const result = await rewriteDraft({ text });
+      const previous = draft;
+      setDraft(result.text.slice(0, 160));
+      toast.success("Draft rewritten", {
+        action: {
+          label: "Undo",
+          onClick: () => setDraft(previous),
+        },
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Rewrite failed");
+    } finally {
+      setRewriting(false);
     }
   };
 
@@ -181,6 +204,7 @@ export function ConversationView({
             rows={1}
             maxLength={160}
             className="max-h-28 min-h-[44px] flex-1 resize-none py-2.5 text-[15px]"
+            disabled={rewriting}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -189,9 +213,25 @@ export function ConversationView({
             }}
           />
           <Button
+            type="button"
+            variant="outline"
             size="icon"
             className="h-11 w-11 shrink-0 rounded-full"
-            disabled={sending || !draft.trim()}
+            disabled={rewriting || sending || !draft.trim()}
+            onClick={() => void handleRewrite()}
+            aria-label="Rewrite professionally"
+            title="Rewrite professionally"
+          >
+            <MagicWand
+              size={18}
+              weight="duotone"
+              className={rewriting ? "animate-pulse" : undefined}
+            />
+          </Button>
+          <Button
+            size="icon"
+            className="h-11 w-11 shrink-0 rounded-full"
+            disabled={sending || rewriting || !draft.trim()}
             onClick={() => void handleSend()}
             aria-label="Send"
           >
@@ -200,6 +240,7 @@ export function ConversationView({
         </div>
         <p className="mx-auto mt-1 max-w-2xl text-[11px] text-muted-foreground">
           {draft.length}/160
+          {rewriting ? " · Rewriting…" : " · Wand rewrites with Groq"}
         </p>
       </div>
     </div>

@@ -304,6 +304,21 @@ You can also paste that URL manually under each DID’s **SMS/MMS URL Callback**
 
 **Limits:** Voip.ms API sending is capped (~100 SMS/day by default; ask support to raise). Local anonymous Convex needs a publicly reachable `.convex.site` URL (or tunnel) for webhooks; until then, rely on **Sync messages**.
 
+### Professional SMS rewrite (Groq)
+
+The Messages composer has a **wand** button that rewrites your draft into a clearer, client-ready SMS via [Groq](https://console.groq.com)’s free API (`llama-3.3-70b-versatile`). No paid membership required.
+
+1. Create a free API key at [console.groq.com](https://console.groq.com).
+2. Set it in Convex:
+
+```bash
+pnpm exec convex env set GROQ_API_KEY "gsk_..."
+# Cloud / anonymous local:
+# CONVEX_AGENT_MODE=anonymous pnpm exec convex env set GROQ_API_KEY "gsk_..."
+```
+
+3. Open a conversation, type a draft, tap the wand, review, then send. Use **Undo** on the toast if you prefer the previous text.
+
 ## Project Structure
 
 ```
