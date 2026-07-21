@@ -3,7 +3,7 @@
  * Prefers tel: links, then common display formats.
  */
 
-function normalizeUsDigits(raw: string): string | null {
+export function normalizeUsDigits(raw: string): string | null {
   let digits = raw.replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("1")) {
     digits = digits.slice(1);

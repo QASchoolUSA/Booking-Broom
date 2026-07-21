@@ -165,4 +165,40 @@ export default defineSchema({
     error: v.optional(v.string()),
     checkedAt: v.number(),
   }).index("by_site", ["siteId"]),
+
+  /** Voip.ms DID numbers (one per business line / sub-account). */
+  smsDids: defineTable({
+    did: v.string(),
+    description: v.string(),
+    subAccount: v.optional(v.string()),
+    smsEnabled: v.boolean(),
+    siteId: v.optional(v.id("sites")),
+    lastSyncedAt: v.number(),
+  })
+    .index("by_did", ["did"])
+    .index("by_sub_account", ["subAccount"]),
+
+  /** Inbound/outbound SMS and MMS synced from Voip.ms or received via webhook. */
+  smsMessages: defineTable({
+    voipmsId: v.string(),
+    did: v.string(),
+    contact: v.string(),
+    direction: v.union(v.literal("in"), v.literal("out")),
+    type: v.union(v.literal("sms"), v.literal("mms")),
+    body: v.string(),
+    mediaUrls: v.optional(v.array(v.string())),
+    sentAt: v.number(),
+    status: v.optional(v.string()),
+  })
+    .index("by_did_and_sentAt", ["did", "sentAt"])
+    .index("by_did_contact_sentAt", ["did", "contact", "sentAt"])
+    .index("by_voipms_id", ["voipmsId"])
+    .index("by_sentAt", ["sentAt"]),
+
+  /** Singleton row tracking the last Voip.ms SMS sync. */
+  smsSyncState: defineTable({
+    lastSyncAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+    lastDidSyncAt: v.optional(v.number()),
+  }),
 });

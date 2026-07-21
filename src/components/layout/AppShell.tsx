@@ -7,6 +7,7 @@ import {
   Broom,
   CalendarBlank,
   ChartLine,
+  ChatCircle,
   Gauge,
   GearSix,
   Globe,
@@ -55,6 +56,7 @@ export function AppShell({
 
   const navItems = [
     { href: "/", label: "Bookings", icon: CalendarBlank, match: (p: string) => p === "/" || p.startsWith("/sites") },
+    { href: "/messages", label: "Messages", icon: ChatCircle, match: (p: string) => p === "/messages" || p.startsWith("/messages/") },
     { href: "/websites", label: "Sites", icon: Globe, match: (p: string) => p === "/websites" || p.startsWith("/websites/") },
     { href: "/seo", label: "SEO", icon: ChartLine, match: (p: string) => p === "/seo" || p.startsWith("/seo/") },
     { href: "/performance", label: "Speed", icon: Gauge, match: (p: string) => p === "/performance" || p.startsWith("/performance/") },

@@ -179,6 +179,52 @@ export interface CreateBookingPayload {
   notes?: string;
 }
 
+export interface SmsDid {
+  id: string;
+  did: string;
+  description: string;
+  sub_account: string | null;
+  sms_enabled: boolean;
+  site_id: string | null;
+  formatted: string;
+  last_synced_at: string;
+}
+
+export interface SmsThread {
+  did: string;
+  did_description: string;
+  did_formatted: string;
+  sub_account: string | null;
+  contact: string;
+  contact_formatted: string;
+  last_body: string;
+  last_sent_at: string;
+  last_direction: "in" | "out";
+  last_type: "sms" | "mms";
+  has_media: boolean;
+}
+
+export interface SmsMessage {
+  id: string;
+  voipms_id: string;
+  did: string;
+  contact: string;
+  contact_formatted: string;
+  direction: "in" | "out";
+  type: "sms" | "mms";
+  body: string;
+  media_urls: string[];
+  sent_at: string;
+  status: string | null;
+}
+
+export interface SmsSyncState {
+  id: string;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+  last_did_sync_at: string | null;
+}
+
 export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   new: "New",
   confirmed: "Confirmed",

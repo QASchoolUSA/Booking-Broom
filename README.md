@@ -273,6 +273,37 @@ Without a key, the API allows a very low anonymous quota and will often fail und
 
 Domains are audited as `https://{domain}`; set a URL override on a site card if you need `www` or a specific path.
 
+## Voip.ms SMS / MMS (Messages page)
+
+The **Messages** page (`/messages`) shows SMS/MMS for your Voip.ms DIDs (including each number’s **description** label and **sub-account**), lets you filter by line, and send text replies. Inbound MMS media is displayed; outbound is text-only.
+
+### One-time Voip.ms setup
+
+1. In the Voip.ms portal: **Main Menu → SOAP and REST/JSON API** — set an API password, enable the API, and **whitelist** the IPs that will call the API (Convex action egress / your server). Contact Voip.ms support if you need cloud/dynamic IPs allowed.
+2. Enable **SMS/MMS** on each DID. Prefer one DID per sub-account so labels stay clear.
+3. Set Convex environment variables:
+
+```bash
+pnpm exec convex env set VOIPMS_API_USERNAME "you@example.com"
+pnpm exec convex env set VOIPMS_API_PASSWORD "your-api-password"
+pnpm exec convex env set VOIPMS_WEBHOOK_SECRET "long-random-string"
+# Public Convex HTTP site URL (same as NEXT_PUBLIC_CONVEX_SITE_URL), used to build callbacks:
+pnpm exec convex env set CONVEX_SITE_URL "https://your-deployment.convex.site"
+# Cloud / anonymous local: prefix with CONVEX_AGENT_MODE=anonymous
+```
+
+4. In the app: open **Messages** → **Sync numbers from Voip.ms**. That pulls DIDs (with description + sub-account) and, when possible, configures each DID’s SMS URL callback to:
+
+```
+https://your-deployment.convex.site/voipms/sms?secret=YOUR_SECRET&to={TO}&from={FROM}&message={MESSAGE}&id={ID}&date={TIMESTAMP}&media={MEDIA}
+```
+
+You can also paste that URL manually under each DID’s **SMS/MMS URL Callback** (enable retry so Voip.ms expects a plain `ok` response).
+
+5. **Sync messages** backfills recent history via `getSMS` / `getMMS`. A cron also syncs every 15 minutes as a safety net. New inbound traffic should arrive in near real time via the webhook.
+
+**Limits:** Voip.ms API sending is capped (~100 SMS/day by default; ask support to raise). Local anonymous Convex needs a publicly reachable `.convex.site` URL (or tunnel) for webhooks; until then, rely on **Sync messages**.
+
 ## Project Structure
 
 ```
@@ -282,6 +313,7 @@ src/
 ├── components/
 │   ├── bookings/           # Booking cards, detail sheet
 │   ├── dashboard/          # Main dashboard view
+│   ├── messages/           # Voip.ms SMS/MMS inbox
 │   ├── seo/                # Search Console overview & site cards
 │   ├── performance/        # PageSpeed Insights overview & site cards
 │   └── layout/             # App shell, nav, filters
@@ -311,7 +343,7 @@ pnpm dev
 
 - Assign bookings to cleaners
 - Cleaner mobile app (React Native + same Convex backend)
-- SMS notifications on new bookings
+- Outbound MMS attachments from Messages
 
 ## Email notifications
 

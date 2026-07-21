@@ -29,4 +29,11 @@ crons.interval(
   internal.siteHealthActions.checkAllInternal
 );
 
+/** Safety net if a Voip.ms SMS webhook is missed. */
+crons.interval(
+  "sync Voip.ms SMS messages",
+  { minutes: 15 },
+  internal.voipmsActions.syncAllInternal
+);
+
 export default crons;
