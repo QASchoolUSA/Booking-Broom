@@ -1,14 +1,5 @@
 import { DashboardView } from "@/components/dashboard/DashboardView";
-
-const SITE_NAMES: Record<string, string> = {
-  sanford: "Sanford Cleaning",
-  deltona: "Deltona Cleaning",
-  "haines-city": "Haines City Cleaning",
-  celebration: "Celebration Cleaning",
-  "winter-haven": "Cleaning Winter Haven",
-  "cleaning-weekly": "Cleaning Weekly",
-  davenport: "Cleaning Davenport",
-};
+import { getSiteDisplayName } from "@/lib/site-emails";
 
 interface SitePageProps {
   params: Promise<{ slug: string }>;
@@ -16,7 +7,7 @@ interface SitePageProps {
 
 export default async function SitePage({ params }: SitePageProps) {
   const { slug } = await params;
-  const name = SITE_NAMES[slug] ?? slug;
+  const name = getSiteDisplayName(slug);
 
   return (
     <DashboardView
