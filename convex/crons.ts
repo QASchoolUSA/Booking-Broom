@@ -15,6 +15,18 @@ crons.daily(
   internal.gsc.pruneHistory
 );
 
+crons.daily(
+  "sync Bing Webmaster metrics",
+  { hourUTC: 6, minuteUTC: 30 },
+  internal.bingActions.syncAllInternal
+);
+
+crons.daily(
+  "prune Bing Webmaster metrics history",
+  { hourUTC: 7, minuteUTC: 30 },
+  internal.bing.pruneHistory
+);
+
 /** PageSpeed runs are slower; weekly is enough for ops health checks. */
 crons.weekly(
   "sync PageSpeed Insights metrics",

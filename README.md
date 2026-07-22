@@ -248,7 +248,29 @@ Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Vercel if not alre
 
 6. Ensure each cleaning site property exists in the Google account you connect (Domain or URL-prefix property). Domains are matched automatically to `sites.domain`; if a match fails, set a property override on the SEO page card.
 
-7. In the app: open **SEO** → **Connect Google** → approve readonly Search Console access. Metrics sync daily at 06:00 UTC and on demand via **Sync now**.
+7. In the app: open **SEO** → **Connect Google** → approve readonly Search Console access. Metrics sync daily at 06:00 UTC and on demand via **Sync now**. Sites that are not in the connected Search Console account show a **Not in Google Search Console** badge.
+
+## Bing Webmaster (SEO page)
+
+The same **SEO** page (`/seo`) can show Bing traffic (clicks, impressions, CTR), crawl issues, and property match status. Use the **Google / Bing** toggle at the top of the page.
+
+### One-time Bing setup
+
+1. Sign in to [Bing Webmaster Tools](https://www.bing.com/webmasters/) and verify each cleaning site (or import from Google Search Console).
+2. Settings → **API Access** → generate an **API Key** (one key covers all verified sites for that account).
+3. Set the Convex environment variable:
+
+```bash
+pnpm exec convex env set BING_WEBMASTER_API_KEY "your-api-key"
+# Cloud / anonymous local:
+# CONVEX_AGENT_MODE=anonymous pnpm exec convex env set BING_WEBMASTER_API_KEY "your-api-key"
+```
+
+4. In the app: open **SEO** → **Bing** → **Sync now**. Metrics sync daily at 06:30 UTC. Sites missing from Bing show **Not in Bing Webmaster**.
+
+### Page scans
+
+On `/seo`, use **Scan** on a site card (or **Scan all pages**) to run a homepage on-page check (title, meta description, H1, canonical, robots, Open Graph, structured data, HTTPS). Results are stored per site and are independent of the Google/Bing toggle.
 
 ## PageSpeed Insights (Performance page)
 

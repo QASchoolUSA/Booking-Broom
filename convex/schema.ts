@@ -32,6 +32,8 @@ export default defineSchema({
     emailConfigured: v.optional(v.boolean()),
     /** Override GSC property URL when auto-match by domain fails. */
     gscPropertyUrl: v.optional(v.string()),
+    /** Override Bing Webmaster site URL when auto-match by domain fails. */
+    bingPropertyUrl: v.optional(v.string()),
     /** Full URL override for PageSpeed Insights when https://{domain} is wrong. */
     performanceUrl: v.optional(v.string()),
     apiKeyHash: v.optional(v.string()),
@@ -120,6 +122,104 @@ export default defineSchema({
   })
     .index("by_site_period_date", ["siteId", "periodDays", "snapshotDate"])
     .index("by_synced_at", ["syncedAt"]),
+
+  /**
+   * Whether each app site matched a GSC or Bing Webmaster property on last sync.
+   * Missing row ⇒ sync has not run yet (unconfigured).
+   */
+  siteSearchPropertyStatus: defineTable({
+    siteId: v.id("sites"),
+    source: v.union(v.literal("google"), v.literal("bing")),
+    status: v.union(v.literal("matched"), v.literal("not_in_console")),
+    propertyUrl: v.optional(v.string()),
+    syncedAt: v.number(),
+  }).index("by_site_source", ["siteId", "source"]),
+
+  /** Singleton row tracking the last Bing Webmaster sync. */
+  bingSyncState: defineTable({
+    lastSyncAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+  }),
+
+  /**
+   * Latest Bing Webmaster traffic snapshot per site and period.
+   * position is unused (always 0); CTR is derived from clicks/impressions.
+   */
+  siteBingSearchMetrics: defineTable({
+    siteId: v.id("sites"),
+    periodDays: v.union(
+      v.literal(1),
+      v.literal(2),
+      v.literal(7),
+      v.literal(28),
+      v.literal(90)
+    ),
+    bingPropertyUrl: v.string(),
+    clicks: v.number(),
+    impressions: v.number(),
+    ctr: v.number(),
+    position: v.number(),
+    startDate: v.string(),
+    endDate: v.string(),
+    syncedAt: v.number(),
+  }).index("by_site_period", ["siteId", "periodDays"]),
+
+  /** Daily Bing snapshots retained for ~7 days for delta comparisons. */
+  siteBingSearchMetricsHistory: defineTable({
+    siteId: v.id("sites"),
+    periodDays: v.union(
+      v.literal(1),
+      v.literal(2),
+      v.literal(7),
+      v.literal(28),
+      v.literal(90)
+    ),
+    snapshotDate: v.string(),
+    bingPropertyUrl: v.string(),
+    clicks: v.number(),
+    impressions: v.number(),
+    ctr: v.number(),
+    position: v.number(),
+    startDate: v.string(),
+    endDate: v.string(),
+    syncedAt: v.number(),
+  })
+    .index("by_site_period_date", ["siteId", "periodDays", "snapshotDate"])
+    .index("by_synced_at", ["syncedAt"]),
+
+  /** Latest Bing crawl issues snapshot per site. */
+  siteBingCrawlIssues: defineTable({
+    siteId: v.id("sites"),
+    issueCount: v.number(),
+    issues: v.array(
+      v.object({
+        url: v.string(),
+        httpCode: v.number(),
+        issues: v.number(),
+        inLinks: v.number(),
+      })
+    ),
+    syncedAt: v.number(),
+  }).index("by_site", ["siteId"]),
+
+  /** Latest homepage on-page SEO scan per site. */
+  sitePageScans: defineTable({
+    siteId: v.id("sites"),
+    scannedUrl: v.string(),
+    score: v.number(),
+    passed: v.number(),
+    total: v.number(),
+    checks: v.array(
+      v.object({
+        id: v.string(),
+        label: v.string(),
+        pass: v.boolean(),
+        detail: v.optional(v.string()),
+      })
+    ),
+    error: v.optional(v.string()),
+    scannedAt: v.number(),
+  }).index("by_site", ["siteId"]),
 
   /** Singleton row tracking the last PageSpeed Insights sync. */
   pagespeedSyncState: defineTable({

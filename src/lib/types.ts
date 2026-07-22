@@ -109,6 +109,19 @@ export interface GscConnection {
   last_sync_error: string | null;
 }
 
+export interface BingSyncState {
+  id: string;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+}
+
+export type SeoSource = "google" | "bing";
+
+export type SeoPropertyStatus =
+  | "matched"
+  | "not_in_console"
+  | "unconfigured";
+
 export interface SiteSearchMetrics {
   id: string;
   site_id: string;
@@ -131,6 +144,34 @@ export interface SeoMetricDelta {
   compared_to: string;
 }
 
+export interface SeoPageScanCheck {
+  id: string;
+  label: string;
+  pass: boolean;
+  detail?: string;
+}
+
+export interface SeoPageScan {
+  scanned_url: string;
+  score: number;
+  passed: number;
+  total: number;
+  checks: SeoPageScanCheck[];
+  error: string | null;
+  scanned_at: string;
+}
+
+export interface SeoCrawlIssues {
+  issue_count: number;
+  issues: {
+    url: string;
+    httpCode: number;
+    issues: number;
+    inLinks: number;
+  }[];
+  synced_at: string;
+}
+
 export interface SiteSeoRow {
   site: {
     id: string;
@@ -139,9 +180,14 @@ export interface SiteSeoRow {
     domain: string;
     accent_color: string;
     gsc_property_url: string | null;
+    bing_property_url?: string | null;
   };
+  property_status: SeoPropertyStatus;
+  property_url: string | null;
   metrics: SiteSearchMetrics | null;
   delta: SeoMetricDelta | null;
+  crawl_issues: SeoCrawlIssues | null;
+  page_scan: SeoPageScan | null;
 }
 
 export interface Booking {

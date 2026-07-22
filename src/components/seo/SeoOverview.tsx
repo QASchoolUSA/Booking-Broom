@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 interface SeoOverviewProps {
   rows: SiteSeoRow[];
+  source?: "google" | "bing";
   className?: string;
 }
 
@@ -30,7 +31,8 @@ function formatPosition(pos: number): string {
   return pos.toFixed(1);
 }
 
-export function SeoOverview({ rows, className }: SeoOverviewProps) {
+export function SeoOverview({ rows, source = "google", className }: SeoOverviewProps) {
+  const showPosition = source === "google";
   const withMetrics = rows.filter((r) => r.metrics);
   const totalClicks = withMetrics.reduce((s, r) => s + (r.metrics?.clicks ?? 0), 0);
   const totalImpressions = withMetrics.reduce(
@@ -128,23 +130,33 @@ export function SeoOverview({ rows, className }: SeoOverviewProps) {
       deltaValue: ctrDelta ?? 0,
       direction: "higher-better",
     },
-    {
-      label: "Avg position",
-      value: withMetrics.length ? formatPosition(avgPosition) : "—",
-      icon: Ranking,
-      accent:
-        "text-violet-700 bg-violet-100 dark:text-violet-300 dark:bg-violet-950",
-      deltaText:
-        positionDelta !== null
-          ? formatSignedNumber(positionDelta, 1)
-          : null,
-      deltaValue: positionDelta ?? 0,
-      direction: "lower-better",
-    },
+    ...(showPosition
+      ? [
+          {
+            label: "Avg position",
+            value: withMetrics.length ? formatPosition(avgPosition) : "—",
+            icon: Ranking,
+            accent:
+              "text-violet-700 bg-violet-100 dark:text-violet-300 dark:bg-violet-950",
+            deltaText:
+              positionDelta !== null
+                ? formatSignedNumber(positionDelta, 1)
+                : null,
+            deltaValue: positionDelta ?? 0,
+            direction: "lower-better" as MetricDirection,
+          },
+        ]
+      : []),
   ];
 
   return (
-    <div className={cn("grid grid-cols-2 gap-3 lg:grid-cols-4", className)}>
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-3",
+        showPosition ? "lg:grid-cols-4" : "lg:grid-cols-3",
+        className
+      )}
+    >
       {stats.map(({ label, value, icon: Icon, accent, deltaText, deltaValue, direction }) => (
         <div
           key={label}

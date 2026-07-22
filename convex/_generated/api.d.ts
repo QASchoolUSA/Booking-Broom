@@ -9,6 +9,8 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as bing from "../bing.js";
+import type * as bingActions from "../bingActions.js";
 import type * as bookings from "../bookings.js";
 import type * as crons from "../crons.js";
 import type * as gsc from "../gsc.js";
@@ -21,6 +23,8 @@ import type * as lib_voipms from "../lib/voipms.js";
 import type * as pagespeed from "../pagespeed.js";
 import type * as pagespeedActions from "../pagespeedActions.js";
 import type * as seed from "../seed.js";
+import type * as seoScan from "../seoScan.js";
+import type * as seoScanActions from "../seoScanActions.js";
 import type * as siteHealth from "../siteHealth.js";
 import type * as siteHealthActions from "../siteHealthActions.js";
 import type * as sites from "../sites.js";
@@ -36,6 +40,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  bing: typeof bing;
+  bingActions: typeof bingActions;
   bookings: typeof bookings;
   crons: typeof crons;
   gsc: typeof gsc;
@@ -48,6 +54,8 @@ declare const fullApi: ApiFromModules<{
   pagespeed: typeof pagespeed;
   pagespeedActions: typeof pagespeedActions;
   seed: typeof seed;
+  seoScan: typeof seoScan;
+  seoScanActions: typeof seoScanActions;
   siteHealth: typeof siteHealth;
   siteHealthActions: typeof siteHealthActions;
   sites: typeof sites;

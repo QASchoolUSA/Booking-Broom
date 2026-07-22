@@ -28,6 +28,7 @@ Gotcha: any `convex run` / `convex env` / `convex deploy` command also needs `CO
 - All routes except `/login` and `/api/bookings` require auth; unauthenticated requests 307-redirect to `/login`. Create a manager account at `/login` via "First time? Create manager account".
 - Simulate an inbound booking without the UI: `POST http://localhost:3000/api/bookings` with a seeded site (e.g. `{"site_slug":"sanford","api_key":"bb_sanford_dev_key","customer_name":"Jane Doe","service_type":"Deep Clean"}`). Bookings appear on the dashboard in real time.
 - PageSpeed Insights lives at `/performance` (nav label **Speed**). Set `PAGESPEED_API_KEY` in Convex env, then use **Sync now** to audit each site.
+- SEO lives at `/seo` with a Google / Bing toggle. Google uses OAuth (`GOOGLE_CLIENT_*`); Bing uses `BING_WEBMASTER_API_KEY`. Page scans run from the SEO site cards.
 
 ### Lint
 `pnpm lint` runs but currently reports pre-existing errors (mostly `react-hooks` purity/set-state rules); these are not caused by environment setup.

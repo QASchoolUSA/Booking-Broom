@@ -322,7 +322,23 @@ export const syncAllInternal = internalAction({
           properties,
           site.gscPropertyUrl
         );
-        if (!property) continue;
+
+        if (!property) {
+          await ctx.runMutation(internal.gsc.upsertPropertyStatus, {
+            siteId: site._id as Id<"sites">,
+            status: "not_in_console",
+          });
+          await ctx.runMutation(internal.gsc.clearSiteMetrics, {
+            siteId: site._id as Id<"sites">,
+          });
+          continue;
+        }
+
+        await ctx.runMutation(internal.gsc.upsertPropertyStatus, {
+          siteId: site._id as Id<"sites">,
+          status: "matched",
+          propertyUrl: property,
+        });
 
         for (const periodDays of PERIODS) {
           const { startDate, endDate } = dateRangeForPeriod(periodDays);
