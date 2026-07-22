@@ -102,10 +102,14 @@ node scripts/setup-convex-auth.mjs https://your-app.vercel.app
 | `celebration` | Celebration Cleaning | `bb_celebration_dev_key` |
 | `winter-haven` | Cleaning Winter Haven | `bb_winter-haven_dev_key` |
 | `cleaning-weekly` | Cleaning Weekly | `bb_cleaning-weekly_dev_key` |
+| `davenport` | Cleaning Davenport | `bb_davenport_dev_key` |
+| `apopka` | Apopka Cleaning | `bb_apopka_dev_key` |
+| `kissimmee` | Cleaning Kissimmee | `bb_kissimmee_dev_key` |
+| `windermere` | Windermere Cleaning | `bb_windermere_dev_key` |
 
 Use the **Test booking** button in development to simulate incoming bookings.
 
-Site-specific production keys and env setup: see `docs/winter-haven-site.md`, `docs/cleaning-weekly-site.md`, `docs/celebration-site.md`, and `docs/sanford-site.md`.
+Site-specific production keys and env setup: see `docs/*-site.md` (including `docs/apopka-site.md`, `docs/kissimmee-site.md`, `docs/windermere-site.md`).
 
 ## Public Booking API
 
@@ -196,6 +200,9 @@ When a booking is submitted via the public API, Booking Broom can send:
 | Cleaning Winter Haven | `info@cleaningwinterhaven.com` |
 | Cleaning Weekly | `info@cleaningweekly.com` |
 | Cleaning Davenport | `info@cleaningdavenport.com` |
+| Apopka Cleaning | `hello@apopkacleaning.com` |
+| Cleaning Kissimmee | `hello@cleaningkissimmee.com` |
+| Windermere Cleaning | `hello@windermerecleaning.com` |
 
 Configure SpaceMail SMTP in Vercel (or `.env.local` for local dev):
 

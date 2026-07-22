@@ -66,4 +66,31 @@ export const SEED_SITES = [
     apiKeyHash:
       "293de0ab407d09360e8acdb5a6390dee8a7f2bcb06b10446e8667fdf0798f20f",
   },
+  {
+    slug: "apopka",
+    name: "Apopka Cleaning",
+    domain: "apopkacleaning.com",
+    accentColor: "#0a3d45",
+    contactEmail: "hello@apopkacleaning.com",
+    apiKeyHash:
+      "33397a9979a1b4145c6cc34e16e816643f804be386f92e128241c387fe22271e",
+  },
+  {
+    slug: "kissimmee",
+    name: "Cleaning Kissimmee",
+    domain: "cleaningkissimmee.com",
+    accentColor: "#0f8a7d",
+    contactEmail: "hello@cleaningkissimmee.com",
+    apiKeyHash:
+      "2e48804d991b9f6dbc64e8433053285ac89357cb418b14b351f91b90e13098ef",
+  },
+  {
+    slug: "windermere",
+    name: "Windermere Cleaning",
+    domain: "windermerecleaning.com",
+    accentColor: "#0b1f2a",
+    contactEmail: "hello@windermerecleaning.com",
+    apiKeyHash:
+      "dcf4fdf3f91594880e14d460d0ab9029c7ccb90132dba61686efb62b27cd92de",
+  },
 ] as const;

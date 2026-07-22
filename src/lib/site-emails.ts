@@ -34,6 +34,18 @@ const SITE_EMAILS: Record<
     name: "Cleaning Davenport",
     email: "info@cleaningdavenport.com",
   },
+  apopka: {
+    name: "Apopka Cleaning",
+    email: "hello@apopkacleaning.com",
+  },
+  kissimmee: {
+    name: "Cleaning Kissimmee",
+    email: "hello@cleaningkissimmee.com",
+  },
+  windermere: {
+    name: "Windermere Cleaning",
+    email: "hello@windermerecleaning.com",
+  },
 };
 
 export function getAdminEmail(siteSlug: string): string | undefined {
