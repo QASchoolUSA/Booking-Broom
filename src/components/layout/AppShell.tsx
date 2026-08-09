@@ -8,6 +8,7 @@ import {
   CalendarBlank,
   ChartLine,
   ChatCircle,
+  CurrencyDollar,
   Gauge,
   GearSix,
   Globe,
@@ -72,6 +73,7 @@ export function AppShell({
     { href: "/websites", label: "Sites", icon: Globe, match: (p: string) => p === "/websites" || p.startsWith("/websites/") },
     { href: "/seo", label: "SEO", icon: ChartLine, match: (p: string) => p === "/seo" || p.startsWith("/seo/") },
     { href: "/performance", label: "Speed", icon: Gauge, match: (p: string) => p === "/performance" || p.startsWith("/performance/") },
+    { href: "/pricing", label: "Pricing", icon: CurrencyDollar, match: (p: string) => p === "/pricing" || p.startsWith("/pricing/") },
     { href: "/settings", label: "Settings", icon: GearSix, match: (p: string) => p === "/settings" },
   ];
 
@@ -254,7 +256,7 @@ export function AppShell({
         className="chrome-surface fixed inset-x-0 bottom-0 z-30 border-t border-border md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="mx-auto flex max-w-lg items-stretch px-2 pt-1.5">
+        <div className="mx-auto flex max-w-lg items-stretch overflow-x-auto px-2 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {navItems.map(({ href, label, icon: Icon, match }) => {
             const isActive = match(pathname);
             return (
@@ -262,7 +264,7 @@ export function AppShell({
                 key={href}
                 href={href}
                 className={cn(
-                  "relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1.5 text-[11px] font-semibold leading-tight tracking-tight transition-colors",
+                  "relative flex min-h-[52px] min-w-[56px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1.5 text-[11px] font-semibold leading-tight tracking-tight transition-colors",
                   isActive ? "text-primary" : "text-muted-foreground"
                 )}
               >
@@ -277,7 +279,7 @@ export function AppShell({
           <button
             type="button"
             onClick={handleSignOut}
-            className="flex min-h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1.5 text-[11px] font-semibold leading-tight tracking-tight text-muted-foreground transition-colors active:text-foreground"
+            className="flex min-h-[52px] min-w-[56px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1.5 text-[11px] font-semibold leading-tight tracking-tight text-muted-foreground transition-colors active:text-foreground"
           >
             <SignOut size={22} />
             Sign out

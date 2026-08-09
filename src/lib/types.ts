@@ -1,3 +1,9 @@
+import type {
+  PricingConfig,
+  PricingEngine,
+} from "convex/lib/pricingConfigs";
+import type { SiteBasket } from "convex/lib/pricingEngines";
+
 export type BookingStatus =
   | "new"
   | "confirmed"
@@ -99,6 +105,35 @@ export interface SitePerformanceRow {
     performance_url: string | null;
   };
   metrics: SitePerformanceMetrics | null;
+}
+
+export interface SitePricing {
+  id: string;
+  site_id: string;
+  engine: PricingEngine;
+  currency: string;
+  config: PricingConfig;
+  version: number;
+  updated_at: string;
+}
+
+export interface SitePricingRow {
+  site: {
+    id: string;
+    slug: string;
+    name: string;
+    domain: string;
+    accent_color: string;
+  };
+  pricing: SitePricing | null;
+  basket: SiteBasket | null;
+}
+
+export interface SitePricingHistoryEntry {
+  id: string;
+  version: number;
+  summary: string;
+  changed_at: string;
 }
 
 export interface GscConnection {

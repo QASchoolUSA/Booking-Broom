@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
+import { pricingConfig, pricingEngine } from "./lib/pricingConfigs";
 
 export const bookingStatus = v.union(
   v.literal("new"),
@@ -90,6 +91,33 @@ export default defineSchema({
   })
     .index("by_site", ["siteId"])
     .index("by_created", ["createdAt"]),
+
+  /**
+   * Live pricing numbers for each cleaning site. The site owns the algorithm;
+   * this row owns the values it plugs in. `engine` mirrors `config.kind` so the
+   * engine can be read without narrowing the union.
+   */
+  sitePricing: defineTable({
+    siteId: v.id("sites"),
+    engine: pricingEngine,
+    currency: v.string(),
+    config: pricingConfig,
+    /** Bumped on every save; sites use it as an ETag. */
+    version: v.number(),
+    updatedAt: v.number(),
+  }).index("by_site", ["siteId"]),
+
+  /** Previous pricing configs, newest version last, for review and rollback. */
+  sitePricingHistory: defineTable({
+    siteId: v.id("sites"),
+    version: v.number(),
+    engine: pricingEngine,
+    currency: v.string(),
+    config: pricingConfig,
+    /** Human summary of what changed, e.g. "3 fields changed". */
+    summary: v.string(),
+    changedAt: v.number(),
+  }).index("by_site_version", ["siteId", "version"]),
 
   /** Single Google Search Console OAuth connection for the manager account. */
   gscConnections: defineTable({

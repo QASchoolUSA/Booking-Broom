@@ -1,5 +1,6 @@
 import { internalMutation, mutation } from "./_generated/server";
 import { SEED_SITES } from "./lib/apiKeys";
+import { SEED_PRICING } from "./lib/pricingSeed";
 
 function siteFields(site: (typeof SEED_SITES)[number], now: number) {
   return {
@@ -89,6 +90,10 @@ export const syncSeedSites = internalMutation({
       if (existing.contactEmail !== site.contactEmail) {
         patch.contactEmail = site.contactEmail;
       }
+      // Lets a key rotation take effect by editing SEED_SITES and re-running.
+      if (existing.apiKeyHash !== site.apiKeyHash) {
+        patch.apiKeyHash = site.apiKeyHash;
+      }
 
       if (Object.keys(patch).length > 0) {
         await ctx.db.patch(existing._id, patch);
@@ -97,5 +102,54 @@ export const syncSeedSites = internalMutation({
     }
 
     return { added, updated, total: SEED_SITES.length };
+  },
+});
+
+/**
+ * Give any site without a pricing row the values it currently hardcodes.
+ * Existing rows are left alone — once a price has been edited in the dashboard,
+ * the database wins.
+ */
+export const syncSeedPricing = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    let added = 0;
+    let skipped = 0;
+    const missingSites: string[] = [];
+
+    for (const seed of SEED_PRICING) {
+      const site = await ctx.db
+        .query("sites")
+        .withIndex("by_slug", (q) => q.eq("slug", seed.slug))
+        .unique();
+
+      if (!site) {
+        missingSites.push(seed.slug);
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("sitePricing")
+        .withIndex("by_site", (q) => q.eq("siteId", site._id))
+        .unique();
+
+      if (existing) {
+        skipped += 1;
+        continue;
+      }
+
+      await ctx.db.insert("sitePricing", {
+        siteId: site._id,
+        engine: seed.engine,
+        currency: seed.currency,
+        config: seed.config,
+        version: 1,
+        updatedAt: now,
+      });
+      added += 1;
+    }
+
+    return { added, skipped, missingSites, total: SEED_PRICING.length };
   },
 });

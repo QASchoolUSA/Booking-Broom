@@ -8,6 +8,7 @@ import type { NextRequest } from "next/server";
 const isPublicPage = createRouteMatcher(["/login"]);
 const isPublicApi = createRouteMatcher([
   "/api/bookings",
+  "/api/pricing",
   "/gsc/oauth/callback",
 ]);
 

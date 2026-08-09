@@ -2,32 +2,10 @@ import { NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "convex/_generated/api";
 import { hashApiKey } from "@/lib/api-keys";
+import { corsHeaders } from "@/lib/cors";
 import { sendBookingEmails } from "@/lib/email";
 import { normalizeProperty, normalizeQuote } from "@/lib/booking-payload";
 import type { CreateBookingPayload } from "@/lib/types";
-
-const ALLOWED_ORIGINS = (
-  process.env.ALLOWED_ORIGINS ??
-    "http://localhost:3000,https://sanfordcleaning.com,https://deltonacleaning.com,https://hainescitycleaning.com,https://celebrationcleaning.com,https://cleaningwinterhaven.com,https://cleaningweekly.com,https://www.cleaningweekly.com,https://www.celebrationcleaning.com,https://www.sanfordcleaning.com,https://cleaningdavenport.com,https://www.cleaningdavenport.com,https://apopkacleaning.com,https://www.apopkacleaning.com,https://cleaningkissimmee.com,https://www.cleaningkissimmee.com,https://windermerecleaning.com,https://www.windermerecleaning.com"
-)
-  .split(",")
-  .map((o) => o.trim());
-
-function corsHeaders(origin: string | null) {
-  const allowed =
-    origin &&
-    ALLOWED_ORIGINS.some(
-      (o) => origin === o || origin.endsWith(o.replace("https://", "."))
-    )
-      ? origin
-      : ALLOWED_ORIGINS[0];
-
-  return {
-    "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  };
-}
 
 export async function OPTIONS(request: Request) {
   return new NextResponse(null, {

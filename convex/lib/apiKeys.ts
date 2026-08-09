@@ -54,8 +54,9 @@ export const SEED_SITES = [
     domain: "cleaningweekly.com",
     accentColor: "#0D9488",
     contactEmail: "info@cleaningweekly.com",
+    // Rotated after the previous key was found committed in wrangler.jsonc.
     apiKeyHash:
-      "556a60b2e73ab2f14408eca3cb5e7717260bab1f8385e89234c372b6a4aca335",
+      "486f2e0c73e2f0d53aa173700dbb97aacaa1bfc0af624e13bf26b85e7abf83c3",
   },
   {
     slug: "davenport",
