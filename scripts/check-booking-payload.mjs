@@ -24,6 +24,12 @@ function argValue(flag) {
   return index === -1 ? undefined : process.argv[index + 1];
 }
 
+/**
+ * Tags this run's rows so a check can never pass against a row left behind by
+ * an earlier run, which would hide a POST that just started failing.
+ */
+const run = new Date().toISOString().slice(11, 19);
+
 let failures = 0;
 
 function check(label, condition, detail) {
@@ -36,17 +42,23 @@ function check(label, condition, detail) {
 }
 
 async function post(payload) {
-  const response = await fetch(`${BASE}/api/bookings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ site_slug: site, api_key: apiKey, ...payload }),
-  });
+  let response;
+  try {
+    response = await fetch(`${BASE}/api/bookings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ site_slug: site, api_key: apiKey, ...payload }),
+    });
+  } catch {
+    console.error(`Cannot reach ${BASE}. Start the dashboard with \`pnpm dev\` first.`);
+    process.exit(1);
+  }
   const body = await response.json().catch(() => ({}));
   return { status: response.status, body };
 }
 
 const FULL = {
-  customer_name: "Payload Smoke Full",
+  customer_name: `Payload Smoke Full ${run}`,
   email: "full@example.com",
   phone: "(407) 555-0100",
   address: "123 Structured Way, Deltona, FL",
@@ -91,7 +103,7 @@ const FULL = {
 };
 
 const LEGACY = {
-  customer_name: "Payload Smoke Legacy",
+  customer_name: `Payload Smoke Legacy ${run}`,
   email: "legacy@example.com",
   service_type: "Standard Clean",
   notes: [
@@ -104,7 +116,7 @@ const LEGACY = {
   ].join("\n"),
 };
 
-const MINIMAL = { customer_name: "Payload Smoke Minimal" };
+const MINIMAL = { customer_name: `Payload Smoke Minimal ${run}` };
 
 console.log(`Booking API at ${BASE} (site ${site})\n`);
 
