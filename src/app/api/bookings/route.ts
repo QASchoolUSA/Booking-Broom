@@ -4,7 +4,12 @@ import { api } from "convex/_generated/api";
 import { hashApiKey } from "@/lib/api-keys";
 import { corsHeaders } from "@/lib/cors";
 import { sendBookingEmails } from "@/lib/email";
-import { normalizeProperty, normalizeQuote } from "@/lib/booking-payload";
+import {
+  normalizeAttribution,
+  normalizeIntent,
+  normalizeProperty,
+  normalizeQuote,
+} from "@/lib/booking-payload";
 import type { CreateBookingPayload } from "@/lib/types";
 
 export async function OPTIONS(request: Request) {
@@ -49,6 +54,8 @@ export async function POST(request: Request) {
       notes: body.notes,
       property: normalizeProperty(body.property),
       quote: normalizeQuote(body.quote),
+      attribution: normalizeAttribution(body.attribution),
+      intent: normalizeIntent(body.intent),
     });
 
     try {

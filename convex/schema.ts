@@ -19,6 +19,14 @@ export const bookingProperty = v.object({
   /** Human label when only a band is known, e.g. "1,000-1,500 sq ft". */
   sizeLabel: v.optional(v.string()),
   homeType: v.optional(v.string()),
+  /** How dirty the home is, e.g. "Very dirty" — drives crew time. */
+  condition: v.optional(v.string()),
+  /** People living in the home. */
+  occupants: v.optional(v.number()),
+  /** When the home was last cleaned, as the site phrased it. */
+  lastCleaned: v.optional(v.string()),
+  /** Rooms or areas the customer asked the crew to skip. */
+  excludedAreas: v.optional(v.array(v.string())),
 });
 
 /** Structured estimate captured by the site booking wizards. */
@@ -26,6 +34,11 @@ export const bookingQuote = v.object({
   estimate: v.optional(v.number()),
   estimateLow: v.optional(v.number()),
   estimateHigh: v.optional(v.number()),
+  /**
+   * Price of each ongoing visit when the estimate covers a one-off first clean,
+   * e.g. Sanford quotes an initial deep clean plus a lower recurring rate.
+   */
+  recurringEstimate: v.optional(v.number()),
   currency: v.optional(v.string()),
   serviceLevel: v.optional(v.string()),
   frequency: v.optional(v.string()),
@@ -34,11 +47,30 @@ export const bookingQuote = v.object({
       v.object({
         label: v.string(),
         price: v.optional(v.number()),
+        quantity: v.optional(v.number()),
       })
     )
   ),
   paymentTerms: v.optional(v.string()),
+  /**
+   * Set when the site computed the estimate without ever showing it to the
+   * customer, so it stays internal and is kept out of confirmation emails.
+   */
+  internal: v.optional(v.boolean()),
 });
+
+/** Where the lead came from, so marketing spend can be attributed. */
+export const bookingAttribution = v.object({
+  utmSource: v.optional(v.string()),
+  utmMedium: v.optional(v.string()),
+  utmCampaign: v.optional(v.string()),
+  utmTerm: v.optional(v.string()),
+  utmContent: v.optional(v.string()),
+  gclid: v.optional(v.string()),
+});
+
+/** Whether the customer asked to book or was only price shopping. */
+export const bookingIntent = v.union(v.literal("quote"), v.literal("book"));
 
 export default defineSchema({
   ...authTables,
@@ -86,6 +118,10 @@ export default defineSchema({
     property: v.optional(bookingProperty),
     /** Structured estimate; absent on bookings sent before this existed. */
     quote: v.optional(bookingQuote),
+    /** Lead source; absent when the site does not track campaigns. */
+    attribution: v.optional(bookingAttribution),
+    /** Quote request vs booking request; absent when the site has one flow. */
+    intent: v.optional(bookingIntent),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

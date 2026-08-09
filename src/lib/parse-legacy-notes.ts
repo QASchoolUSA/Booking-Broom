@@ -1,4 +1,10 @@
-import type { BookingProperty, BookingQuote, BookingQuoteAddOn } from "@/lib/types";
+import type {
+  BookingAttribution,
+  BookingIntent,
+  BookingProperty,
+  BookingQuote,
+  BookingQuoteAddOn,
+} from "@/lib/types";
 
 /**
  * Bookings created before the sites sent structured `property` / `quote` objects
@@ -8,11 +14,19 @@ import type { BookingProperty, BookingQuote, BookingQuoteAddOn } from "@/lib/typ
 export interface ParsedLegacyNotes {
   property: BookingProperty | null;
   quote: BookingQuote | null;
+  attribution: BookingAttribution | null;
+  intent: BookingIntent | null;
   /** Whatever did not look like a known key, i.e. the customer's own message. */
   remainder: string | null;
 }
 
-const EMPTY: ParsedLegacyNotes = { property: null, quote: null, remainder: null };
+const EMPTY: ParsedLegacyNotes = {
+  property: null,
+  quote: null,
+  attribution: null,
+  intent: null,
+  remainder: null,
+};
 
 function toNumber(value: string): number | undefined {
   const match = value.replace(/,/g, "").match(/-?\d+(\.\d+)?/);
@@ -51,9 +65,13 @@ function parseAddOns(value: string): BookingQuoteAddOn[] | undefined {
       // Weekly formats line items as "Inside fridge ($25)".
       const withPrice = part.match(/^(.*?)\s*\(\$?(\d+(?:\.\d+)?)\)$/);
       if (withPrice) {
-        return { label: withPrice[1].trim(), price: Number(withPrice[2]) };
+        return {
+          label: withPrice[1].trim(),
+          price: Number(withPrice[2]),
+          quantity: null,
+        };
       }
-      return { label: part, price: null };
+      return { label: part, price: null, quantity: null };
     });
 
   return addOns.length ? addOns : undefined;
@@ -89,20 +107,28 @@ export function parseLegacyNotes(notes: string | null | undefined): ParsedLegacy
     square_feet: null,
     size_label: null,
     home_type: null,
+    condition: null,
+    occupants: null,
+    last_cleaned: null,
+    excluded_areas: null,
   };
   const quote: BookingQuote = {
     estimate: null,
     estimate_low: null,
     estimate_high: null,
+    recurring_estimate: null,
     currency: "USD",
     service_level: null,
     frequency: null,
     add_ons: null,
     payment_terms: null,
+    internal: false,
   };
 
   let sawProperty = false;
   let sawQuote = false;
+  let intent: BookingIntent | null = null;
+  let leadSource: string | null = null;
   const remainder: string[] = [];
 
   for (const segment of segments) {
@@ -144,23 +170,42 @@ export function parseLegacyNotes(notes: string | null | undefined): ParsedLegacy
         break;
       }
       case "bedrooms":
-      case "bedroom":
-        property.bedrooms = toNumber(value) ?? property.bedrooms;
+      case "bedroom": {
+        // A value like "not sure" is the customer talking, so keep it as a note.
+        const bedrooms = toNumber(value);
+        if (bedrooms === undefined) {
+          remainder.push(segment);
+          break;
+        }
+        property.bedrooms = bedrooms;
         sawProperty = true;
         break;
+      }
       case "bathrooms":
       case "bathroom":
-      case "restrooms":
-        property.bathrooms = toNumber(value) ?? property.bathrooms;
+      case "restrooms": {
+        const bathrooms = toNumber(value);
+        if (bathrooms === undefined) {
+          remainder.push(segment);
+          break;
+        }
+        property.bathrooms = bathrooms;
         sawProperty = true;
         break;
+      }
       case "sq ft":
       case "sqft":
       case "square footage":
-      case "square feet":
-        property.square_feet = toNumber(value) ?? property.square_feet;
+      case "square feet": {
+        const squareFeet = toNumber(value);
+        if (squareFeet === undefined) {
+          remainder.push(segment);
+          break;
+        }
+        property.square_feet = squareFeet;
         sawProperty = true;
         break;
+      }
       case "level":
       case "service level":
         quote.service_level = value;
@@ -182,17 +227,41 @@ export function parseLegacyNotes(notes: string | null | undefined): ParsedLegacy
       case "estimate total":
       case "price": {
         const price = parsePrice(value);
-        if (price) {
-          quote.estimate = price.estimate ?? quote.estimate;
-          quote.estimate_low = price.low ?? quote.estimate_low;
-          quote.estimate_high = price.high ?? quote.estimate_high;
-          sawQuote = true;
+        if (!price) {
+          remainder.push(segment);
+          break;
         }
+        quote.estimate = price.estimate ?? quote.estimate;
+        quote.estimate_low = price.low ?? quote.estimate_low;
+        quote.estimate_high = price.high ?? quote.estimate_high;
+        sawQuote = true;
+        break;
+      }
+      // Sanford quotes an initial clean plus a lower ongoing rate.
+      case "maintenance price":
+      case "recurring price":
+      case "ongoing price": {
+        const recurring = toNumber(value);
+        if (recurring === undefined) {
+          remainder.push(segment);
+          break;
+        }
+        quote.recurring_estimate = recurring;
+        sawQuote = true;
         break;
       }
       case "payment":
         quote.payment_terms = value;
         sawQuote = true;
+        break;
+      // Davenport wrote these as prose before they had structured fields.
+      case "intent":
+        if (/^book/i.test(value)) intent = "book";
+        else if (/^quote/i.test(value)) intent = "quote";
+        else remainder.push(segment);
+        break;
+      case "source":
+        leadSource = value;
         break;
       default:
         remainder.push(segment);
@@ -202,6 +271,17 @@ export function parseLegacyNotes(notes: string | null | undefined): ParsedLegacy
   return {
     property: sawProperty ? property : null,
     quote: sawQuote ? quote : null,
+    attribution: leadSource
+      ? {
+          utm_source: leadSource,
+          utm_medium: null,
+          utm_campaign: null,
+          utm_term: null,
+          utm_content: null,
+          gclid: null,
+        }
+      : null,
+    intent,
     remainder: remainder.length ? remainder.join("\n") : null,
   };
 }

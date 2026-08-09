@@ -1,6 +1,12 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { bookingStatus, bookingProperty, bookingQuote } from "./schema";
+import {
+  bookingStatus,
+  bookingProperty,
+  bookingQuote,
+  bookingAttribution,
+  bookingIntent,
+} from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
 
 function mapSite(doc: Doc<"sites">) {
@@ -42,6 +48,10 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
           square_feet: doc.property.squareFeet ?? null,
           size_label: doc.property.sizeLabel ?? null,
           home_type: doc.property.homeType ?? null,
+          condition: doc.property.condition ?? null,
+          occupants: doc.property.occupants ?? null,
+          last_cleaned: doc.property.lastCleaned ?? null,
+          excluded_areas: doc.property.excludedAreas ?? null,
         }
       : null,
     quote: doc.quote
@@ -49,16 +59,30 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
           estimate: doc.quote.estimate ?? null,
           estimate_low: doc.quote.estimateLow ?? null,
           estimate_high: doc.quote.estimateHigh ?? null,
+          recurring_estimate: doc.quote.recurringEstimate ?? null,
           currency: doc.quote.currency ?? "USD",
           service_level: doc.quote.serviceLevel ?? null,
           frequency: doc.quote.frequency ?? null,
           add_ons: doc.quote.addOns?.map((addOn) => ({
             label: addOn.label,
             price: addOn.price ?? null,
+            quantity: addOn.quantity ?? null,
           })) ?? null,
           payment_terms: doc.quote.paymentTerms ?? null,
+          internal: doc.quote.internal ?? false,
         }
       : null,
+    attribution: doc.attribution
+      ? {
+          utm_source: doc.attribution.utmSource ?? null,
+          utm_medium: doc.attribution.utmMedium ?? null,
+          utm_campaign: doc.attribution.utmCampaign ?? null,
+          utm_term: doc.attribution.utmTerm ?? null,
+          utm_content: doc.attribution.utmContent ?? null,
+          gclid: doc.attribution.gclid ?? null,
+        }
+      : null,
+    intent: doc.intent ?? null,
     created_at: new Date(doc.createdAt).toISOString(),
     updated_at: new Date(doc.updatedAt).toISOString(),
     site: site ? mapSite(site) : undefined,
@@ -85,6 +109,33 @@ export const list = query({
     return bookings.map((booking) =>
       mapBooking(booking, siteMap.get(booking.siteId))
     );
+  },
+});
+
+/**
+ * Read-back for `scripts/check-booking-payload.mjs`, which has no dashboard
+ * session. Internal, so only the Convex CLI and other server functions can
+ * call it.
+ */
+export const latestForSite = internalQuery({
+  args: { slug: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const site = await ctx.db
+      .query("sites")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .unique();
+
+    if (!site) return [];
+
+    const bookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_site", (q) => q.eq("siteId", site._id))
+      .collect();
+
+    return bookings
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, args.limit ?? 20)
+      .map((booking) => mapBooking(booking, site));
   },
 });
 
@@ -149,6 +200,8 @@ export const createPublic = mutation({
     notes: v.optional(v.string()),
     property: v.optional(bookingProperty),
     quote: v.optional(bookingQuote),
+    attribution: v.optional(bookingAttribution),
+    intent: v.optional(bookingIntent),
   },
   handler: async (ctx, args) => {
     const site = await ctx.db
@@ -178,6 +231,8 @@ export const createPublic = mutation({
       notes: args.notes,
       property: args.property,
       quote: args.quote,
+      attribution: args.attribution,
+      intent: args.intent,
       createdAt: now,
       updatedAt: now,
     });

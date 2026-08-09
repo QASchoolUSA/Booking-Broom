@@ -2,7 +2,7 @@
 
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { CalendarBlank, House, MapPin, Phone, User } from "@phosphor-icons/react";
-import type { BookingWithSite } from "@/lib/types";
+import type { BookingQuote, BookingWithSite } from "@/lib/types";
 import { SiteBadge } from "@/components/bookings/SiteBadge";
 import { StatusBadge } from "@/components/bookings/StatusBadge";
 import { formatMoney, resolveBookingDetails } from "@/lib/booking-details";
@@ -14,10 +14,26 @@ interface BookingCardProps {
   className?: string;
 }
 
+/** Sites quote inconsistently, so show whichever figure they did send. */
+function formatEstimate(quote: BookingQuote | null): string | null {
+  if (!quote) return null;
+
+  const { currency } = quote;
+  if (quote.estimate !== null) return formatMoney(quote.estimate, currency);
+  if (quote.estimate_low !== null && quote.estimate_high !== null) {
+    return `${formatMoney(quote.estimate_low, currency)}–${formatMoney(quote.estimate_high, currency)}`;
+  }
+  if (quote.estimate_low !== null) return formatMoney(quote.estimate_low, currency);
+  if (quote.recurring_estimate !== null) {
+    return formatMoney(quote.recurring_estimate, currency);
+  }
+  return null;
+}
+
 export function BookingCard({ booking, onSelect, className }: BookingCardProps) {
   const isNew = booking.status === "new";
-  const { quote, property } = resolveBookingDetails(booking);
-  const estimate = quote?.estimate ?? null;
+  const { quote, property, intent } = resolveBookingDetails(booking);
+  const estimate = formatEstimate(quote);
   const propertySummary = [
     property?.bedrooms !== null && property?.bedrooms !== undefined
       ? `${property.bedrooms === 0 ? "Studio" : `${property.bedrooms} bd`}`
@@ -25,9 +41,10 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
     property?.bathrooms !== null && property?.bathrooms !== undefined
       ? `${property.bathrooms} ba`
       : null,
+    // Most sites only know a band, so fall back to its label.
     property?.square_feet
       ? `${property.square_feet.toLocaleString("en-US")} sq ft`
-      : null,
+      : (property?.size_label ?? null),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -59,6 +76,11 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
           <div className="flex flex-wrap items-center gap-1.5">
             {booking.site && <SiteBadge site={booking.site} />}
             <StatusBadge status={booking.status} />
+            {intent === "quote" && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                Quote only
+              </span>
+            )}
           </div>
 
           <div>
@@ -77,9 +99,9 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
           >
             {formatDistanceToNow(parseISO(booking.created_at), { addSuffix: true })}
           </time>
-          {estimate !== null && (
-            <span className="text-sm font-semibold tabular-nums">
-              {formatMoney(estimate, quote?.currency)}
+          {estimate && (
+            <span className="whitespace-nowrap text-sm font-semibold tabular-nums">
+              {estimate}
             </span>
           )}
         </div>

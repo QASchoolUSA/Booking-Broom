@@ -231,22 +231,42 @@ export interface BookingProperty {
   square_feet: number | null;
   size_label: string | null;
   home_type: string | null;
+  condition: string | null;
+  occupants: number | null;
+  last_cleaned: string | null;
+  excluded_areas: string[] | null;
 }
 
 export interface BookingQuoteAddOn {
   label: string;
   price: number | null;
+  quantity: number | null;
 }
+
+export interface BookingAttribution {
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_term: string | null;
+  utm_content: string | null;
+  gclid: string | null;
+}
+
+export type BookingIntent = "quote" | "book";
 
 export interface BookingQuote {
   estimate: number | null;
   estimate_low: number | null;
   estimate_high: number | null;
+  /** Per-visit price when `estimate` covers a one-off first clean. */
+  recurring_estimate: number | null;
   currency: string;
   service_level: string | null;
   frequency: string | null;
   add_ons: BookingQuoteAddOn[] | null;
   payment_terms: string | null;
+  /** True when the customer never saw this estimate, so it is ours alone. */
+  internal: boolean;
 }
 
 export interface Booking {
@@ -264,6 +284,8 @@ export interface Booking {
   internal_notes: string | null;
   property: BookingProperty | null;
   quote: BookingQuote | null;
+  attribution: BookingAttribution | null;
+  intent: BookingIntent | null;
   created_at: string;
   updated_at: string;
   site?: Site;
@@ -280,17 +302,32 @@ export interface CreateBookingPropertyPayload {
   square_feet?: number;
   size_label?: string;
   home_type?: string;
+  condition?: string;
+  occupants?: number;
+  last_cleaned?: string;
+  excluded_areas?: string[];
 }
 
 export interface CreateBookingQuotePayload {
   estimate?: number;
   estimate_low?: number;
   estimate_high?: number;
+  recurring_estimate?: number;
   currency?: string;
   service_level?: string;
   frequency?: string;
-  add_ons?: Array<{ label: string; price?: number }>;
+  add_ons?: Array<{ label: string; price?: number; quantity?: number }>;
   payment_terms?: string;
+  internal?: boolean;
+}
+
+export interface CreateBookingAttributionPayload {
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_term?: string;
+  utm_content?: string;
+  gclid?: string;
 }
 
 export interface CreateBookingPayload {
@@ -306,6 +343,8 @@ export interface CreateBookingPayload {
   notes?: string;
   property?: CreateBookingPropertyPayload;
   quote?: CreateBookingQuotePayload;
+  attribution?: CreateBookingAttributionPayload;
+  intent?: string;
 }
 
 export interface SmsDid {

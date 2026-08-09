@@ -69,9 +69,17 @@ function formatPropertyBlock(payload: CreateBookingPayload): string | null {
   return parts.length ? `Property: ${parts.join(" · ")}` : null;
 }
 
-function formatQuoteBlock(payload: CreateBookingPayload): string[] {
+type Audience = "customer" | "admin";
+
+function formatQuoteBlock(
+  payload: CreateBookingPayload,
+  audience: Audience
+): string[] {
   const quote = payload.quote;
   if (!quote) return [];
+  // An internal estimate was never shown on the site, so quoting it back to the
+  // customer would commit us to a price they never agreed to.
+  if (quote.internal && audience === "customer") return [];
 
   const currency = quote.currency ?? "USD";
   const hasRange = quote.estimate_low !== undefined && quote.estimate_high !== undefined;
@@ -98,12 +106,20 @@ function formatQuoteBlock(payload: CreateBookingPayload): string[] {
           )
           .join(", ")}`
       : null,
-    estimate ? `Estimated total: ${estimate}` : null,
+    estimate
+      ? `${quote.recurring_estimate !== undefined ? "Initial clean" : "Estimated total"}: ${estimate}`
+      : null,
+    quote.recurring_estimate !== undefined
+      ? `Recurring price: ${formatMoney(quote.recurring_estimate, currency)}`
+      : null,
     quote.payment_terms ? `Payment: ${quote.payment_terms}` : null,
   ].filter((line): line is string => Boolean(line));
 }
 
-function formatBookingDetails(payload: CreateBookingPayload): string {
+function formatBookingDetails(
+  payload: CreateBookingPayload,
+  audience: Audience
+): string {
   const lines = [
     `Name: ${payload.customer_name}`,
     payload.email ? `Email: ${payload.email}` : null,
@@ -113,7 +129,7 @@ function formatBookingDetails(payload: CreateBookingPayload): string {
     formatPropertyBlock(payload),
     payload.preferred_date ? `Preferred date: ${payload.preferred_date}` : null,
     payload.preferred_time ? `Preferred time: ${payload.preferred_time}` : null,
-    ...formatQuoteBlock(payload),
+    ...formatQuoteBlock(payload, audience),
     payload.notes ? `\nNotes:\n${payload.notes}` : null,
   ].filter(Boolean);
 
@@ -130,7 +146,7 @@ function buildCustomerEmail(siteName: string, payload: CreateBookingPayload): { 
       "",
       "Your booking details:",
       "",
-      formatBookingDetails(payload),
+      formatBookingDetails(payload, "customer"),
       "",
       "Payment is due after your cleaning is complete — no upfront payment required.",
       "",
@@ -147,7 +163,7 @@ function buildAdminEmail(siteName: string, payload: CreateBookingPayload): { sub
     text: [
       `New booking received via ${siteName} (${payload.site_slug})`,
       "",
-      formatBookingDetails(payload),
+      formatBookingDetails(payload, "admin"),
     ].join("\n"),
   };
 }

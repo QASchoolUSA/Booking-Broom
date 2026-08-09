@@ -12,6 +12,7 @@ import {
 import type { BookingWithSite, BookingStatus } from "@/lib/types";
 import { resolveBookingDetails } from "@/lib/booking-details";
 import {
+  BookingAttributionSection,
   BookingPropertySection,
   BookingQuoteSection,
 } from "@/components/bookings/BookingQuotePanel";
@@ -159,6 +160,11 @@ export function BookingDetailSheet({
           <div className="flex flex-wrap items-center gap-2">
             {booking.site && <SiteBadge site={booking.site} />}
             <StatusBadge status={booking.status} />
+            {details.intent === "quote" && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                Quote only
+              </span>
+            )}
           </div>
           <SheetTitle className="min-w-0 truncate text-left text-lg font-semibold">
             {booking.customer_name}
@@ -215,6 +221,8 @@ export function BookingDetailSheet({
           <BookingQuoteSection quote={details.quote} />
 
           <BookingPropertySection property={details.property} />
+
+          <BookingAttributionSection attribution={details.attribution} />
 
           {details.notes && (
             <section>
