@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { useBookings } from "@/lib/hooks/useBookings";
 import { AppShell } from "@/components/layout/AppShell";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { PricingCompareGrid } from "@/components/pricing/PricingCompareGrid";
-import { SitePricingCard } from "@/components/pricing/SitePricingCard";
+import { PricingEditWorkspace } from "@/components/pricing/PricingEditWorkspace";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SitePricingRow } from "@/lib/types";
@@ -18,6 +18,7 @@ export default function PricingPage() {
   const { sites, allBookings, connectionState } = useBookings();
   const { isAuthenticated } = useConvexAuth();
   const [tab, setTab] = useState<PricingTab>("compare");
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
 
   const rowsRaw = useQuery(api.pricing.list, isAuthenticated ? {} : "skip");
   const rows = (rowsRaw ?? []) as SitePricingRow[];
@@ -30,6 +31,15 @@ export default function PricingPage() {
   });
 
   const unconfigured = rows.filter((row) => row.pricing === null).length;
+
+  const handleSelectSite = useCallback((siteId: string) => {
+    setSelectedSiteId(siteId);
+  }, []);
+
+  const handleEditSite = useCallback((siteId: string) => {
+    setSelectedSiteId(siteId);
+    setTab("edit");
+  }, []);
 
   return (
     <AppShell
@@ -48,7 +58,7 @@ export default function PricingPage() {
           <div className="hidden md:block">
             <h2 className="text-2xl font-bold tracking-tight">Pricing</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              What every site charges, and the one place to change it
+              Compare what every site charges, then edit one site at a time
             </p>
           </div>
           <Tabs
@@ -66,36 +76,30 @@ export default function PricingPage() {
 
         {unconfigured > 0 && (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
-            {unconfigured} site{unconfigured === 1 ? "" : "s"} have no pricing
-            configured yet. Run{" "}
-            <code className="rounded bg-amber-500/20 px-1 py-0.5 text-xs">
-              convex run internal.seed.syncSeedPricing
-            </code>{" "}
-            to import the numbers they currently ship with.
+            <p>
+              {unconfigured} site{unconfigured === 1 ? "" : "s"} still need
+              pricing imported before you can edit or compare them.
+            </p>
+            <p className="mt-1 text-xs opacity-90">
+              Ask a developer to sync shipped prices, then refresh. Developer
+              command:{" "}
+              <code className="rounded bg-amber-500/20 px-1 py-0.5">
+                convex run internal.seed.syncSeedPricing
+              </code>
+            </p>
           </div>
         )}
 
         {loading ? (
           <Skeleton className="h-96 rounded-xl" />
         ) : tab === "compare" ? (
-          <PricingCompareGrid rows={rows} />
+          <PricingCompareGrid rows={rows} onEditSite={handleEditSite} />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {rows.map((row) => (
-              // Keyed on the saved version so a save (or another manager's edit)
-              // remounts the card onto the new numbers instead of leaving a
-              // stale draft behind.
-              <SitePricingCard
-                key={`${row.site.id}:${row.pricing?.version ?? "none"}`}
-                row={row}
-              />
-            ))}
-            {rows.length === 0 && (
-              <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
-                No sites configured yet.
-              </p>
-            )}
-          </div>
+          <PricingEditWorkspace
+            rows={rows}
+            selectedSiteId={selectedSiteId}
+            onSelectSite={handleSelectSite}
+          />
         )}
       </div>
     </AppShell>

@@ -155,6 +155,8 @@ export function describePricingConfig(
         },
         {
           title: "Size band multipliers",
+          description:
+            "Scales Standard and related quotes up or down by home size.",
           fields: config.sqftBands.map((band, i) => ({
             path: ["sqftBands", i, "multiplier"],
             label: band.label,
@@ -163,6 +165,8 @@ export function describePricingConfig(
         },
         {
           title: "Service level multipliers",
+          description:
+            "Deep and other levels are priced as a multiple of the standard clean.",
           fields: config.levelMultipliers.map((level, i) => ({
             path: ["levelMultipliers", i, "multiplier"],
             label: level.label,
@@ -171,6 +175,7 @@ export function describePricingConfig(
         },
         {
           title: "Commercial by size band",
+          description: "Flat commercial quotes by the same size bands.",
           fields: config.commercialByBand.map((row, i) => ({
             path: ["commercialByBand", i, "value"],
             label: bandLabel(row.key),
