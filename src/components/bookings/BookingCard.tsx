@@ -1,10 +1,11 @@
 "use client";
 
 import { format, formatDistanceToNow, parseISO } from "date-fns";
-import { CalendarBlank, MapPin, Phone, User } from "@phosphor-icons/react";
+import { CalendarBlank, House, MapPin, Phone, User } from "@phosphor-icons/react";
 import type { BookingWithSite } from "@/lib/types";
 import { SiteBadge } from "@/components/bookings/SiteBadge";
 import { StatusBadge } from "@/components/bookings/StatusBadge";
+import { formatMoney, resolveBookingDetails } from "@/lib/booking-details";
 import { cn } from "@/lib/utils";
 
 interface BookingCardProps {
@@ -15,6 +16,21 @@ interface BookingCardProps {
 
 export function BookingCard({ booking, onSelect, className }: BookingCardProps) {
   const isNew = booking.status === "new";
+  const { quote, property } = resolveBookingDetails(booking);
+  const estimate = quote?.estimate ?? null;
+  const propertySummary = [
+    property?.bedrooms !== null && property?.bedrooms !== undefined
+      ? `${property.bedrooms === 0 ? "Studio" : `${property.bedrooms} bd`}`
+      : null,
+    property?.bathrooms !== null && property?.bathrooms !== undefined
+      ? `${property.bathrooms} ba`
+      : null,
+    property?.square_feet
+      ? `${property.square_feet.toLocaleString("en-US")} sq ft`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <article
@@ -54,12 +70,19 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
           </div>
         </div>
 
-        <time
-          className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground"
-          dateTime={booking.created_at}
-        >
-          {formatDistanceToNow(parseISO(booking.created_at), { addSuffix: true })}
-        </time>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <time
+            className="text-[11px] font-medium tabular-nums text-muted-foreground"
+            dateTime={booking.created_at}
+          >
+            {formatDistanceToNow(parseISO(booking.created_at), { addSuffix: true })}
+          </time>
+          {estimate !== null && (
+            <span className="text-sm font-semibold tabular-nums">
+              {formatMoney(estimate, quote?.currency)}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-3 space-y-1.5 border-t border-border/60 pt-3 text-[13px] text-muted-foreground">
@@ -82,6 +105,12 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
           <p className="flex items-center gap-2 truncate">
             <Phone size={15} className="shrink-0 opacity-70" />
             {booking.phone}
+          </p>
+        )}
+        {propertySummary && (
+          <p className="flex items-center gap-2 truncate">
+            <House size={15} className="shrink-0 opacity-70" />
+            {propertySummary}
           </p>
         )}
       </div>

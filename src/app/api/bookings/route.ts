@@ -3,6 +3,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "convex/_generated/api";
 import { hashApiKey } from "@/lib/api-keys";
 import { sendBookingEmails } from "@/lib/email";
+import { normalizeProperty, normalizeQuote } from "@/lib/booking-payload";
 import type { CreateBookingPayload } from "@/lib/types";
 
 const ALLOWED_ORIGINS = (
@@ -68,6 +69,8 @@ export async function POST(request: Request) {
       preferredDate: body.preferred_date,
       preferredTime: body.preferred_time,
       notes: body.notes,
+      property: normalizeProperty(body.property),
+      quote: normalizeQuote(body.quote),
     });
 
     try {

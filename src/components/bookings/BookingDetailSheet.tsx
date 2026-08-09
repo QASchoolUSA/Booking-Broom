@@ -10,6 +10,11 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import type { BookingWithSite, BookingStatus } from "@/lib/types";
+import { resolveBookingDetails } from "@/lib/booking-details";
+import {
+  BookingPropertySection,
+  BookingQuoteSection,
+} from "@/components/bookings/BookingQuotePanel";
 import { SiteBadge } from "@/components/bookings/SiteBadge";
 import { StatusBadge } from "@/components/bookings/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -136,6 +141,8 @@ export function BookingDetailSheet({
     }
   };
 
+  const details = resolveBookingDetails(booking);
+
   const hasContact =
     Boolean(booking.email) ||
     Boolean(booking.phone) ||
@@ -205,11 +212,15 @@ export function BookingDetailSheet({
             </section>
           )}
 
-          {booking.notes && (
+          <BookingQuoteSection quote={details.quote} />
+
+          <BookingPropertySection property={details.property} />
+
+          {details.notes && (
             <section>
               <h4 className={sectionHeading}>Customer notes</h4>
-              <p className="rounded-xl border bg-muted/30 px-4 py-3 text-sm leading-relaxed text-foreground">
-                {booking.notes}
+              <p className="whitespace-pre-line rounded-xl border bg-muted/30 px-4 py-3 text-sm leading-relaxed text-foreground">
+                {details.notes}
               </p>
             </section>
           )}

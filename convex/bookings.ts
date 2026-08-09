@@ -1,6 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { bookingStatus } from "./schema";
+import { bookingStatus, bookingProperty, bookingQuote } from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
 
 function mapSite(doc: Doc<"sites">) {
@@ -35,6 +35,30 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
     preferred_time: doc.preferredTime ?? null,
     notes: doc.notes ?? null,
     internal_notes: doc.internalNotes ?? null,
+    property: doc.property
+      ? {
+          bedrooms: doc.property.bedrooms ?? null,
+          bathrooms: doc.property.bathrooms ?? null,
+          square_feet: doc.property.squareFeet ?? null,
+          size_label: doc.property.sizeLabel ?? null,
+          home_type: doc.property.homeType ?? null,
+        }
+      : null,
+    quote: doc.quote
+      ? {
+          estimate: doc.quote.estimate ?? null,
+          estimate_low: doc.quote.estimateLow ?? null,
+          estimate_high: doc.quote.estimateHigh ?? null,
+          currency: doc.quote.currency ?? "USD",
+          service_level: doc.quote.serviceLevel ?? null,
+          frequency: doc.quote.frequency ?? null,
+          add_ons: doc.quote.addOns?.map((addOn) => ({
+            label: addOn.label,
+            price: addOn.price ?? null,
+          })) ?? null,
+          payment_terms: doc.quote.paymentTerms ?? null,
+        }
+      : null,
     created_at: new Date(doc.createdAt).toISOString(),
     updated_at: new Date(doc.updatedAt).toISOString(),
     site: site ? mapSite(site) : undefined,
@@ -123,6 +147,8 @@ export const createPublic = mutation({
     preferredDate: v.optional(v.string()),
     preferredTime: v.optional(v.string()),
     notes: v.optional(v.string()),
+    property: v.optional(bookingProperty),
+    quote: v.optional(bookingQuote),
   },
   handler: async (ctx, args) => {
     const site = await ctx.db
@@ -150,6 +176,8 @@ export const createPublic = mutation({
       preferredDate: args.preferredDate,
       preferredTime: args.preferredTime,
       notes: args.notes,
+      property: args.property,
+      quote: args.quote,
       createdAt: now,
       updatedAt: now,
     });

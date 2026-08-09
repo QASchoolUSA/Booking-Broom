@@ -190,6 +190,30 @@ export interface SiteSeoRow {
   page_scan: SeoPageScan | null;
 }
 
+export interface BookingProperty {
+  bedrooms: number | null;
+  bathrooms: number | null;
+  square_feet: number | null;
+  size_label: string | null;
+  home_type: string | null;
+}
+
+export interface BookingQuoteAddOn {
+  label: string;
+  price: number | null;
+}
+
+export interface BookingQuote {
+  estimate: number | null;
+  estimate_low: number | null;
+  estimate_high: number | null;
+  currency: string;
+  service_level: string | null;
+  frequency: string | null;
+  add_ons: BookingQuoteAddOn[] | null;
+  payment_terms: string | null;
+}
+
 export interface Booking {
   id: string;
   site_id: string;
@@ -203,6 +227,8 @@ export interface Booking {
   preferred_time: string | null;
   notes: string | null;
   internal_notes: string | null;
+  property: BookingProperty | null;
+  quote: BookingQuote | null;
   created_at: string;
   updated_at: string;
   site?: Site;
@@ -210,6 +236,26 @@ export interface Booking {
 
 export interface BookingWithSite extends Booking {
   site: Site;
+}
+
+/** Inbound wire format from the cleaning sites; every field is untrusted. */
+export interface CreateBookingPropertyPayload {
+  bedrooms?: number;
+  bathrooms?: number;
+  square_feet?: number;
+  size_label?: string;
+  home_type?: string;
+}
+
+export interface CreateBookingQuotePayload {
+  estimate?: number;
+  estimate_low?: number;
+  estimate_high?: number;
+  currency?: string;
+  service_level?: string;
+  frequency?: string;
+  add_ons?: Array<{ label: string; price?: number }>;
+  payment_terms?: string;
 }
 
 export interface CreateBookingPayload {
@@ -223,6 +269,8 @@ export interface CreateBookingPayload {
   preferred_date?: string;
   preferred_time?: string;
   notes?: string;
+  property?: CreateBookingPropertyPayload;
+  quote?: CreateBookingQuotePayload;
 }
 
 export interface SmsDid {

@@ -39,6 +39,70 @@ function getFromAddress(siteSlug: string, siteName: string): string {
   );
 }
 
+function formatMoney(amount: number, currency = "USD"): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency || "USD",
+    maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+  }).format(amount);
+}
+
+function formatPropertyBlock(payload: CreateBookingPayload): string | null {
+  const property = payload.property;
+  if (!property) return null;
+
+  const parts = [
+    property.bedrooms !== undefined
+      ? property.bedrooms === 0
+        ? "Studio"
+        : `${property.bedrooms} bedroom${property.bedrooms === 1 ? "" : "s"}`
+      : null,
+    property.bathrooms !== undefined
+      ? `${property.bathrooms} bathroom${property.bathrooms === 1 ? "" : "s"}`
+      : null,
+    property.square_feet !== undefined
+      ? `${property.square_feet.toLocaleString("en-US")} sq ft`
+      : property.size_label ?? null,
+    property.home_type ?? null,
+  ].filter(Boolean);
+
+  return parts.length ? `Property: ${parts.join(" · ")}` : null;
+}
+
+function formatQuoteBlock(payload: CreateBookingPayload): string[] {
+  const quote = payload.quote;
+  if (!quote) return [];
+
+  const currency = quote.currency ?? "USD";
+  const hasRange = quote.estimate_low !== undefined && quote.estimate_high !== undefined;
+  const estimate =
+    quote.estimate !== undefined
+      ? `${formatMoney(quote.estimate, currency)}${
+          hasRange
+            ? ` (range ${formatMoney(quote.estimate_low!, currency)}–${formatMoney(quote.estimate_high!, currency)})`
+            : ""
+        }`
+      : hasRange
+        ? `${formatMoney(quote.estimate_low!, currency)}–${formatMoney(quote.estimate_high!, currency)}`
+        : null;
+
+  return [
+    quote.service_level ? `Service level: ${quote.service_level}` : null,
+    quote.frequency ? `Frequency: ${quote.frequency}` : null,
+    quote.add_ons?.length
+      ? `Add-ons: ${quote.add_ons
+          .map((addOn) =>
+            addOn.price !== undefined
+              ? `${addOn.label} (+${formatMoney(addOn.price, currency)})`
+              : addOn.label
+          )
+          .join(", ")}`
+      : null,
+    estimate ? `Estimated total: ${estimate}` : null,
+    quote.payment_terms ? `Payment: ${quote.payment_terms}` : null,
+  ].filter((line): line is string => Boolean(line));
+}
+
 function formatBookingDetails(payload: CreateBookingPayload): string {
   const lines = [
     `Name: ${payload.customer_name}`,
@@ -46,8 +110,10 @@ function formatBookingDetails(payload: CreateBookingPayload): string {
     payload.phone ? `Phone: ${payload.phone}` : null,
     payload.address ? `Address: ${payload.address}` : null,
     payload.service_type ? `Service: ${payload.service_type}` : null,
+    formatPropertyBlock(payload),
     payload.preferred_date ? `Preferred date: ${payload.preferred_date}` : null,
     payload.preferred_time ? `Preferred time: ${payload.preferred_time}` : null,
+    ...formatQuoteBlock(payload),
     payload.notes ? `\nNotes:\n${payload.notes}` : null,
   ].filter(Boolean);
 

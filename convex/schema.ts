@@ -10,6 +10,35 @@ export const bookingStatus = v.union(
   v.literal("cancelled")
 );
 
+/** Structured property details captured by the site booking wizards. */
+export const bookingProperty = v.object({
+  bedrooms: v.optional(v.number()),
+  bathrooms: v.optional(v.number()),
+  squareFeet: v.optional(v.number()),
+  /** Human label when only a band is known, e.g. "1,000-1,500 sq ft". */
+  sizeLabel: v.optional(v.string()),
+  homeType: v.optional(v.string()),
+});
+
+/** Structured estimate captured by the site booking wizards. */
+export const bookingQuote = v.object({
+  estimate: v.optional(v.number()),
+  estimateLow: v.optional(v.number()),
+  estimateHigh: v.optional(v.number()),
+  currency: v.optional(v.string()),
+  serviceLevel: v.optional(v.string()),
+  frequency: v.optional(v.string()),
+  addOns: v.optional(
+    v.array(
+      v.object({
+        label: v.string(),
+        price: v.optional(v.number()),
+      })
+    )
+  ),
+  paymentTerms: v.optional(v.string()),
+});
+
 export default defineSchema({
   ...authTables,
 
@@ -52,6 +81,10 @@ export default defineSchema({
     preferredTime: v.optional(v.string()),
     notes: v.optional(v.string()),
     internalNotes: v.optional(v.string()),
+    /** Structured property details; absent on bookings sent before this existed. */
+    property: v.optional(bookingProperty),
+    /** Structured estimate; absent on bookings sent before this existed. */
+    quote: v.optional(bookingQuote),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

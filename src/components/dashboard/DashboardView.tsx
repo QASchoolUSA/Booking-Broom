@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { MagnifyingGlass, ArrowsClockwise } from "@phosphor-icons/react";
 import { useBookings } from "@/lib/hooks/useBookings";
 import type { BookingStatus, BookingWithSite } from "@/lib/types";
+import { resolveBookingDetails } from "@/lib/booking-details";
 import { AppShell } from "@/components/layout/AppShell";
 import { SiteFilter } from "@/components/layout/SiteFilter";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
@@ -64,14 +65,18 @@ export function DashboardView({
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      result = result.filter(
-        (b) =>
+      result = result.filter((b) => {
+        const { quote } = resolveBookingDetails(b);
+        return (
           b.customer_name.toLowerCase().includes(q) ||
           b.phone?.toLowerCase().includes(q) ||
           b.email?.toLowerCase().includes(q) ||
           b.service_type.toLowerCase().includes(q) ||
-          b.address?.toLowerCase().includes(q)
-      );
+          b.address?.toLowerCase().includes(q) ||
+          quote?.estimate?.toString().includes(q) ||
+          quote?.service_level?.toLowerCase().includes(q)
+        );
+      });
     }
 
     return result;
