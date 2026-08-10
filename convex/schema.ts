@@ -220,6 +220,28 @@ export default defineSchema({
     .index("by_site_period_date", ["siteId", "periodDays", "snapshotDate"])
     .index("by_synced_at", ["syncedAt"]),
 
+  /** Top search queries (keywords) from GSC for a site × period. */
+  siteSearchQueries: defineTable({
+    siteId: v.id("sites"),
+    periodDays: v.union(
+      v.literal(1),
+      v.literal(2),
+      v.literal(7),
+      v.literal(28),
+      v.literal(90)
+    ),
+    queries: v.array(
+      v.object({
+        query: v.string(),
+        clicks: v.number(),
+        impressions: v.number(),
+        ctr: v.number(),
+        position: v.number(),
+      })
+    ),
+    syncedAt: v.number(),
+  }).index("by_site_period", ["siteId", "periodDays"]),
+
   /**
    * Whether each app site matched a GSC or Bing Webmaster property on last sync.
    * Missing row ⇒ sync has not run yet (unconfigured).
@@ -283,6 +305,28 @@ export default defineSchema({
   })
     .index("by_site_period_date", ["siteId", "periodDays", "snapshotDate"])
     .index("by_synced_at", ["syncedAt"]),
+
+  /** Top search queries (keywords) from Bing Webmaster for a site × period. */
+  siteBingSearchQueries: defineTable({
+    siteId: v.id("sites"),
+    periodDays: v.union(
+      v.literal(1),
+      v.literal(2),
+      v.literal(7),
+      v.literal(28),
+      v.literal(90)
+    ),
+    queries: v.array(
+      v.object({
+        query: v.string(),
+        clicks: v.number(),
+        impressions: v.number(),
+        ctr: v.number(),
+        position: v.number(),
+      })
+    ),
+    syncedAt: v.number(),
+  }).index("by_site_period", ["siteId", "periodDays"]),
 
   /** Latest Bing crawl issues snapshot per site. */
   siteBingCrawlIssues: defineTable({

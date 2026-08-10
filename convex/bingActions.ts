@@ -22,6 +22,22 @@ function requireBingApiKey(): string {
 
 type DailyStat = { date: string; clicks: number; impressions: number };
 
+type QueryStatRow = {
+  date: string;
+  query: string;
+  clicks: number;
+  impressions: number;
+  position: number;
+};
+
+type TopQueryRow = {
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
 type CrawlIssueRow = {
   url: string;
   httpCode: number;
@@ -122,6 +138,87 @@ function aggregatePeriod(
   };
 }
 
+async function getQueryStats(
+  apiKey: string,
+  siteUrl: string
+): Promise<QueryStatRow[]> {
+  const data = await bingJson<{
+    d?: {
+      Query?: string;
+      Clicks?: number;
+      Impressions?: number;
+      Date?: string;
+      AvgClickPosition?: number;
+      AvgImpressionPosition?: number;
+    }[];
+  }>("GetQueryStats", apiKey, { siteUrl });
+
+  const rows = data.d ?? [];
+  const out: QueryStatRow[] = [];
+  for (const row of rows) {
+    if (!row.Date || !row.Query) continue;
+    const date = parseBingDate(row.Date);
+    if (!date) continue;
+    const position =
+      row.AvgClickPosition && row.AvgClickPosition > 0
+        ? row.AvgClickPosition
+        : (row.AvgImpressionPosition ?? 0);
+    out.push({
+      date,
+      query: row.Query,
+      clicks: row.Clicks ?? 0,
+      impressions: row.Impressions ?? 0,
+      position,
+    });
+  }
+  return out;
+}
+
+function topQueriesForPeriod(
+  rows: QueryStatRow[],
+  startDate: string,
+  endDate: string,
+  limit = 5
+): TopQueryRow[] {
+  const byQuery = new Map<
+    string,
+    { clicks: number; impressions: number; positionWeighted: number; weight: number }
+  >();
+
+  for (const row of rows) {
+    if (row.date < startDate || row.date > endDate) continue;
+    const existing = byQuery.get(row.query) ?? {
+      clicks: 0,
+      impressions: 0,
+      positionWeighted: 0,
+      weight: 0,
+    };
+    existing.clicks += row.clicks;
+    existing.impressions += row.impressions;
+    if (row.position > 0 && row.impressions > 0) {
+      existing.positionWeighted += row.position * row.impressions;
+      existing.weight += row.impressions;
+    }
+    byQuery.set(row.query, existing);
+  }
+
+  return Array.from(byQuery.entries())
+    .map(([query, stats]) => ({
+      query,
+      clicks: stats.clicks,
+      impressions: stats.impressions,
+      ctr: stats.impressions > 0 ? stats.clicks / stats.impressions : 0,
+      position: stats.weight > 0 ? stats.positionWeighted / stats.weight : 0,
+    }))
+    .sort(
+      (a, b) =>
+        b.clicks - a.clicks ||
+        b.impressions - a.impressions ||
+        a.query.localeCompare(b.query)
+    )
+    .slice(0, limit);
+}
+
 async function getCrawlIssues(
   apiKey: string,
   siteUrl: string
@@ -190,6 +287,7 @@ export const syncAllInternal = internalAction({
 
         try {
           const daily = await getRankAndTrafficStats(apiKey, property);
+          const queryStats = await getQueryStats(apiKey, property);
           for (const periodDays of PERIODS) {
             const { startDate, endDate } = dateRangeForBingPeriod(periodDays);
             const stats = aggregatePeriod(daily, startDate, endDate);
@@ -203,6 +301,17 @@ export const syncAllInternal = internalAction({
               position: 0,
               startDate,
               endDate,
+            });
+
+            const queries = topQueriesForPeriod(
+              queryStats,
+              startDate,
+              endDate
+            );
+            await ctx.runMutation(internal.bing.upsertQueries, {
+              siteId: site._id as Id<"sites">,
+              periodDays,
+              queries,
             });
           }
 

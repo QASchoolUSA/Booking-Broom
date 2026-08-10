@@ -20,6 +20,14 @@ const periodDays = v.union(
   v.literal(90)
 );
 
+const topQuery = v.object({
+  query: v.string(),
+  clicks: v.number(),
+  impressions: v.number(),
+  ctr: v.number(),
+  position: v.number(),
+});
+
 type PeriodDays = 1 | 2 | 7 | 28 | 90;
 
 const crawlIssue = v.object({
@@ -140,6 +148,13 @@ export const listMetrics = query({
         .withIndex("by_site", (q) => q.eq("siteId", site._id))
         .unique();
 
+      const queryDoc = await ctx.db
+        .query("siteBingSearchQueries")
+        .withIndex("by_site_period", (q) =>
+          q.eq("siteId", site._id).eq("periodDays", args.periodDays)
+        )
+        .unique();
+
       let delta: ReturnType<typeof computeDelta> | null = null;
 
       if (metric) {
@@ -189,6 +204,7 @@ export const listMetrics = query({
         property_url: propertyStatus?.propertyUrl ?? null,
         metrics: metric ? mapMetric(metric) : null,
         delta,
+        top_queries: queryDoc?.queries?.length ? queryDoc.queries : null,
         crawl_issues: crawl
           ? {
               issue_count: crawl.issueCount,
@@ -244,6 +260,9 @@ export const clearMetrics = mutation({
       .query("siteBingSearchMetricsHistory")
       .collect()) {
       await ctx.db.delete(h._id);
+    }
+    for (const q of await ctx.db.query("siteBingSearchQueries").collect()) {
+      await ctx.db.delete(q._id);
     }
     for (const c of await ctx.db.query("siteBingCrawlIssues").collect()) {
       await ctx.db.delete(c._id);
@@ -310,6 +329,12 @@ export const clearSiteMetrics = internalMutation({
       .withIndex("by_site_period_date", (q) => q.eq("siteId", args.siteId))
       .collect();
     for (const h of history) await ctx.db.delete(h._id);
+
+    const queries = await ctx.db
+      .query("siteBingSearchQueries")
+      .withIndex("by_site_period", (q) => q.eq("siteId", args.siteId))
+      .collect();
+    for (const q of queries) await ctx.db.delete(q._id);
 
     const crawl = await ctx.db
       .query("siteBingCrawlIssues")
@@ -389,6 +414,35 @@ export const upsertMetric = internalMutation({
       await ctx.db.patch(existingHistory._id, historyPayload);
     } else {
       await ctx.db.insert("siteBingSearchMetricsHistory", historyPayload);
+    }
+  },
+});
+
+export const upsertQueries = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+    periodDays,
+    queries: v.array(topQuery),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("siteBingSearchQueries")
+      .withIndex("by_site_period", (q) =>
+        q.eq("siteId", args.siteId).eq("periodDays", args.periodDays)
+      )
+      .unique();
+
+    const payload = {
+      siteId: args.siteId,
+      periodDays: args.periodDays,
+      queries: args.queries,
+      syncedAt: Date.now(),
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, payload);
+    } else {
+      await ctx.db.insert("siteBingSearchQueries", payload);
     }
   },
 });

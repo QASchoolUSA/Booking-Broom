@@ -294,6 +294,64 @@ async function querySearchAnalytics(
   };
 }
 
+type TopQueryRow = {
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+async function queryTopQueries(
+  accessToken: string,
+  siteUrl: string,
+  startDate: string,
+  endDate: string
+): Promise<TopQueryRow[]> {
+  const encoded = encodeURIComponent(siteUrl);
+  const res = await fetch(
+    `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        startDate,
+        endDate,
+        dimensions: ["query"],
+        rowLimit: 5,
+        dataState: "all",
+      }),
+    }
+  );
+  const data = (await res.json()) as {
+    rows?: {
+      keys?: string[];
+      clicks: number;
+      impressions: number;
+      ctr: number;
+      position: number;
+    }[];
+    error?: { message?: string };
+  };
+  if (!res.ok) {
+    throw new Error(
+      data.error?.message || `Search query analytics failed for ${siteUrl}`
+    );
+  }
+  return (data.rows ?? [])
+    .map((row) => ({
+      query: row.keys?.[0] ?? "",
+      clicks: row.clicks ?? 0,
+      impressions: row.impressions ?? 0,
+      ctr: row.ctr ?? 0,
+      position: row.position ?? 0,
+    }))
+    .filter((row) => row.query.length > 0);
+}
+
 export const syncAllInternal = internalAction({
   args: {},
   handler: async (ctx) => {
@@ -358,6 +416,18 @@ export const syncAllInternal = internalAction({
             position: stats.position,
             startDate,
             endDate,
+          });
+
+          const queries = await queryTopQueries(
+            accessToken,
+            property,
+            startDate,
+            endDate
+          );
+          await ctx.runMutation(internal.gsc.upsertQueries, {
+            siteId: site._id as Id<"sites">,
+            periodDays,
+            queries,
           });
         }
       }

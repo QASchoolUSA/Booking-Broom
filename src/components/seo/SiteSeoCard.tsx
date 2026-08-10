@@ -44,7 +44,7 @@ function formatPosition(pos: number): string {
 }
 
 export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
-  const { site, metrics, delta, property_status, crawl_issues, page_scan } =
+  const { site, metrics, delta, property_status, crawl_issues, page_scan, top_queries } =
     row;
   const updateGscProperty = useMutation(api.gsc.updateGscProperty);
   const updateBingProperty = useMutation(api.bing.updateBingProperty);
@@ -226,6 +226,40 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
             No {source === "bing" ? "Bing" : "Search Console"} data yet.
           </p>
           <p className="mt-1 text-xs">Sync to pull metrics for this site.</p>
+        </div>
+      )}
+
+      {!notInConsole && (
+        <div className="mt-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Top keywords
+          </p>
+          {top_queries && top_queries.length > 0 ? (
+            <ol className="mt-1.5 space-y-1">
+              {top_queries.map((q, i) => (
+                <li
+                  key={`${q.query}-${i}`}
+                  className="flex items-baseline justify-between gap-3 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    <span className="mr-2 tabular-nums text-muted-foreground">
+                      {i + 1}.
+                    </span>
+                    <span className="text-foreground">{q.query}</span>
+                  </span>
+                  <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                    {formatNumber(q.clicks)} clk
+                    <span className="mx-1 text-muted-foreground/50">·</span>
+                    {formatNumber(q.impressions)} imp
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              No keyword data yet — Sync now
+            </p>
+          )}
         </div>
       )}
 

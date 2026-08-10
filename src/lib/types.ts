@@ -171,6 +171,14 @@ export interface SiteSearchMetrics {
   synced_at: string;
 }
 
+export interface SeoTopQuery {
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
 export interface SeoMetricDelta {
   clicks: number;
   impressions: number;
@@ -221,6 +229,7 @@ export interface SiteSeoRow {
   property_url: string | null;
   metrics: SiteSearchMetrics | null;
   delta: SeoMetricDelta | null;
+  top_queries: SeoTopQuery[] | null;
   crawl_issues: SeoCrawlIssues | null;
   page_scan: SeoPageScan | null;
 }
