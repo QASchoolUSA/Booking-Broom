@@ -16,7 +16,6 @@ function mapSite(doc: Doc<"sites">) {
     hosting_account_email: doc.hostingAccountEmail ?? null,
     phone_number: doc.phoneNumber ?? null,
     email_configured: doc.emailConfigured ?? false,
-    gsc_property_url: doc.gscPropertyUrl ?? null,
     performance_url: doc.performanceUrl ?? null,
     created_at: new Date(doc.createdAt).toISOString(),
   };

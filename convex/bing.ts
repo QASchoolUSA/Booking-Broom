@@ -195,7 +195,6 @@ export const listMetrics = query({
           name: site.name,
           domain: site.domain,
           accent_color: site.accentColor,
-          gsc_property_url: site.gscPropertyUrl ?? null,
           bing_property_url: site.bingPropertyUrl ?? null,
         },
         property_status: propertyStatus

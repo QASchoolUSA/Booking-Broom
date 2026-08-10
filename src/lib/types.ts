@@ -26,7 +26,6 @@ export interface Site {
   hosting_account_email: string | null;
   phone_number: string | null;
   email_configured: boolean;
-  gsc_property_url: string | null;
   performance_url: string | null;
   created_at: string;
 }
@@ -222,7 +221,6 @@ export interface SiteSeoRow {
     name: string;
     domain: string;
     accent_color: string;
-    gsc_property_url: string | null;
     bing_property_url?: string | null;
   };
   property_status: SeoPropertyStatus;

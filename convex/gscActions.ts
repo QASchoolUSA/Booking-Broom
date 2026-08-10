@@ -372,14 +372,11 @@ export const syncAllInternal = internalAction({
       }
 
       const properties = await listGscSites(accessToken);
+      await ctx.runMutation(internal.gsc.stripGscPropertyOverrides, {});
       const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
 
       for (const site of sites) {
-        const property = matchGscProperty(
-          site.domain,
-          properties,
-          site.gscPropertyUrl
-        );
+        const property = matchGscProperty(site.domain, properties);
 
         if (!property) {
           await ctx.runMutation(internal.gsc.upsertPropertyStatus, {

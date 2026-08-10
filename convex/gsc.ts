@@ -187,7 +187,6 @@ export const listMetrics = query({
           name: site.name,
           domain: site.domain,
           accent_color: site.accentColor,
-          gsc_property_url: site.gscPropertyUrl ?? null,
           bing_property_url: site.bingPropertyUrl ?? null,
         },
         property_status: propertyStatus
@@ -213,23 +212,6 @@ export const listMetrics = query({
     }
 
     return results;
-  },
-});
-
-export const updateGscProperty = mutation({
-  args: {
-    siteId: v.id("sites"),
-    gscPropertyUrl: v.union(v.string(), v.null()),
-  },
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
-
-    const site = await ctx.db.get(args.siteId);
-    if (!site) throw new Error("Site not found");
-
-    const value = args.gscPropertyUrl?.trim() || undefined;
-    await ctx.db.patch(args.siteId, { gscPropertyUrl: value });
   },
 });
 
@@ -368,6 +350,25 @@ export const listSitesInternal = internalQuery({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query("sites").collect();
+  },
+});
+
+/** Remove legacy GSC property overrides from site docs (field removed from schema). */
+export const stripGscPropertyOverrides = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const sites = await ctx.db.query("sites").collect();
+    for (const site of sites) {
+      const legacy = site as typeof site & { gscPropertyUrl?: string };
+      if (legacy.gscPropertyUrl === undefined) continue;
+      const {
+        _id,
+        _creationTime,
+        gscPropertyUrl: _removed,
+        ...fields
+      } = legacy;
+      await ctx.db.replace(_id, fields);
+    }
   },
 });
 

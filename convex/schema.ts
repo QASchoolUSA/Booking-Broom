@@ -92,8 +92,6 @@ export default defineSchema({
     phoneNumber: v.optional(v.string()),
     /** Manual ops checklist: booking inbox / SMTP for this site is set up. */
     emailConfigured: v.optional(v.boolean()),
-    /** Override GSC property URL when auto-match by domain fails. */
-    gscPropertyUrl: v.optional(v.string()),
     /** Override Bing Webmaster site URL when auto-match by domain fails. */
     bingPropertyUrl: v.optional(v.string()),
     /** Full URL override for PageSpeed Insights when https://{domain} is wrong. */

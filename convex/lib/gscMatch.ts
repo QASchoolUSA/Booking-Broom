@@ -25,7 +25,8 @@ export const PERIOD_YESTERDAY = 2 as const;
 
 /**
  * Match an app site domain to a GSC or Bing Webmaster property URL.
- * Prefer an explicit override when it exists in the property list (or always if list empty).
+ * Prefer an explicit override when provided and it exists in the property list
+ * (or always if the list is empty). GSC matching is domain-only (no override).
  */
 export function matchGscProperty(
   domain: string,

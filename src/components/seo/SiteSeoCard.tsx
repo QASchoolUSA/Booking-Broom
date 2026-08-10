@@ -46,45 +46,28 @@ function formatPosition(pos: number): string {
 export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
   const { site, metrics, delta, property_status, crawl_issues, page_scan, top_queries } =
     row;
-  const updateGscProperty = useMutation(api.gsc.updateGscProperty);
   const updateBingProperty = useMutation(api.bing.updateBingProperty);
   const scanSite = useAction(api.seoScanActions.scanSite);
   const [editing, setEditing] = useState(false);
-  const [propertyUrl, setPropertyUrl] = useState(
-    source === "bing"
-      ? (site.bing_property_url ?? "")
-      : (site.gsc_property_url ?? "")
-  );
+  const [propertyUrl, setPropertyUrl] = useState(site.bing_property_url ?? "");
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [showCrawl, setShowCrawl] = useState(false);
   const [showScan, setShowScan] = useState(false);
 
   useEffect(() => {
-    setPropertyUrl(
-      source === "bing"
-        ? (site.bing_property_url ?? "")
-        : (site.gsc_property_url ?? "")
-    );
+    setPropertyUrl(site.bing_property_url ?? "");
     setEditing(false);
-  }, [source, site.gsc_property_url, site.bing_property_url]);
+  }, [source, site.bing_property_url]);
 
   const handleSaveProperty = async () => {
     setSaving(true);
     try {
-      if (source === "bing") {
-        await updateBingProperty({
-          siteId: site.id as Id<"sites">,
-          bingPropertyUrl: propertyUrl.trim() || null,
-        });
-        toast.success("Bing property saved — run Sync now to refresh");
-      } else {
-        await updateGscProperty({
-          siteId: site.id as Id<"sites">,
-          gscPropertyUrl: propertyUrl.trim() || null,
-        });
-        toast.success("GSC property saved — run Sync now to refresh");
-      }
+      await updateBingProperty({
+        siteId: site.id as Id<"sites">,
+        bingPropertyUrl: propertyUrl.trim() || null,
+      });
+      toast.success("Bing property saved — run Sync now to refresh");
       setEditing(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save");
@@ -151,13 +134,7 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
     source === "bing"
       ? "Not in Bing Webmaster"
       : "Not in Google Search Console";
-  const propertyLabel = source === "bing" ? "Bing site URL" : "GSC property URL";
-  const propertyPlaceholder =
-    source === "bing"
-      ? "https://www.example.com/"
-      : "sc-domain:example.com or https://www.example.com/";
-  const currentOverride =
-    source === "bing" ? site.bing_property_url : site.gsc_property_url;
+  const bingOverride = site.bing_property_url ?? null;
   const resolvedProperty =
     metrics?.gsc_property_url ?? row.property_url ?? null;
 
@@ -190,7 +167,11 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
 
       {notInConsole ? (
         <div className="mt-4 rounded-lg border border-dashed border-amber-300/60 bg-amber-50/50 px-3 py-4 text-center text-sm text-muted-foreground dark:border-amber-800 dark:bg-amber-950/30">
-          <p>Add this site in {source === "bing" ? "Bing Webmaster" : "Search Console"}, or set a property override below, then sync.</p>
+          <p>
+            {source === "bing"
+              ? "Add this site in Bing Webmaster, or set a property override below, then sync."
+              : "Add this site in Search Console (matching this domain), then sync."}
+          </p>
         </div>
       ) : metricCells ? (
         <div
@@ -379,48 +360,50 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
         )}
       </div>
 
-      <div className="mt-3 border-t pt-3">
-        {editing ? (
-          <div className="space-y-2">
-            <Label htmlFor={`prop-${source}-${site.slug}`} className="text-xs">
-              {propertyLabel}
-            </Label>
-            <Input
-              id={`prop-${source}-${site.slug}`}
-              value={propertyUrl}
-              onChange={(e) => setPropertyUrl(e.target.value)}
-              placeholder={propertyPlaceholder}
-              className="h-9 text-xs"
-            />
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleSaveProperty} disabled={saving}>
-                {saving ? "Saving…" : "Save"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setEditing(false);
-                  setPropertyUrl(currentOverride ?? "");
-                }}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
+      {source === "bing" && (
+        <div className="mt-3 border-t pt-3">
+          {editing ? (
+            <div className="space-y-2">
+              <Label htmlFor={`prop-bing-${site.slug}`} className="text-xs">
+                Bing site URL
+              </Label>
+              <Input
+                id={`prop-bing-${site.slug}`}
+                value={propertyUrl}
+                onChange={(e) => setPropertyUrl(e.target.value)}
+                placeholder="https://www.example.com/"
+                className="h-9 text-xs"
+              />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSaveProperty} disabled={saving}>
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditing(false);
+                    setPropertyUrl(bingOverride ?? "");
+                  }}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {currentOverride
-              ? `Edit ${source === "bing" ? "Bing" : "GSC"} property`
-              : `Set ${source === "bing" ? "Bing" : "GSC"} property override`}
-          </button>
-        )}
-      </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {bingOverride
+                ? "Edit Bing property"
+                : "Set Bing property override"}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
