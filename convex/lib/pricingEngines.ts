@@ -61,8 +61,10 @@ export type SiteBasket = {
   gaps: CanonicalService[];
 };
 
-function round2(n: number) {
-  return Math.round(n * 100) / 100;
+/** Final basket prices: nearest $5 whole dollars (no cents like 280.80). */
+function roundMoney(n: number) {
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n / 5) * 5;
 }
 
 /** Cheapest wins when several of a site's services map to one canonical key. */
@@ -71,9 +73,10 @@ function put(
   key: CanonicalService,
   entry: BasketEntry
 ) {
+  const price = roundMoney(entry.price);
   const existing = entries[key];
-  if (existing && existing.price <= entry.price) return;
-  entries[key] = { ...entry, price: round2(entry.price) };
+  if (existing && existing.price <= price) return;
+  entries[key] = { ...entry, price };
 }
 
 function pickBandKey(
