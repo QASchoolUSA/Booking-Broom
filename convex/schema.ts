@@ -536,4 +536,16 @@ export default defineSchema({
     /** Index into sorted connected mailboxes for round-robin. */
     nextMailboxIndex: v.optional(v.number()),
   }),
+
+  /** Web Push subscriptions for manager devices (new-booking alerts). */
+  pushSubscriptions: defineTable({
+    userId: v.string(),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    userAgent: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_endpoint", ["endpoint"])
+    .index("by_user", ["userId"]),
 });

@@ -2,7 +2,7 @@ import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { normalizeUsDigits } from "./lib/phone";
+import { normalizeUsDigits, smsPartyDigits } from "./lib/phone";
 import {
   buildWebhookUrl,
   defaultSyncDateRange,
@@ -355,8 +355,8 @@ export const deleteConversation = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
-    const did = normalizeUsDigits(args.did);
-    const contact = normalizeUsDigits(args.contact);
+    const did = smsPartyDigits(args.did);
+    const contact = smsPartyDigits(args.contact);
     if (!did || !contact) throw new Error("Invalid phone number");
 
     const messages = await ctx.runQuery(

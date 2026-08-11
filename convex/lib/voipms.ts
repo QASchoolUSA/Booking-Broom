@@ -3,6 +3,8 @@
  * Docs: https://voip.ms/m/apidocs.php
  */
 
+import { smsPartyDigits } from "./phone";
+
 const API_URL = "https://voip.ms/api/v1/rest.php";
 
 export type VoipmsDid = {
@@ -246,8 +248,8 @@ export async function getSms(opts: {
   return asArray<VoipmsSmsRow>(data.sms).map((row) => ({
     ...row,
     id: String(row.id),
-    did: String(row.did ?? "").replace(/\D/g, "").slice(-10),
-    contact: String(row.contact ?? "").replace(/\D/g, "").slice(-10),
+    did: smsPartyDigits(String(row.did ?? "")) ?? "",
+    contact: smsPartyDigits(String(row.contact ?? "")) ?? "",
     message: String(row.message ?? ""),
     date: String(row.date ?? ""),
     type: String(row.type ?? ""),
@@ -271,8 +273,8 @@ export async function getMms(opts: {
     return asArray<VoipmsMmsRow>(data.mms ?? data.sms).map((row) => ({
       ...row,
       id: String(row.id),
-      did: String(row.did ?? "").replace(/\D/g, "").slice(-10),
-      contact: String(row.contact ?? "").replace(/\D/g, "").slice(-10),
+      did: smsPartyDigits(String(row.did ?? "")) ?? "",
+      contact: smsPartyDigits(String(row.contact ?? "")) ?? "",
       message: String(row.message ?? ""),
       date: String(row.date ?? ""),
       type: String(row.type ?? ""),

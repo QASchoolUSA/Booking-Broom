@@ -3,12 +3,29 @@
  * Prefers tel: links, then common display formats.
  */
 
+/** Strict US 10-digit NANP number (for dialing / site phones). */
 export function normalizeUsDigits(raw: string): string | null {
   let digits = raw.replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("1")) {
     digits = digits.slice(1);
   }
   if (digits.length !== 10) return null;
+  return digits;
+}
+
+/**
+ * Digits-only SMS party key for storage/lookup.
+ * Allows short codes and other non-NANP contacts Voip.ms may return
+ * (e.g. "122000") while still normalizing 11-digit US numbers.
+ */
+export function smsPartyDigits(raw: string): string | null {
+  let digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length === 11 && digits.startsWith("1")) {
+    digits = digits.slice(1);
+  }
+  // Reject empty/garbage; keep short codes (5–6) and full numbers.
+  if (digits.length < 3) return null;
   return digits;
 }
 

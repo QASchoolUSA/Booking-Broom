@@ -6,7 +6,7 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { formatUsPhone, normalizeUsDigits } from "./lib/phone";
+import { formatUsPhone, smsPartyDigits } from "./lib/phone";
 
 function mapDid(doc: Doc<"smsDids">) {
   return {
@@ -84,7 +84,7 @@ export const listThreads = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
-    const didFilter = args.did ? normalizeUsDigits(args.did) : null;
+    const didFilter = args.did ? smsPartyDigits(args.did) : null;
 
     let messages: Doc<"smsMessages">[];
     if (didFilter) {
@@ -165,8 +165,8 @@ export const upsertConversationMeta = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
-    const did = normalizeUsDigits(args.did);
-    const contact = normalizeUsDigits(args.contact);
+    const did = smsPartyDigits(args.did);
+    const contact = smsPartyDigits(args.contact);
     if (!did || !contact) throw new Error("Invalid phone number");
 
     const label = (args.label ?? "").trim().slice(0, 120);
@@ -213,8 +213,8 @@ export const listMessages = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
-    const did = normalizeUsDigits(args.did);
-    const contact = normalizeUsDigits(args.contact);
+    const did = smsPartyDigits(args.did);
+    const contact = smsPartyDigits(args.contact);
     if (!did || !contact) return [];
 
     const messages = await ctx.db

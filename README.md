@@ -224,6 +224,30 @@ pnpm exec convex run internal.seed.syncSeedSites
 
 To add a new site’s inbox, update both files and re-run sync.
 
+## Web push (new bookings)
+
+Managers can enable **OS push notifications** on **Settings → Push notifications**. When a cleaning site posts a booking to `/api/bookings`, subscribed devices get a notification even if Booking Broom is closed.
+
+Generate VAPID keys once:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Set them on the Convex deployment:
+
+```bash
+pnpm exec convex env set VAPID_PUBLIC_KEY "your-public-key"
+pnpm exec convex env set VAPID_PRIVATE_KEY "your-private-key"
+pnpm exec convex env set VAPID_SUBJECT "mailto:you@example.com"
+```
+
+Notes:
+
+- The service worker is built by Serwist and is **disabled in `next dev`**. Use a production build (`pnpm build && pnpm start`) or the deployed app to test push.
+- **iPhone / iPad:** install via Safari → Share → Add to Home Screen, open the home-screen app, then enable push in Settings (iOS 16.4+).
+- Push is best-effort: bookings still save if VAPID is unset or delivery fails.
+
 ## Google Search Console (SEO page)
 
 The **SEO** page (`/seo`) syncs clicks, impressions, CTR, and average position from Google Search Console for each cleaning site.

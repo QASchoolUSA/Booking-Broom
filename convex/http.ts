@@ -2,7 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
-import { normalizeUsDigits } from "./lib/phone";
+import { normalizeUsDigits, smsPartyDigits } from "./lib/phone";
 import { parseVoipmsDate } from "./lib/voipms";
 
 const http = httpRouter();
@@ -49,7 +49,7 @@ const voipmsSmsWebhook = httpAction(async (ctx, request) => {
     "";
 
   const did = normalizeUsDigits(toRaw);
-  const contact = normalizeUsDigits(fromRaw);
+  const contact = smsPartyDigits(fromRaw);
   if (!did || !contact) {
     // Still ack so Voip.ms stops retrying bad payloads.
     return new Response("ok", { status: 200 });

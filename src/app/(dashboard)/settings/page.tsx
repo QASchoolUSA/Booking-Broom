@@ -5,6 +5,7 @@ import { useSites } from "@/lib/hooks/useSites";
 import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { PushNotificationsCard } from "@/components/settings/PushNotificationsCard";
 import {
   Card,
   CardContent,
@@ -68,6 +69,8 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          <PushNotificationsCard />
 
           <Card className="shadow-sm">
             <CardHeader>

@@ -32,6 +32,8 @@ import type * as lib_voipms from "../lib/voipms.js";
 import type * as pagespeed from "../pagespeed.js";
 import type * as pagespeedActions from "../pagespeedActions.js";
 import type * as pricing from "../pricing.js";
+import type * as push from "../push.js";
+import type * as pushActions from "../pushActions.js";
 import type * as seed from "../seed.js";
 import type * as seoScan from "../seoScan.js";
 import type * as seoScanActions from "../seoScanActions.js";
@@ -73,6 +75,8 @@ declare const fullApi: ApiFromModules<{
   pagespeed: typeof pagespeed;
   pagespeedActions: typeof pagespeedActions;
   pricing: typeof pricing;
+  push: typeof push;
+  pushActions: typeof pushActions;
   seed: typeof seed;
   seoScan: typeof seoScan;
   seoScanActions: typeof seoScanActions;
