@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
@@ -27,6 +27,33 @@ import type {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
+const MAILBOX_STORAGE_KEY = "bb.email.selectedMailbox";
+
+function readStoredMailboxId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(MAILBOX_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredMailboxId(id: string) {
+  try {
+    window.localStorage.setItem(MAILBOX_STORAGE_KEY, id);
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function pickDefaultMailbox(mailboxes: EmailMailbox[]): string | null {
+  if (mailboxes.length === 0) return null;
+  const stored = readStoredMailboxId();
+  if (stored && mailboxes.some((m) => m.id === stored)) return stored;
+  const withUnread = mailboxes.find((m) => m.unread_count > 0);
+  return withUnread?.id ?? mailboxes[0]!.id;
+}
+
 export default function EmailPage() {
   const { connectionState } = useBookings();
   const { isAuthenticated } = useConvexAuth();
@@ -49,12 +76,37 @@ export default function EmailPage() {
   );
   const mailboxes = (mailboxesRaw ?? []) as EmailMailbox[];
 
+  useEffect(() => {
+    if (mailboxes.length === 0) {
+      if (selectedMailboxId !== null) setSelectedMailboxId(null);
+      return;
+    }
+    const stillValid =
+      selectedMailboxId &&
+      mailboxes.some((m) => m.id === selectedMailboxId);
+    if (stillValid) return;
+    const next = pickDefaultMailbox(mailboxes);
+    if (next) {
+      setSelectedMailboxId(next);
+      writeStoredMailboxId(next);
+    }
+  }, [mailboxes, selectedMailboxId]);
+
+  const selectMailbox = (id: string) => {
+    setSelectedMailboxId(id);
+    writeStoredMailboxId(id);
+    setSelectedThreadId(null);
+  };
+
+  const activeMailbox = useMemo(
+    () => mailboxes.find((m) => m.id === selectedMailboxId) ?? null,
+    [mailboxes, selectedMailboxId]
+  );
+
   const threadsRaw = useQuery(
     api.email.listThreads,
-    isAuthenticated
-      ? selectedMailboxId
-        ? { mailboxId: selectedMailboxId as Id<"emailMailboxes"> }
-        : {}
+    isAuthenticated && selectedMailboxId
+      ? { mailboxId: selectedMailboxId as Id<"emailMailboxes"> }
       : "skip"
   );
   const threads = (threadsRaw ?? []) as EmailThread[];
@@ -75,16 +127,18 @@ export default function EmailPage() {
   );
   const messages = messagesRaw as EmailMessage[] | undefined;
 
-  const showInbox = mailboxes.length > 0 || Boolean(syncState);
+  const showInbox = mailboxes.length > 0;
   const mobileInThread = Boolean(selectedThreadId);
   const iosChatShell = isMobile && mobileInThread;
+  const siteLabel =
+    activeMailbox?.site_name || activeMailbox?.email || "Email";
 
   useChatVisualViewport(iosChatShell);
 
   return (
     <AppShell
       connectionState={connectionState}
-      pageTitle="Email"
+      pageTitle={siteLabel}
       contentWidth="full"
       hideMobileNav={mobileInThread}
       hideMobileHeader={mobileInThread}
@@ -93,23 +147,32 @@ export default function EmailPage() {
         <MailboxSidebar
           mailboxes={mailboxes}
           selectedMailboxId={selectedMailboxId}
-          onSelect={(id) => {
-            setSelectedMailboxId(id);
-            setSelectedThreadId(null);
-          }}
+          onSelect={selectMailbox}
         />
       }
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="hidden shrink-0 space-y-3 border-b border-border/60 px-6 py-4 md:block lg:px-8">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight">Email</h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                SpaceMail inboxes for each cleaning site
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5">
+                {activeMailbox?.site_accent && (
+                  <span
+                    className="size-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: activeMailbox.site_accent }}
+                  />
+                )}
+                <h2 className="truncate text-2xl font-bold tracking-tight">
+                  {siteLabel}
+                </h2>
+              </div>
+              <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                {activeMailbox
+                  ? activeMailbox.email
+                  : "Select a site mailbox to read and reply"}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -123,7 +186,7 @@ export default function EmailPage() {
                 size="sm"
                 className="gap-1.5"
                 onClick={() => setComposeOpen(true)}
-                disabled={mailboxes.length === 0}
+                disabled={!selectedMailboxId}
               >
                 <Plus size={16} weight="bold" />
                 New email
@@ -138,7 +201,7 @@ export default function EmailPage() {
           />
         </div>
 
-        {!showInbox && mailboxes.length === 0 ? (
+        {!showInbox ? (
           <div className="flex flex-1 flex-col justify-center px-4 py-6 md:px-6">
             <EmailSyncBanner
               syncState={syncState}
@@ -169,7 +232,7 @@ export default function EmailPage() {
                     size="icon"
                     className="h-9 w-9 shrink-0"
                     onClick={() => setComposeOpen(true)}
-                    disabled={mailboxes.length === 0}
+                    disabled={!selectedMailboxId}
                     aria-label="New email"
                   >
                     <Plus size={18} weight="bold" />
@@ -178,23 +241,15 @@ export default function EmailPage() {
                 <MailboxFilterChips
                   mailboxes={mailboxes}
                   selectedMailboxId={selectedMailboxId}
-                  onSelect={(id) => {
-                    setSelectedMailboxId(id);
-                    setSelectedThreadId(null);
-                  }}
+                  onSelect={selectMailbox}
                 />
               </div>
 
               <div className="hidden shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5 md:flex">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Conversations
-                  {selectedMailboxId
-                    ? (() => {
-                        const m = mailboxes.find(
-                          (x) => x.id === selectedMailboxId
-                        );
-                        return m ? ` · ${m.site_name || m.email}` : "";
-                      })()
+                <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Inbox
+                  {activeMailbox
+                    ? ` · ${activeMailbox.site_name || activeMailbox.email}`
                     : ""}
                 </p>
                 <Button
@@ -203,7 +258,7 @@ export default function EmailPage() {
                   size="sm"
                   className="h-8 gap-1 px-2 text-xs"
                   onClick={() => setComposeOpen(true)}
-                  disabled={mailboxes.length === 0}
+                  disabled={!selectedMailboxId}
                 >
                   <Plus size={14} weight="bold" />
                   New
@@ -214,6 +269,7 @@ export default function EmailPage() {
                 <EmailThreadList
                   threads={threads}
                   selectedId={selectedThreadId}
+                  siteName={activeMailbox?.site_name || activeMailbox?.email}
                   onSelect={(thread) => setSelectedThreadId(thread.id)}
                 />
               </div>
@@ -257,6 +313,7 @@ export default function EmailPage() {
         onOpenChange={setComposeOpen}
         mailboxes={mailboxes}
         defaultMailboxId={selectedMailboxId}
+        lockMailbox
         onSent={(threadId) => {
           setSelectedThreadId(threadId);
         }}
@@ -264,8 +321,8 @@ export default function EmailPage() {
       <ConnectMailboxDialog
         open={connectOpen}
         onOpenChange={setConnectOpen}
-        onConnected={() => {
-          setSelectedThreadId(null);
+        onConnected={(mailboxId) => {
+          selectMailbox(mailboxId);
         }}
       />
     </AppShell>

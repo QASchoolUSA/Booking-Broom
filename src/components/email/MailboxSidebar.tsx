@@ -11,7 +11,7 @@ import type { EmailMailbox } from "@/lib/types";
 interface MailboxSidebarProps {
   mailboxes: EmailMailbox[];
   selectedMailboxId: string | null;
-  onSelect: (mailboxId: string | null) => void;
+  onSelect: (mailboxId: string) => void;
 }
 
 export function MailboxSidebar({
@@ -35,7 +35,6 @@ export function MailboxSidebar({
     }
     try {
       await disconnect({ mailboxId: box.id as Id<"emailMailboxes"> });
-      if (selectedMailboxId === box.id) onSelect(null);
       toast.success("Mailbox disconnected");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to disconnect");
@@ -45,45 +44,40 @@ export function MailboxSidebar({
   return (
     <div className="space-y-1">
       <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Mailboxes
+        Sites
       </p>
-      <button
-        type="button"
-        onClick={() => onSelect(null)}
-        className={cn(
-          "flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
-          selectedMailboxId === null
-            ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-            : "text-sidebar-foreground hover:bg-muted/60"
-        )}
-      >
-        All sites
-      </button>
       {mailboxes.map((box) => {
         const active = selectedMailboxId === box.id;
+        const unread = box.unread_count > 0;
         return (
           <div key={box.id} className="group relative">
             <button
               type="button"
               onClick={() => onSelect(box.id)}
               className={cn(
-                "flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 pr-8 text-left transition-colors",
+                "relative flex w-full flex-col gap-0.5 rounded-lg py-2.5 pl-3.5 pr-9 text-left transition-colors",
                 active
                   ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
                   : "text-sidebar-foreground hover:bg-muted/60"
               )}
             >
-              <span className="flex items-center gap-2 truncate text-sm font-medium">
-                {box.site_accent && (
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: box.site_accent }}
-                  />
-                )}
+              <span
+                className="absolute inset-y-2 left-0 w-1 rounded-full"
+                style={{
+                  backgroundColor: box.site_accent || "var(--primary)",
+                  opacity: active ? 1 : 0.55,
+                }}
+              />
+              <span className="flex items-center gap-2 truncate text-sm font-semibold">
                 <span className="truncate">{box.site_name || box.email}</span>
                 {box.status === "error" && (
                   <span className="shrink-0 text-[10px] font-semibold uppercase text-amber-600">
                     err
+                  </span>
+                )}
+                {unread && (
+                  <span className="ml-auto shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary-foreground">
+                    {box.unread_count > 99 ? "99+" : box.unread_count}
                   </span>
                 )}
               </span>

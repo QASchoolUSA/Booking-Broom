@@ -10,7 +10,8 @@ import { SPACEMAIL_DEFAULTS } from "./lib/spacemail";
 
 function mapMailbox(
   doc: Doc<"emailMailboxes">,
-  site?: Doc<"sites"> | null
+  site?: Doc<"sites"> | null,
+  unreadCount = 0
 ) {
   return {
     id: doc._id,
@@ -25,6 +26,7 @@ function mapMailbox(
     smtp_host: doc.smtpHost,
     smtp_port: doc.smtpPort,
     status: doc.status,
+    unread_count: unreadCount,
     last_sync_at: doc.lastSyncAt
       ? new Date(doc.lastSyncAt).toISOString()
       : null,
@@ -131,8 +133,23 @@ export const listMailboxes = query({
     const boxes = await ctx.db.query("emailMailboxes").collect();
     const sites = await ctx.db.query("sites").collect();
     const siteMap = new Map(sites.map((s) => [s._id, s]));
+
+    const unreadByMailbox = new Map<string, number>();
+    for (const box of boxes) {
+      const threads = await ctx.db
+        .query("emailThreads")
+        .withIndex("by_mailbox_and_lastMessageAt", (q) =>
+          q.eq("mailboxId", box._id)
+        )
+        .collect();
+      const unread = threads.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+      unreadByMailbox.set(box._id, unread);
+    }
+
     return boxes
-      .map((b) => mapMailbox(b, siteMap.get(b.siteId)))
+      .map((b) =>
+        mapMailbox(b, siteMap.get(b.siteId), unreadByMailbox.get(b._id) ?? 0)
+      )
       .sort((a, b) =>
         (a.site_name || a.email).localeCompare(b.site_name || b.email)
       );

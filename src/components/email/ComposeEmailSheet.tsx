@@ -32,6 +32,8 @@ interface ComposeEmailSheetProps {
   onOpenChange: (open: boolean) => void;
   mailboxes: EmailMailbox[];
   defaultMailboxId?: string | null;
+  /** When true, From is fixed to defaultMailboxId (no picker). */
+  lockMailbox?: boolean;
   onSent: (threadId: string) => void;
 }
 
@@ -40,6 +42,7 @@ export function ComposeEmailSheet({
   onOpenChange,
   mailboxes,
   defaultMailboxId,
+  lockMailbox = false,
   onSent,
 }: ComposeEmailSheetProps) {
   const sendNew = useAction(api.emailActions.sendNew);
@@ -63,6 +66,8 @@ export function ComposeEmailSheet({
     setSubject("");
     setBody("");
   }, [open, defaultMailboxId, mailboxes]);
+
+  const lockedMailbox = mailboxes.find((m) => m.id === mailboxId) ?? null;
 
   const handleSend = async () => {
     if (!mailboxId || sending) return;
@@ -102,28 +107,41 @@ export function ComposeEmailSheet({
         <SheetHeader>
           <SheetTitle>New email</SheetTitle>
           <SheetDescription>
-            Send from a connected SpaceMail mailbox.
+            {lockMailbox && lockedMailbox
+              ? `Sending as ${lockedMailbox.site_name || lockedMailbox.email}`
+              : "Send from a connected SpaceMail mailbox."}
           </SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
           <div className="space-y-2">
             <Label>From</Label>
-            <Select
-              value={mailboxId}
-              onValueChange={(v) => v && setMailboxId(v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select mailbox" />
-              </SelectTrigger>
-              <SelectContent>
-                {mailboxes.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {(m.site_name || m.email) + ` · ${m.email}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {lockMailbox && lockedMailbox ? (
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5">
+                <p className="text-sm font-medium text-foreground">
+                  {lockedMailbox.site_name || lockedMailbox.email}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {lockedMailbox.email}
+                </p>
+              </div>
+            ) : (
+              <Select
+                value={mailboxId}
+                onValueChange={(v) => v && setMailboxId(v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mailbox" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mailboxes.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {(m.site_name || m.email) + ` · ${m.email}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="email-to">To</Label>
@@ -167,7 +185,7 @@ export function ComposeEmailSheet({
           </Button>
           <Button
             onClick={handleSend}
-            disabled={sending || mailboxes.length === 0}
+            disabled={sending || !mailboxId}
             className="gap-1.5"
           >
             <PaperPlaneTilt size={16} weight="fill" />

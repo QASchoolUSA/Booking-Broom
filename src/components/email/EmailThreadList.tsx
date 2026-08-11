@@ -9,17 +9,21 @@ interface EmailThreadListProps {
   threads: EmailThread[];
   selectedId: string | null;
   onSelect: (thread: EmailThread) => void;
+  siteName?: string | null;
 }
 
 export function EmailThreadList({
   threads,
   selectedId,
   onSelect,
+  siteName,
 }: EmailThreadListProps) {
   if (threads.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-16 text-center text-sm text-muted-foreground">
-        No conversations yet. Sync mailboxes or wait for inbound email.
+        {siteName
+          ? `No mail for ${siteName} yet.`
+          : "No conversations yet. Sync the mailbox or wait for inbound email."}
       </div>
     );
   }
@@ -35,7 +39,9 @@ export function EmailThreadList({
               p &&
               (!thread.mailbox_email ||
                 p.toLowerCase() !== thread.mailbox_email.toLowerCase())
-          )[0] ?? thread.participants[0] ?? "Unknown";
+          )[0] ??
+          thread.participants[0] ??
+          "Unknown";
         return (
           <li key={thread.id}>
             <button
@@ -65,12 +71,14 @@ export function EmailThreadList({
               </div>
               <p className="truncate text-xs text-muted-foreground">
                 {fromLabel}
-                {thread.site_name ? ` · ${thread.site_name}` : ""}
                 {unread ? ` · ${thread.unread_count} unread` : ""}
               </p>
               <p className="mt-0.5 flex items-center gap-1 truncate text-sm text-foreground/75">
                 {thread.last_snippet.includes("📎") && (
-                  <Paperclip size={14} className="shrink-0 text-muted-foreground" />
+                  <Paperclip
+                    size={14}
+                    className="shrink-0 text-muted-foreground"
+                  />
                 )}
                 <span className="truncate">{thread.last_snippet || " "}</span>
               </p>

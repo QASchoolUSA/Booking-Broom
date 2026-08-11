@@ -419,6 +419,7 @@ export interface EmailMailbox {
   smtp_host: string;
   smtp_port: number;
   status: EmailMailboxStatus;
+  unread_count: number;
   last_sync_at: string | null;
   last_sync_error: string | null;
   created_at: string;
