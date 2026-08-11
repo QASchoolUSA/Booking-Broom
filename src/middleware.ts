@@ -5,7 +5,11 @@ import {
 } from "@convex-dev/auth/nextjs/server";
 import type { NextRequest } from "next/server";
 
-const isPublicPage = createRouteMatcher(["/login"]);
+const isPublicPage = createRouteMatcher([
+  "/login",
+  "/manifest.webmanifest",
+  "/manifest.json",
+]);
 const isPublicApi = createRouteMatcher([
   "/api/bookings",
   "/api/pricing",
@@ -16,11 +20,20 @@ function isGscOAuthCallback(request: NextRequest) {
   return request.nextUrl.pathname === "/gsc/oauth/callback";
 }
 
+function isStaticAsset(pathname: string) {
+  return (
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/manifest.json" ||
+    pathname === "/sw.js" ||
+    pathname.startsWith("/icons/")
+  );
+}
+
 export default convexAuthNextjsMiddleware(
   async (request, { convexAuth }) => {
     const isAuthenticated = await convexAuth.isAuthenticated();
 
-    if (isPublicApi(request)) {
+    if (isPublicApi(request) || isStaticAsset(request.nextUrl.pathname)) {
       return;
     }
 
@@ -29,6 +42,10 @@ export default convexAuthNextjsMiddleware(
     }
 
     if (isAuthenticated && isPublicPage(request)) {
+      // Stay on public assets (manifest) even when signed in — don't bounce to /
+      if (isStaticAsset(request.nextUrl.pathname)) {
+        return;
+      }
       return nextjsMiddlewareRedirect(request, "/");
     }
   },
@@ -41,6 +58,7 @@ export default convexAuthNextjsMiddleware(
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Skip Next internals, images, and the web app manifest (must stay JSON).
+    "/((?!_next/static|_next/image|favicon.ico|manifest\\.webmanifest|manifest\\.json|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

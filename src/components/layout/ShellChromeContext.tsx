@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -27,12 +28,16 @@ export type ShellChromeOptions = {
   onRefresh?: () => void;
 };
 
-type ShellChromeContextValue = {
-  options: ShellChromeOptions;
+type ShellChromeSetContextValue = {
   setOptions: (options: ShellChromeOptions) => void;
 };
 
-const ShellChromeContext = createContext<ShellChromeContextValue | null>(null);
+const ShellChromeOptionsContext = createContext<ShellChromeOptions | null>(
+  null
+);
+const ShellChromeSetContext = createContext<ShellChromeSetContextValue | null>(
+  null
+);
 
 export const DEFAULT_SHELL_OPTIONS: ShellChromeOptions = {
   contentWidth: "default",
@@ -51,45 +56,66 @@ export function ShellChromeProvider({ children }: { children: ReactNode }) {
     setOptionsState(next);
   }, []);
 
-  const value = useMemo(
-    () => ({ options, setOptions }),
-    [options, setOptions]
-  );
+  const setValue = useMemo(() => ({ setOptions }), [setOptions]);
 
   return (
-    <ShellChromeContext.Provider value={value}>
-      {children}
-    </ShellChromeContext.Provider>
+    <ShellChromeSetContext.Provider value={setValue}>
+      <ShellChromeOptionsContext.Provider value={options}>
+        {children}
+      </ShellChromeOptionsContext.Provider>
+    </ShellChromeSetContext.Provider>
   );
 }
 
-export function useShellChrome() {
-  const ctx = useContext(ShellChromeContext);
-  if (!ctx) {
-    throw new Error("useShellChrome must be used within ShellChromeProvider");
+/** Read chrome options — only the shell should subscribe to this. */
+export function useShellChromeOptions() {
+  const options = useContext(ShellChromeOptionsContext);
+  if (!options) {
+    throw new Error(
+      "useShellChromeOptions must be used within ShellChromeProvider"
+    );
   }
-  return ctx;
+  return options;
 }
 
 /**
- * Register page chrome for the persistent AppShell. Clears on unmount.
+ * Register page chrome for the persistent AppShell.
+ * Uses the setter-only context so pages do not re-render when chrome updates
+ * (avoids an infinite loop from recreating sidebar elements each render).
  */
 export function useShellPage(options: ShellChromeOptions) {
-  const { setOptions } = useShellChrome();
+  const ctx = useContext(ShellChromeSetContext);
+  if (!ctx) {
+    throw new Error("useShellPage must be used within ShellChromeProvider");
+  }
+  const { setOptions } = ctx;
+
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+
+  const {
+    pageTitle,
+    contentWidth,
+    hideMobileNavPad,
+    hideMobileNav,
+    hideMobileHeader,
+    connectionState,
+    onRefresh,
+    sidebar,
+  } = options;
 
   useEffect(() => {
-    setOptions(options);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- track chrome fields explicitly
+    setOptions(optionsRef.current);
   }, [
     setOptions,
-    options.sidebar,
-    options.pageTitle,
-    options.contentWidth,
-    options.hideMobileNavPad,
-    options.hideMobileNav,
-    options.hideMobileHeader,
-    options.connectionState,
-    options.onRefresh,
+    pageTitle,
+    contentWidth,
+    hideMobileNavPad,
+    hideMobileNav,
+    hideMobileHeader,
+    connectionState,
+    onRefresh,
+    sidebar,
   ]);
 
   useEffect(() => {
