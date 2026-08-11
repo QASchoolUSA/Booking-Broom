@@ -17,6 +17,7 @@ import { SiteSeoCard } from "@/components/seo/SiteSeoCard";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageLoader } from "@/components/loading/PageLoader";
 import type { SeoPeriodDays, SeoSource, SiteSeoRow } from "@/lib/types";
 
 const PERIODS: { value: SeoPeriodDays; label: string }[] = [
@@ -230,13 +231,7 @@ function SeoPageContent() {
 
 export default function SeoPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="dashboard-bg flex min-h-dvh items-center justify-center p-8">
-          <Skeleton className="h-10 w-48" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PageLoader label="Loading SEO" />}>
       <SeoPageContent />
     </Suspense>
   );
