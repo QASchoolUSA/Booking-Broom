@@ -4,12 +4,12 @@ import { useMemo, useState } from "react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { Plus } from "@phosphor-icons/react";
-import { useBookings } from "@/lib/hooks/useBookings";
+import { useConnectionState } from "@/lib/hooks/useConnectionState";
 import {
   useChatVisualViewport,
   useIsMobileMd,
 } from "@/lib/hooks/useVisualViewportHeight";
-import { AppShell } from "@/components/layout/AppShell";
+import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { DidSidebar } from "@/components/messages/DidSidebar";
 import { DidFilterChips } from "@/components/messages/DidFilterChips";
 import { SmsSyncBanner } from "@/components/messages/SmsSyncBanner";
@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 export default function MessagesPage() {
-  const { connectionState } = useBookings();
+  const connectionState = useConnectionState();
   const { isAuthenticated } = useConvexAuth();
   const [selectedDid, setSelectedDid] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -67,11 +67,31 @@ export default function MessagesPage() {
   const messages = messagesRaw as SmsMessage[] | undefined;
 
   const showInbox = dids.length > 0 || Boolean(syncState);
+  const threadsLoading = isAuthenticated && threadsRaw === undefined;
   const mobileInThread = Boolean(selectedKey);
   const iosChatShell = isMobile && mobileInThread;
 
   // Always sync --vvh/--vvs while the immersive mobile thread is open.
   useChatVisualViewport(iosChatShell);
+
+  useShellPage({
+    connectionState,
+    pageTitle: "Messages",
+    contentWidth: "full",
+    hideMobileNav: mobileInThread,
+    hideMobileHeader: mobileInThread,
+    hideMobileNavPad: true,
+    sidebar: (
+      <DidSidebar
+        dids={dids}
+        selectedDid={selectedDid}
+        onSelect={(did) => {
+          setSelectedDid(did);
+          setSelectedKey(null);
+        }}
+      />
+    ),
+  });
 
   const threadForView =
     selectedThread ??
@@ -94,24 +114,7 @@ export default function MessagesPage() {
       : null);
 
   return (
-    <AppShell
-      connectionState={connectionState}
-      pageTitle="Messages"
-      contentWidth="full"
-      hideMobileNav={mobileInThread}
-      hideMobileHeader={mobileInThread}
-      hideMobileNavPad
-      sidebar={
-        <DidSidebar
-          dids={dids}
-          selectedDid={selectedDid}
-          onSelect={(did) => {
-            setSelectedDid(did);
-            setSelectedKey(null);
-          }}
-        />
-      }
-    >
+    <>
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Desktop title + sync */}
         <div className="hidden shrink-0 space-y-3 border-b border-border/60 px-6 py-4 md:block lg:px-8">
@@ -205,6 +208,7 @@ export default function MessagesPage() {
                 <ThreadList
                   threads={threads}
                   selectedKey={selectedKey}
+                  loading={threadsLoading}
                   onSelect={(thread) =>
                     setSelectedKey(`${thread.did}:${thread.contact}`)
                   }
@@ -255,6 +259,6 @@ export default function MessagesPage() {
           setSelectedKey(`${did}:${contact}`);
         }}
       />
-    </AppShell>
+    </>
   );
 }

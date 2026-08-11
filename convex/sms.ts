@@ -222,10 +222,10 @@ export const listMessages = query({
       .withIndex("by_did_contact_sentAt", (q) =>
         q.eq("did", did).eq("contact", contact)
       )
-      .order("asc")
-      .collect();
+      .order("desc")
+      .take(200);
 
-    return messages.map(mapMessage);
+    return messages.reverse().map(mapMessage);
   },
 });
 

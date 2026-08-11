@@ -4,11 +4,13 @@ import { formatDistanceToNow } from "date-fns";
 import { Image as ImageIcon, NotePencil } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { SmsThread } from "@/lib/types";
+import { ThreadListSkeleton } from "@/components/loading/skeletons";
 
 interface ThreadListProps {
   threads: SmsThread[];
   selectedKey: string | null;
   onSelect: (thread: SmsThread) => void;
+  loading?: boolean;
 }
 
 function threadKey(t: SmsThread) {
@@ -19,7 +21,12 @@ export function ThreadList({
   threads,
   selectedKey,
   onSelect,
+  loading = false,
 }: ThreadListProps) {
+  if (loading) {
+    return <ThreadListSkeleton />;
+  }
+
   if (threads.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-16 text-center text-sm text-muted-foreground">

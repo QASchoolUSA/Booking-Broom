@@ -4,12 +4,14 @@ import { formatDistanceToNow } from "date-fns";
 import { Paperclip } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { EmailThread } from "@/lib/types";
+import { EmailThreadListSkeleton } from "@/components/loading/skeletons";
 
 interface EmailThreadListProps {
   threads: EmailThread[];
   selectedId: string | null;
   onSelect: (thread: EmailThread) => void;
   siteName?: string | null;
+  loading?: boolean;
 }
 
 export function EmailThreadList({
@@ -17,7 +19,12 @@ export function EmailThreadList({
   selectedId,
   onSelect,
   siteName,
+  loading = false,
 }: EmailThreadListProps) {
+  if (loading) {
+    return <EmailThreadListSkeleton />;
+  }
+
   if (threads.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-16 text-center text-sm text-muted-foreground">

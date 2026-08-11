@@ -7,6 +7,7 @@ import type { Id } from "convex/_generated/dataModel";
 import { toast } from "sonner";
 import type { EmailSiteForConnect } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -164,7 +165,9 @@ export function ConnectMailboxDialog({
           <Button
             onClick={handleConnect}
             disabled={busy || sites.length === 0 || !siteId || !email || !password}
+            className="gap-2"
           >
+            {busy && <Spinner className="size-4" label="Connecting mailbox" />}
             {busy ? "Testing & saving…" : "Test & save"}
           </Button>
         </SheetFooter>

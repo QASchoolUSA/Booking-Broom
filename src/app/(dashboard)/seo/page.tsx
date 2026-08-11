@@ -7,8 +7,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "convex/_generated/api";
 import { toast } from "sonner";
 import { MagnifyingGlass } from "@phosphor-icons/react";
-import { useBookings } from "@/lib/hooks/useBookings";
-import { AppShell } from "@/components/layout/AppShell";
+import { useSites } from "@/lib/hooks/useSites";
+import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { GscConnectBanner } from "@/components/seo/GscConnectBanner";
 import { BingSyncBanner } from "@/components/seo/BingSyncBanner";
@@ -28,7 +28,7 @@ const PERIODS: { value: SeoPeriodDays; label: string }[] = [
 ];
 
 function SeoPageContent() {
-  const { sites, allBookings, connectionState } = useBookings();
+  const { sites, connectionState } = useSites();
   const { isAuthenticated } = useConvexAuth();
   const [period, setPeriod] = useState<SeoPeriodDays>(28);
   const [source, setSource] = useState<SeoSource>("google");
@@ -78,10 +78,6 @@ function SeoPageContent() {
   }, [searchParams, router]);
 
   const counts: Record<string, number> = {};
-  allBookings.forEach((b) => {
-    const slug = b.site?.slug;
-    if (slug) counts[slug] = (counts[slug] ?? 0) + 1;
-  });
 
   const sampleMetrics = rows.find((r) => r.metrics)?.metrics;
   const dateRangeLabel = sampleMetrics
@@ -108,18 +104,13 @@ function SeoPageContent() {
     }
   };
 
+  useShellPage({
+    connectionState,
+    pageTitle: "SEO",
+    sidebar: <SiteSidebar sites={sites} counts={counts} totalCount={0} />,
+  });
+
   return (
-    <AppShell
-      connectionState={connectionState}
-      pageTitle="SEO"
-      sidebar={
-        <SiteSidebar
-          sites={sites}
-          counts={counts}
-          totalCount={allBookings.length}
-        />
-      }
-    >
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="hidden md:block">
@@ -234,7 +225,6 @@ function SeoPageContent() {
           </>
         )}
       </div>
-    </AppShell>
   );
 }
 

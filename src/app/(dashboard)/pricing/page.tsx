@@ -3,8 +3,8 @@
 import { useCallback, useState } from "react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { useBookings } from "@/lib/hooks/useBookings";
-import { AppShell } from "@/components/layout/AppShell";
+import { useSites } from "@/lib/hooks/useSites";
+import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { PricingCompareGrid } from "@/components/pricing/PricingCompareGrid";
 import { PricingEditWorkspace } from "@/components/pricing/PricingEditWorkspace";
@@ -15,7 +15,7 @@ import type { SitePricingRow } from "@/lib/types";
 type PricingTab = "compare" | "edit";
 
 export default function PricingPage() {
-  const { sites, allBookings, connectionState } = useBookings();
+  const { sites, connectionState } = useSites();
   const { isAuthenticated } = useConvexAuth();
   const [tab, setTab] = useState<PricingTab>("compare");
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
@@ -23,12 +23,6 @@ export default function PricingPage() {
   const rowsRaw = useQuery(api.pricing.list, isAuthenticated ? {} : "skip");
   const rows = (rowsRaw ?? []) as SitePricingRow[];
   const loading = isAuthenticated && rowsRaw === undefined;
-
-  const counts: Record<string, number> = {};
-  allBookings.forEach((b) => {
-    const slug = b.site?.slug;
-    if (slug) counts[slug] = (counts[slug] ?? 0) + 1;
-  });
 
   const unconfigured = rows.filter((row) => row.pricing === null).length;
 
@@ -41,18 +35,13 @@ export default function PricingPage() {
     setTab("edit");
   }, []);
 
+  useShellPage({
+    connectionState,
+    pageTitle: "Pricing",
+    sidebar: <SiteSidebar sites={sites} counts={{}} totalCount={0} />,
+  });
+
   return (
-    <AppShell
-      connectionState={connectionState}
-      pageTitle="Pricing"
-      sidebar={
-        <SiteSidebar
-          sites={sites}
-          counts={counts}
-          totalCount={allBookings.length}
-        />
-      }
-    >
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="hidden md:block">
@@ -102,6 +91,5 @@ export default function PricingPage() {
           />
         )}
       </div>
-    </AppShell>
   );
 }

@@ -5,11 +5,11 @@ import { useConvexAuth } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { BookingStatus, BookingWithSite, Site } from "@/lib/types";
 import type { Id } from "convex/_generated/dataModel";
-
-type ConnectionState = "connecting" | "live" | "offline" | "reconnecting";
+import { useConnectionState } from "@/lib/hooks/useConnectionState";
 
 export function useBookings(siteSlug?: string) {
   const { isLoading: authLoading, isAuthenticated } = useConvexAuth();
+  const connectionState = useConnectionState();
   const allBookingsRaw = useQuery(
     api.bookings.list,
     isAuthenticated ? {} : "skip"
@@ -30,15 +30,6 @@ export function useBookings(siteSlug?: string) {
   const bookings = siteSlug
     ? allBookings.filter((b) => b.site?.slug === siteSlug)
     : allBookings;
-
-  let connectionState: ConnectionState = "connecting";
-  if (!isAuthenticated) {
-    connectionState = "offline";
-  } else if (loading) {
-    connectionState = "connecting";
-  } else {
-    connectionState = "live";
-  }
 
   const updateBookingStatus = async (bookingId: string, status: BookingStatus) => {
     await updateStatusMutation({

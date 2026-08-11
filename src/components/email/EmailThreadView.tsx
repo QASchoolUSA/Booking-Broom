@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import DOMPurify from "isomorphic-dompurify";
 import {
   CaretLeft,
   DownloadSimple,
@@ -14,7 +13,9 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { EmailMessage, EmailThread } from "@/lib/types";
+import { EmailMessageSkeleton } from "@/components/loading/skeletons";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
 interface EmailThreadViewProps {
@@ -79,13 +80,28 @@ function AttachmentLink({
 
 function MessageBody({ message }: { message: EmailMessage }) {
   const [preferPlain, setPreferPlain] = useState(false);
-  const sanitized = useMemo(() => {
-    if (!message.html_body) return null;
-    return DOMPurify.sanitize(message.html_body, {
-      USE_PROFILES: { html: true },
-      FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
-      FORBID_ATTR: ["onerror", "onload", "onclick"],
+  const [sanitized, setSanitized] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!message.html_body) {
+      setSanitized(null);
+      return;
+    }
+    void import("isomorphic-dompurify").then((mod) => {
+      if (cancelled) return;
+      const DOMPurify = mod.default;
+      setSanitized(
+        DOMPurify.sanitize(message.html_body!, {
+          USE_PROFILES: { html: true },
+          FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
+          FORBID_ATTR: ["onerror", "onload", "onclick"],
+        })
+      );
     });
+    return () => {
+      cancelled = true;
+    };
   }, [message.html_body]);
 
   const showHtml = Boolean(sanitized) && !preferPlain;
@@ -106,9 +122,11 @@ function MessageBody({ message }: { message: EmailMessage }) {
           className="email-html prose prose-sm max-w-none break-words text-sm text-foreground [&_a]:text-primary [&_img]:max-w-full"
           dangerouslySetInnerHTML={{ __html: sanitized! }}
         />
+      ) : message.html_body && !preferPlain && !message.text_body ? (
+        <Skeleton className="h-24 w-full rounded-md" />
       ) : (
         <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
-          {message.text_body || "(empty message)"}
+          {message.text_body || (message.html_body ? "" : "(empty message)")}
         </pre>
       )}
       {message.attachments.length > 0 && (
@@ -234,7 +252,7 @@ export function EmailThreadView({
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 md:px-5"
       >
         {messages === undefined ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <EmailMessageSkeleton />
         ) : messages.length === 0 ? (
           <p className="text-sm text-muted-foreground">No messages</p>
         ) : (

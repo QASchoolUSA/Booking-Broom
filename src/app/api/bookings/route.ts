@@ -3,7 +3,6 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "convex/_generated/api";
 import { hashApiKey } from "@/lib/api-keys";
 import { corsHeaders } from "@/lib/cors";
-import { sendBookingEmails } from "@/lib/email";
 import {
   normalizeAttribution,
   normalizeIntent,
@@ -59,9 +58,28 @@ export async function POST(request: Request) {
     });
 
     try {
-      const emailResult = await sendBookingEmails(body);
+      const emailResult = await client.action(
+        api.emailActions.sendBookingEmails,
+        {
+          site_slug: body.site_slug,
+          customer_name: body.customer_name,
+          email: body.email,
+          phone: body.phone,
+          address: body.address,
+          service_type: body.service_type,
+          preferred_date: body.preferred_date,
+          preferred_time: body.preferred_time,
+          notes: body.notes,
+          property: body.property,
+          quote: body.quote,
+        }
+      );
       if (emailResult.errors?.length) {
         console.error("Booking email errors:", emailResult.errors);
+      } else if (!emailResult.sent && emailResult.via === "none") {
+        console.warn(
+          "Booking emails skipped: connect a SpaceMail mailbox for this site, or set SMTP_* in Convex env"
+        );
       }
     } catch (error) {
       console.error("Failed to send booking emails:", error);

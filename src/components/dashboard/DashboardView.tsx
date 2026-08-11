@@ -5,7 +5,7 @@ import { MagnifyingGlass, ArrowsClockwise } from "@phosphor-icons/react";
 import { useBookings } from "@/lib/hooks/useBookings";
 import type { BookingStatus, BookingWithSite } from "@/lib/types";
 import { resolveBookingDetails } from "@/lib/booking-details";
-import { AppShell } from "@/components/layout/AppShell";
+import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteFilter } from "@/components/layout/SiteFilter";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { StatsCards } from "@/components/dashboard/StatsCards";
@@ -93,13 +93,21 @@ export function DashboardView({
 
   const newCount = bookings.filter((b) => b.status === "new").length;
 
+  useShellPage({
+    connectionState,
+    onRefresh: refresh,
+    pageTitle: title,
+    sidebar: (
+      <SiteSidebar
+        sites={sites}
+        counts={counts}
+        totalCount={allBookings.length}
+      />
+    ),
+  });
+
   return (
-    <AppShell
-      connectionState={connectionState}
-      onRefresh={refresh}
-      pageTitle={title}
-      sidebar={<SiteSidebar sites={sites} counts={counts} totalCount={allBookings.length} />}
-    >
+    <>
       <div className="space-y-5 md:space-y-6">
         {/* Page header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -234,6 +242,6 @@ export function DashboardView({
         onNotesChange={updateInternalNotes}
         onDelete={deleteBooking}
       />
-    </AppShell>
+    </>
   );
 }

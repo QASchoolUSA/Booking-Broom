@@ -16,6 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { SmsMessage, SmsThread } from "@/lib/types";
+import { MessageBubbleSkeleton } from "@/components/loading/skeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -317,11 +318,7 @@ export function ConversationView({
         className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 py-3 md:px-4"
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
-          {messages === undefined && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Loading…
-            </p>
-          )}
+          {messages === undefined && <MessageBubbleSkeleton />}
           {messages?.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">
               No messages in this thread yet.

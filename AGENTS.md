@@ -27,6 +27,7 @@ Gotcha: any `convex run` / `convex env` / `convex deploy` command also needs `CO
 ### Verifying the app
 - All routes except `/login` and `/api/bookings` require auth; unauthenticated requests 307-redirect to `/login`. Create a manager account at `/login` via "First time? Create manager account".
 - Simulate an inbound booking without the UI: `POST http://localhost:3000/api/bookings` with a seeded site (e.g. `{"site_slug":"sanford","api_key":"bb_sanford_dev_key","customer_name":"Jane Doe","service_type":"Deep Clean"}`). Bookings appear on the dashboard in real time.
+- Booking confirmation emails send from each site’s connected SpaceMail mailbox (Email → Connect). Set `EMAIL_CREDENTIALS_KEY` in Convex env (32-byte secret). Optional fallback when a site isn’t connected: also set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` (and optionally `SMTP_PORT` / `SMTP_FROM`) in Convex env.
 - PageSpeed Insights lives at `/performance` (nav label **Speed**). Set `PAGESPEED_API_KEY` in Convex env, then use **Sync now** to audit each site.
 - SEO lives at `/seo` with a Google / Bing toggle. Google uses OAuth (`GOOGLE_CLIENT_*`); Bing uses `BING_WEBMASTER_API_KEY`. Page scans run from the SEO site cards.
 

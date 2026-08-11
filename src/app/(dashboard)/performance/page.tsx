@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { api } from "convex/_generated/api";
-import { useBookings } from "@/lib/hooks/useBookings";
-import { AppShell } from "@/components/layout/AppShell";
+import { useSites } from "@/lib/hooks/useSites";
+import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { PagespeedSyncBanner } from "@/components/performance/PagespeedSyncBanner";
 import { PerformanceOverview } from "@/components/performance/PerformanceOverview";
@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { PagespeedStrategy, SitePerformanceRow } from "@/lib/types";
 
 export default function PerformancePage() {
-  const { sites, allBookings, connectionState } = useBookings();
+  const { sites, connectionState } = useSites();
   const { isAuthenticated } = useConvexAuth();
   const [strategy, setStrategy] = useState<PagespeedStrategy>("mobile");
 
@@ -31,24 +31,13 @@ export default function PerformancePage() {
   const metricsLoading = isAuthenticated && rowsRaw === undefined;
   const hasMetrics = rows.some((r) => r.metrics != null);
 
-  const counts: Record<string, number> = {};
-  allBookings.forEach((b) => {
-    const slug = b.site?.slug;
-    if (slug) counts[slug] = (counts[slug] ?? 0) + 1;
+  useShellPage({
+    connectionState,
+    pageTitle: "Performance",
+    sidebar: <SiteSidebar sites={sites} counts={{}} totalCount={0} />,
   });
 
   return (
-    <AppShell
-      connectionState={connectionState}
-      pageTitle="Performance"
-      sidebar={
-        <SiteSidebar
-          sites={sites}
-          counts={counts}
-          totalCount={allBookings.length}
-        />
-      }
-    >
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="hidden md:block">
@@ -111,6 +100,5 @@ export default function PerformancePage() {
           </>
         ) : null}
       </div>
-    </AppShell>
   );
 }

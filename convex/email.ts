@@ -6,12 +6,11 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { SPACEMAIL_DEFAULTS } from "./lib/spacemail";
+import { SPACEMAIL_DEFAULTS, clampMessageBodies } from "./lib/spacemail";
 
 function mapMailbox(
   doc: Doc<"emailMailboxes">,
-  site?: Doc<"sites"> | null,
-  unreadCount = 0
+  site?: Doc<"sites"> | null
 ) {
   return {
     id: doc._id,
@@ -26,7 +25,7 @@ function mapMailbox(
     smtp_host: doc.smtpHost,
     smtp_port: doc.smtpPort,
     status: doc.status,
-    unread_count: unreadCount,
+    unread_count: doc.unreadCount ?? 0,
     last_sync_at: doc.lastSyncAt
       ? new Date(doc.lastSyncAt).toISOString()
       : null,
@@ -104,6 +103,39 @@ async function requireIdentity(ctx: {
   return identity;
 }
 
+async function bumpMailboxUnread(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: { db: any },
+  mailboxId: Id<"emailMailboxes">,
+  delta: number
+) {
+  if (delta === 0) return;
+  const box = await ctx.db.get(mailboxId);
+  if (!box) return;
+  const next = Math.max(0, (box.unreadCount ?? 0) + delta);
+  await ctx.db.patch(mailboxId, { unreadCount: next });
+}
+
+/** Recompute denormalized unread from threads (backfill / after clear). */
+async function recomputeMailboxUnread(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: { db: any },
+  mailboxId: Id<"emailMailboxes">
+) {
+  const threads = await ctx.db
+    .query("emailThreads")
+    .withIndex("by_mailbox_and_lastMessageAt", (q: any) =>
+      q.eq("mailboxId", mailboxId)
+    )
+    .collect();
+  const unread = threads.reduce(
+    (sum: number, t: Doc<"emailThreads">) => sum + (t.unreadCount || 0),
+    0
+  );
+  await ctx.db.patch(mailboxId, { unreadCount: unread });
+  return unread;
+}
+
 export const getSyncState = query({
   args: {},
   handler: async (ctx) => {
@@ -120,8 +152,8 @@ export const countUnread = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return 0;
-    const threads = await ctx.db.query("emailThreads").collect();
-    return threads.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+    const boxes = await ctx.db.query("emailMailboxes").collect();
+    return boxes.reduce((sum, b) => sum + (b.unreadCount ?? 0), 0);
   },
 });
 
@@ -134,22 +166,8 @@ export const listMailboxes = query({
     const sites = await ctx.db.query("sites").collect();
     const siteMap = new Map(sites.map((s) => [s._id, s]));
 
-    const unreadByMailbox = new Map<string, number>();
-    for (const box of boxes) {
-      const threads = await ctx.db
-        .query("emailThreads")
-        .withIndex("by_mailbox_and_lastMessageAt", (q) =>
-          q.eq("mailboxId", box._id)
-        )
-        .collect();
-      const unread = threads.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
-      unreadByMailbox.set(box._id, unread);
-    }
-
     return boxes
-      .map((b) =>
-        mapMailbox(b, siteMap.get(b.siteId), unreadByMailbox.get(b._id) ?? 0)
-      )
+      .map((b) => mapMailbox(b, siteMap.get(b.siteId)))
       .sort((a, b) =>
         (a.site_name || a.email).localeCompare(b.site_name || b.email)
       );
@@ -280,6 +298,7 @@ export const markThreadReadLocal = mutation({
     }
     if (thread.unreadCount !== 0) {
       await ctx.db.patch(args.threadId, { unreadCount: 0 });
+      await bumpMailboxUnread(ctx, thread.mailboxId, -thread.unreadCount);
     }
     return {
       mailboxId: thread.mailboxId,
@@ -312,6 +331,7 @@ export const markThreadReadInternal = internalMutation({
     }
     if (thread.unreadCount !== 0) {
       await ctx.db.patch(args.threadId, { unreadCount: 0 });
+      await bumpMailboxUnread(ctx, thread.mailboxId, -thread.unreadCount);
     }
     return {
       mailboxId: thread.mailboxId,
@@ -428,6 +448,7 @@ export const upsertMailboxInternal = internalMutation({
     return await ctx.db.insert("emailMailboxes", {
       siteId: args.siteId,
       ...fields,
+      unreadCount: 0,
       createdAt: Date.now(),
     });
   },
@@ -496,7 +517,27 @@ export const clearMailboxMessagesInternal = internalMutation({
     await ctx.db.patch(args.mailboxId, {
       uidValidity: undefined,
       lastUid: undefined,
+      unreadCount: 0,
     });
+  },
+});
+
+export const recomputeMailboxUnreadInternal = internalMutation({
+  args: { mailboxId: v.id("emailMailboxes") },
+  handler: async (ctx, args) => {
+    return await recomputeMailboxUnread(ctx, args.mailboxId);
+  },
+});
+
+/** One-shot backfill for denormalized mailbox unread counts. */
+export const recomputeAllMailboxUnreadInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const boxes = await ctx.db.query("emailMailboxes").collect();
+    for (const box of boxes) {
+      await recomputeMailboxUnread(ctx, box._id);
+    }
+    return { mailboxes: boxes.length };
   },
 });
 
@@ -604,6 +645,11 @@ export const upsertSyncedMessageInternal = internalMutation({
     attachmentMeta: v.optional(v.array(attachmentMetaValidator)),
   },
   handler: async (ctx, args) => {
+    const bodies = clampMessageBodies({
+      textBody: args.textBody,
+      htmlBody: args.htmlBody,
+    });
+
     const byMid = await ctx.db
       .query("emailMessages")
       .withIndex("by_mailbox_and_messageId", (q) =>
@@ -618,6 +664,7 @@ export const upsertSyncedMessageInternal = internalMutation({
       )
       .unique();
 
+    let createdThread = false;
     if (!thread) {
       const threadId = await ctx.db.insert("emailThreads", {
         mailboxId: args.mailboxId,
@@ -630,6 +677,10 @@ export const upsertSyncedMessageInternal = internalMutation({
         messageCount: 1,
       });
       thread = (await ctx.db.get(threadId))!;
+      createdThread = true;
+      if (!args.seen) {
+        await bumpMailboxUnread(ctx, args.mailboxId, 1);
+      }
     }
 
     if (byMid) {
@@ -637,8 +688,8 @@ export const upsertSyncedMessageInternal = internalMutation({
         uid: args.uid,
         seen: args.seen,
         answered: args.answered,
-        textBody: args.textBody,
-        htmlBody: args.htmlBody,
+        textBody: bodies.textBody,
+        htmlBody: bodies.htmlBody,
         attachmentMeta: args.attachmentMeta,
       });
       return { messageId: byMid._id, threadId: byMid.threadId, created: false };
@@ -671,13 +722,18 @@ export const upsertSyncedMessageInternal = internalMutation({
       to: args.to,
       cc: args.cc,
       subject: args.subject,
-      textBody: args.textBody,
-      htmlBody: args.htmlBody,
+      textBody: bodies.textBody,
+      htmlBody: bodies.htmlBody,
       sentAt: args.sentAt,
       seen: args.seen,
       answered: args.answered,
       attachmentMeta: args.attachmentMeta,
     });
+
+    if (createdThread) {
+      // Thread row already has messageCount/unreadCount for this first message.
+      return { messageId: messageDocId, threadId: thread._id, created: true };
+    }
 
     const unreadBump = args.seen ? 0 : 1;
     const patch: Partial<Doc<"emailThreads">> = {
@@ -691,6 +747,7 @@ export const upsertSyncedMessageInternal = internalMutation({
       patch.participants = args.participants;
     }
     await ctx.db.patch(thread._id, patch);
+    await bumpMailboxUnread(ctx, args.mailboxId, unreadBump);
 
     return { messageId: messageDocId, threadId: thread._id, created: true };
   },

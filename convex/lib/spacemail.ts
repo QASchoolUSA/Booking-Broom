@@ -16,7 +16,56 @@ export const EMAIL_SYNC_LIMITS = {
   maxAttachmentBytes: 5 * 1024 * 1024,
   /** Max messages to fetch per sync tick. */
   maxPerSyncBatch: 80,
+  /**
+   * Convex docs max ~1 MiB. Keep bodies well under so headers + meta fit.
+   * Measured in JS string length (≈ UTF-16 units); good enough as a soft cap.
+   */
+  maxHtmlChars: 350_000,
+  maxTextChars: 80_000,
 } as const;
+
+const TRUNCATION_NOTE =
+  "\n\n[Message truncated — open in SpaceMail webmail for the full body]";
+
+/** Clamp a body so emailMessages documents stay under Convex's 1 MiB limit. */
+export function clampEmailBody(
+  value: string | undefined | null,
+  maxChars: number
+): string | undefined {
+  if (!value) return undefined;
+  if (value.length <= maxChars) return value;
+  const keep = Math.max(0, maxChars - TRUNCATION_NOTE.length);
+  return value.slice(0, keep) + TRUNCATION_NOTE;
+}
+
+export function clampMessageBodies(args: {
+  textBody?: string;
+  htmlBody?: string;
+}): { textBody?: string; htmlBody?: string } {
+  let textBody = clampEmailBody(
+    args.textBody,
+    EMAIL_SYNC_LIMITS.maxTextChars
+  );
+  let htmlBody = clampEmailBody(
+    args.htmlBody,
+    EMAIL_SYNC_LIMITS.maxHtmlChars
+  );
+
+  // If HTML is still huge somehow, drop it and keep text only.
+  const approx =
+    (textBody?.length ?? 0) + (htmlBody?.length ?? 0);
+  if (approx > 700_000) {
+    htmlBody = undefined;
+    textBody =
+      textBody ??
+      clampEmailBody(
+        args.htmlBody?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "),
+        EMAIL_SYNC_LIMITS.maxTextChars
+      );
+  }
+
+  return { textBody, htmlBody };
+}
 
 export function normalizeEmailAddress(raw: string): string {
   const trimmed = raw.trim().toLowerCase();

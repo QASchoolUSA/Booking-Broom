@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useBookings } from "@/lib/hooks/useBookings";
-import { AppShell } from "@/components/layout/AppShell";
+import { useSites } from "@/lib/hooks/useSites";
+import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import {
@@ -23,20 +23,15 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
-  const { sites, allBookings, connectionState } = useBookings();
+  const { sites, connectionState } = useSites();
 
-  const counts: Record<string, number> = {};
-  allBookings.forEach((b) => {
-    const slug = b.site?.slug;
-    if (slug) counts[slug] = (counts[slug] ?? 0) + 1;
+  useShellPage({
+    connectionState,
+    pageTitle: "Settings",
+    sidebar: <SiteSidebar sites={sites} counts={{}} totalCount={0} />,
   });
 
   return (
-    <AppShell
-      connectionState={connectionState}
-      pageTitle="Settings"
-      sidebar={<SiteSidebar sites={sites} counts={counts} totalCount={allBookings.length} />}
-    >
       <div className="space-y-6">
         <div className="hidden md:block">
           <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
@@ -138,6 +133,5 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-    </AppShell>
   );
 }

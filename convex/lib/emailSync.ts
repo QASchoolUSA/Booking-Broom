@@ -6,6 +6,7 @@ import nodemailer from "nodemailer";
 import {
   EMAIL_SYNC_LIMITS,
   SPACEMAIL_DEFAULTS,
+  clampMessageBodies,
   computeThreadKey,
   normalizeEmailAddress,
   normalizeMessageId,
@@ -111,12 +112,16 @@ export function parseMailToInbound(
   const to = addressList(parsed.to);
   const cc = addressList(parsed.cc);
   const subject = parsed.subject?.trim() || "(no subject)";
-  const textBody = parsed.text?.trim() || undefined;
-  const htmlBody = parsed.html
+  const rawText = parsed.text?.trim() || undefined;
+  const rawHtml = parsed.html
     ? typeof parsed.html === "string"
       ? parsed.html
       : undefined
     : undefined;
+  const { textBody, htmlBody } = clampMessageBodies({
+    textBody: rawText,
+    htmlBody: rawHtml,
+  });
   const sentAt = parsed.date?.getTime() ?? Date.now();
   const seen = flags.has("\\Seen") || flags.has("Seen");
   const answered = flags.has("\\Answered") || flags.has("Answered");
@@ -349,6 +354,9 @@ export async function markImapSeen(
 export async function sendSmtpMail(args: {
   conn: MailboxConn;
   fromName?: string;
+  /** Override From header (e.g. site address while auth uses shared SMTP). */
+  from?: string;
+  replyTo?: string;
   to: string[];
   cc?: string[];
   subject: string;
@@ -368,14 +376,17 @@ export async function sendSmtpMail(args: {
     },
   });
 
-  const from = args.fromName
-    ? `${args.fromName} <${args.conn.email}>`
-    : args.conn.email;
+  const from =
+    args.from ??
+    (args.fromName
+      ? `${args.fromName} <${args.conn.email}>`
+      : args.conn.email);
 
   const info = await transport.sendMail({
     from,
     to: args.to.join(", "),
     cc: args.cc?.length ? args.cc.join(", ") : undefined,
+    replyTo: args.replyTo,
     subject: args.subject,
     text: args.text,
     html: args.html,

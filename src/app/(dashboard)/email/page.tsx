@@ -5,17 +5,17 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import { Plus } from "@phosphor-icons/react";
-import { useBookings } from "@/lib/hooks/useBookings";
+import { useConnectionState } from "@/lib/hooks/useConnectionState";
 import {
   useChatVisualViewport,
   useIsMobileMd,
 } from "@/lib/hooks/useVisualViewportHeight";
-import { AppShell } from "@/components/layout/AppShell";
+import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { MailboxSidebar } from "@/components/email/MailboxSidebar";
 import { MailboxFilterChips } from "@/components/email/MailboxFilterChips";
 import { EmailSyncBanner } from "@/components/email/EmailSyncBanner";
 import { EmailThreadList } from "@/components/email/EmailThreadList";
-import { EmailThreadView } from "@/components/email/EmailThreadView";
+import { EmailMessageSkeleton } from "@/components/loading/skeletons";
 import { ComposeEmailSheet } from "@/components/email/ComposeEmailSheet";
 import { ConnectMailboxDialog } from "@/components/email/ConnectMailboxDialog";
 import type {
@@ -26,6 +26,22 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import dynamic from "next/dynamic";
+
+const EmailThreadView = dynamic(
+  () =>
+    import("@/components/email/EmailThreadView").then((m) => ({
+      default: m.EmailThreadView,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-0 flex-1 flex-col p-4">
+        <EmailMessageSkeleton />
+      </div>
+    ),
+  }
+);
 
 const MAILBOX_STORAGE_KEY = "bb.email.selectedMailbox";
 
@@ -55,7 +71,7 @@ function pickDefaultMailbox(mailboxes: EmailMailbox[]): string | null {
 }
 
 export default function EmailPage() {
-  const { connectionState } = useBookings();
+  const connectionState = useConnectionState();
   const { isAuthenticated } = useConvexAuth();
   const [selectedMailboxId, setSelectedMailboxId] = useState<string | null>(
     null
@@ -128,6 +144,9 @@ export default function EmailPage() {
   const messages = messagesRaw as EmailMessage[] | undefined;
 
   const showInbox = mailboxes.length > 0;
+  const threadsLoading = isAuthenticated && selectedMailboxId
+    ? threadsRaw === undefined
+    : false;
   const mobileInThread = Boolean(selectedThreadId);
   const iosChatShell = isMobile && mobileInThread;
   const siteLabel =
@@ -135,22 +154,24 @@ export default function EmailPage() {
 
   useChatVisualViewport(iosChatShell);
 
+  useShellPage({
+    connectionState,
+    pageTitle: siteLabel,
+    contentWidth: "full",
+    hideMobileNav: mobileInThread,
+    hideMobileHeader: mobileInThread,
+    hideMobileNavPad: true,
+    sidebar: (
+      <MailboxSidebar
+        mailboxes={mailboxes}
+        selectedMailboxId={selectedMailboxId}
+        onSelect={selectMailbox}
+      />
+    ),
+  });
+
   return (
-    <AppShell
-      connectionState={connectionState}
-      pageTitle={siteLabel}
-      contentWidth="full"
-      hideMobileNav={mobileInThread}
-      hideMobileHeader={mobileInThread}
-      hideMobileNavPad
-      sidebar={
-        <MailboxSidebar
-          mailboxes={mailboxes}
-          selectedMailboxId={selectedMailboxId}
-          onSelect={selectMailbox}
-        />
-      }
-    >
+    <>
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="hidden shrink-0 space-y-3 border-b border-border/60 px-6 py-4 md:block lg:px-8">
           <div className="flex items-start justify-between gap-3">
@@ -269,6 +290,7 @@ export default function EmailPage() {
                 <EmailThreadList
                   threads={threads}
                   selectedId={selectedThreadId}
+                  loading={threadsLoading}
                   siteName={activeMailbox?.site_name || activeMailbox?.email}
                   onSelect={(thread) => setSelectedThreadId(thread.id)}
                 />
@@ -325,6 +347,6 @@ export default function EmailPage() {
           selectMailbox(mailboxId);
         }}
       />
-    </AppShell>
+    </>
   );
 }

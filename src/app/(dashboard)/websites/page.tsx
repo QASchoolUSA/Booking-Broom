@@ -3,8 +3,8 @@
 import { useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { api } from "convex/_generated/api";
-import { useBookings } from "@/lib/hooks/useBookings";
-import { AppShell } from "@/components/layout/AppShell";
+import { useSites } from "@/lib/hooks/useSites";
+import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { SiteHealthSyncBanner } from "@/components/websites/SiteHealthSyncBanner";
 import { SitesOverview } from "@/components/websites/SitesOverview";
@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { SiteOpsRow } from "@/lib/types";
 
 export default function WebsitesPage() {
-  const { sites, allBookings, connectionState } = useBookings();
+  const { sites, connectionState } = useSites();
   const { isAuthenticated } = useConvexAuth();
 
   const syncState = useQuery(
@@ -28,24 +28,13 @@ export default function WebsitesPage() {
   const loading = isAuthenticated && rowsRaw === undefined;
   const hasStatus = rows.some((r) => r.health != null);
 
-  const counts: Record<string, number> = {};
-  allBookings.forEach((b) => {
-    const slug = b.site?.slug;
-    if (slug) counts[slug] = (counts[slug] ?? 0) + 1;
+  useShellPage({
+    connectionState,
+    pageTitle: "Sites",
+    sidebar: <SiteSidebar sites={sites} counts={{}} totalCount={0} />,
   });
 
   return (
-    <AppShell
-      connectionState={connectionState}
-      pageTitle="Sites"
-      sidebar={
-        <SiteSidebar
-          sites={sites}
-          counts={counts}
-          totalCount={allBookings.length}
-        />
-      }
-    >
       <div className="space-y-6">
         <div className="hidden md:block">
           <h2 className="text-2xl font-bold tracking-tight">Sites</h2>
@@ -77,6 +66,5 @@ export default function WebsitesPage() {
           </div>
         )}
       </div>
-    </AppShell>
   );
 }

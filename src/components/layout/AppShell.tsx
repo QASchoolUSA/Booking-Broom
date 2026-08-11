@@ -191,6 +191,7 @@ function SidebarChrome({
   onSignOut,
   onToggleCollapse,
 }: SidebarChromeProps) {
+  const router = useRouter();
   const compact = mode === "collapsed";
 
   return (
@@ -278,6 +279,7 @@ function SidebarChrome({
                 key={href}
                 href={href}
                 title={label}
+                onMouseEnter={() => router.prefetch(href)}
                 className={cn(
                   "relative flex min-h-10 items-center rounded-lg text-sm font-medium transition-all duration-150",
                   compact

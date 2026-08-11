@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import type { SmsSyncState } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Card,
@@ -182,8 +183,11 @@ export function SmsSyncBanner({
       >
         <ArrowsClockwise
           size={16}
-          className={busy === "messages" ? "animate-spin" : undefined}
+          className={busy === "messages" ? "hidden" : undefined}
         />
+        {busy === "messages" && (
+          <Spinner className="size-4" label="Syncing messages" />
+        )}
         <span className={compact ? "sr-only sm:not-sr-only" : undefined}>
           {busy === "messages" ? "Syncing…" : "Messages"}
         </span>

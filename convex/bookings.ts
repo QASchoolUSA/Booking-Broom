@@ -103,7 +103,7 @@ export const list = query({
       .query("bookings")
       .withIndex("by_created")
       .order("desc")
-      .collect();
+      .take(200);
 
     return bookings.map((booking) =>
       mapBooking(booking, siteMap.get(booking.siteId))

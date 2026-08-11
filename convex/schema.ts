@@ -467,6 +467,8 @@ export default defineSchema({
     lastUid: v.optional(v.number()),
     lastSyncAt: v.optional(v.number()),
     lastSyncError: v.optional(v.string()),
+    /** Denormalized sum of thread unreadCounts — kept in sync by mutations. */
+    unreadCount: v.optional(v.number()),
     status: v.union(
       v.literal("connected"),
       v.literal("error"),
