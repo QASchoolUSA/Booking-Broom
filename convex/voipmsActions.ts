@@ -106,7 +106,7 @@ export const syncMessagesInternal = internalAction({
       const storedDids = await ctx.runQuery(internal.sms.listDidsInternal, {});
       const didList =
         storedDids.length > 0
-          ? storedDids.map((d) => d.did)
+          ? storedDids.map((d: { did: string }) => d.did)
           : (await listDids()).map((d) => d.did);
 
       let upserted = 0;

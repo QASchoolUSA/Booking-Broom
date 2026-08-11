@@ -451,4 +451,87 @@ export default defineSchema({
     note: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_did_contact", ["did", "contact"]),
+
+  /** Per-site SpaceMail mailbox (IMAP/SMTP credentials encrypted at rest). */
+  emailMailboxes: defineTable({
+    siteId: v.id("sites"),
+    email: v.string(),
+    displayName: v.optional(v.string()),
+    imapHost: v.string(),
+    imapPort: v.number(),
+    smtpHost: v.string(),
+    smtpPort: v.number(),
+    passwordCiphertext: v.string(),
+    passwordIv: v.string(),
+    uidValidity: v.optional(v.number()),
+    lastUid: v.optional(v.number()),
+    lastSyncAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+    status: v.union(
+      v.literal("connected"),
+      v.literal("error"),
+      v.literal("disabled")
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_site", ["siteId"])
+    .index("by_email", ["email"])
+    .index("by_status", ["status"]),
+
+  /** Conversation thread within a mailbox. */
+  emailThreads: defineTable({
+    mailboxId: v.id("emailMailboxes"),
+    threadKey: v.string(),
+    subject: v.string(),
+    participants: v.array(v.string()),
+    lastMessageAt: v.number(),
+    lastSnippet: v.string(),
+    unreadCount: v.number(),
+    messageCount: v.number(),
+  })
+    .index("by_mailbox_and_lastMessageAt", ["mailboxId", "lastMessageAt"])
+    .index("by_mailbox_and_threadKey", ["mailboxId", "threadKey"]),
+
+  /** Individual email messages synced from IMAP or sent via SMTP. */
+  emailMessages: defineTable({
+    mailboxId: v.id("emailMailboxes"),
+    threadId: v.id("emailThreads"),
+    uid: v.number(),
+    messageId: v.string(),
+    inReplyTo: v.optional(v.string()),
+    references: v.optional(v.array(v.string())),
+    direction: v.union(v.literal("in"), v.literal("out")),
+    from: v.string(),
+    to: v.array(v.string()),
+    cc: v.optional(v.array(v.string())),
+    subject: v.string(),
+    textBody: v.optional(v.string()),
+    htmlBody: v.optional(v.string()),
+    sentAt: v.number(),
+    seen: v.boolean(),
+    answered: v.optional(v.boolean()),
+    attachmentMeta: v.optional(
+      v.array(
+        v.object({
+          filename: v.string(),
+          size: v.number(),
+          contentType: v.string(),
+          storageId: v.optional(v.id("_storage")),
+          skipped: v.optional(v.boolean()),
+        })
+      )
+    ),
+  })
+    .index("by_mailbox_and_sentAt", ["mailboxId", "sentAt"])
+    .index("by_mailbox_and_messageId", ["mailboxId", "messageId"])
+    .index("by_mailbox_and_uid", ["mailboxId", "uid"])
+    .index("by_thread_and_sentAt", ["threadId", "sentAt"]),
+
+  /** Singleton round-robin cursor for cron IMAP sync. */
+  emailSyncState: defineTable({
+    lastSyncAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+    /** Index into sorted connected mailboxes for round-robin. */
+    nextMailboxIndex: v.optional(v.number()),
+  }),
 });

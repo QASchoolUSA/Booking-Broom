@@ -404,6 +404,85 @@ export interface SmsSyncState {
   last_did_sync_at: string | null;
 }
 
+export type EmailMailboxStatus = "connected" | "error" | "disabled";
+
+export interface EmailMailbox {
+  id: string;
+  site_id: string;
+  site_name: string | null;
+  site_slug: string | null;
+  site_accent: string | null;
+  email: string;
+  display_name: string | null;
+  imap_host: string;
+  imap_port: number;
+  smtp_host: string;
+  smtp_port: number;
+  status: EmailMailboxStatus;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+  created_at: string;
+}
+
+export interface EmailThread {
+  id: string;
+  mailbox_id: string;
+  thread_key: string;
+  subject: string;
+  participants: string[];
+  last_message_at: string;
+  last_snippet: string;
+  unread_count: number;
+  message_count: number;
+  mailbox_email: string | null;
+  site_name: string | null;
+  site_slug: string | null;
+}
+
+export interface EmailAttachment {
+  filename: string;
+  size: number;
+  content_type: string;
+  storage_id: string | null;
+  skipped: boolean;
+}
+
+export interface EmailMessage {
+  id: string;
+  mailbox_id: string;
+  thread_id: string;
+  uid: number;
+  message_id: string;
+  in_reply_to: string | null;
+  references: string[];
+  direction: "in" | "out";
+  from: string;
+  to: string[];
+  cc: string[];
+  subject: string;
+  text_body: string | null;
+  html_body: string | null;
+  sent_at: string;
+  seen: boolean;
+  answered: boolean;
+  attachments: EmailAttachment[];
+}
+
+export interface EmailSyncState {
+  id: string;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+  next_mailbox_index: number;
+}
+
+export interface EmailSiteForConnect {
+  id: string;
+  slug: string;
+  name: string;
+  contact_email: string | null;
+  accent_color: string;
+}
+
 export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   new: "New",
   confirmed: "Confirmed",

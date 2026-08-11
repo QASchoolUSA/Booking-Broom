@@ -12,6 +12,7 @@ import {
   ChartLine,
   ChatCircle,
   CurrencyDollar,
+  EnvelopeSimple,
   Gauge,
   GearSix,
   Globe,
@@ -20,6 +21,8 @@ import {
   WifiHigh,
   WifiSlash,
 } from "@phosphor-icons/react";
+import { useConvexAuth, useQuery } from "convex/react";
+import { api } from "convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -75,6 +78,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Messages",
     icon: ChatCircle,
     match: (p) => p === "/messages" || p.startsWith("/messages/"),
+  },
+  {
+    href: "/email",
+    label: "Email",
+    icon: EnvelopeSimple,
+    match: (p) => p === "/email" || p.startsWith("/email/"),
   },
   {
     href: "/websites",
@@ -164,6 +173,7 @@ interface SidebarChromeProps {
   connectionLabel: string;
   isLive: boolean;
   pathname: string;
+  emailUnread?: number;
   onRefresh?: () => void;
   onSignOut: () => void;
   onToggleCollapse?: () => void;
@@ -176,6 +186,7 @@ function SidebarChrome({
   connectionLabel,
   isLive,
   pathname,
+  emailUnread = 0,
   onRefresh,
   onSignOut,
   onToggleCollapse,
@@ -261,6 +272,7 @@ function SidebarChrome({
         <nav className={cn("mb-5 space-y-1", compact && "mb-3")}>
           {NAV_ITEMS.map(({ href, label, icon: Icon, match }) => {
             const isActive = match(pathname);
+            const showBadge = href === "/email" && emailUnread > 0;
             return (
               <Link
                 key={href}
@@ -279,7 +291,7 @@ function SidebarChrome({
                 {isActive && !compact && (
                   <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />
                 )}
-                <span className="flex size-[18px] shrink-0 items-center justify-center">
+                <span className="relative flex size-[18px] shrink-0 items-center justify-center">
                   <Icon
                     size={18}
                     weight={isActive ? "duotone" : "regular"}
@@ -288,8 +300,22 @@ function SidebarChrome({
                       isActive ? "text-primary" : "text-muted-foreground"
                     )}
                   />
+                  {showBadge && compact && (
+                    <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                      {emailUnread > 99 ? "99+" : emailUnread}
+                    </span>
+                  )}
                 </span>
-                {!compact && label}
+                {!compact && (
+                  <>
+                    <span className="flex-1 truncate">{label}</span>
+                    {showBadge && (
+                      <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary-foreground">
+                        {emailUnread > 99 ? "99+" : emailUnread}
+                      </span>
+                    )}
+                  </>
+                )}
               </Link>
             );
           })}
@@ -348,6 +374,13 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const { signOut } = useAuthActions();
+  const { isAuthenticated } = useConvexAuth();
+  const emailUnreadRaw = useQuery(
+    api.email.countUnread,
+    isAuthenticated ? {} : "skip"
+  );
+  const emailUnread =
+    typeof emailUnreadRaw === "number" ? emailUnreadRaw : 0;
 
   const collapsed = useSyncExternalStore(
     subscribeSidebarCollapsed,
@@ -409,6 +442,7 @@ export function AppShell({
             connectionLabel={connectionLabel}
             isLive={isLive}
             pathname={pathname}
+            emailUnread={emailUnread}
             onRefresh={onRefresh}
             onSignOut={handleSignOut}
             onToggleCollapse={toggleCollapsed}
@@ -443,6 +477,7 @@ export function AppShell({
               connectionLabel={connectionLabel}
               isLive={isLive}
               pathname={pathname}
+              emailUnread={emailUnread}
               onRefresh={onRefresh}
               onSignOut={handleSignOut}
             />
@@ -579,6 +614,7 @@ export function AppShell({
           <div className="mx-auto flex max-w-lg items-stretch overflow-x-auto px-2 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {NAV_ITEMS.map(({ href, label, icon: Icon, match }) => {
               const isActive = match(pathname);
+              const showBadge = href === "/email" && emailUnread > 0;
               return (
                 <Link
                   key={href}
@@ -591,7 +627,14 @@ export function AppShell({
                   {isActive && (
                     <span className="absolute inset-x-3 top-0 h-0.5 rounded-full bg-primary" />
                   )}
-                  <Icon size={22} weight={isActive ? "duotone" : "regular"} />
+                  <span className="relative">
+                    <Icon size={22} weight={isActive ? "duotone" : "regular"} />
+                    {showBadge && (
+                      <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                        {emailUnread > 99 ? "99+" : emailUnread}
+                      </span>
+                    )}
+                  </span>
                   {label}
                 </Link>
               );

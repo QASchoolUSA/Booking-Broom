@@ -48,4 +48,11 @@ crons.interval(
   internal.voipmsActions.syncAllInternal
 );
 
+/** SpaceMail IMAP: one mailbox per tick (round-robin). */
+crons.interval(
+  "sync SpaceMail inbox",
+  { minutes: 5 },
+  internal.emailActions.syncNextMailboxInternal
+);
+
 export default crons;

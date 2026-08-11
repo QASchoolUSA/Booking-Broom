@@ -1,3 +1,7 @@
 {
-  "functions": "convex/"
+  "functions": "convex/",
+  "node": {
+    "externalPackages": ["imapflow", "mailparser", "nodemailer"],
+    "nodeVersion": "22"
+  }
 }
