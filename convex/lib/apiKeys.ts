@@ -82,6 +82,7 @@ export const SEED_SITES = [
     domain: "cleaningkissimmee.com",
     accentColor: "#0f8a7d",
     contactEmail: "hello@cleaningkissimmee.com",
+    phoneNumber: "(689) 288-3488",
     apiKeyHash:
       "2e48804d991b9f6dbc64e8433053285ac89357cb418b14b351f91b90e13098ef",
   },

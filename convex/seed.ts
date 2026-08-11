@@ -10,6 +10,9 @@ function siteFields(site: (typeof SEED_SITES)[number], now: number) {
     accentColor: site.accentColor,
     contactEmail: site.contactEmail,
     apiKeyHash: site.apiKeyHash,
+    ...("phoneNumber" in site && site.phoneNumber
+      ? { phoneNumber: site.phoneNumber }
+      : {}),
     createdAt: now,
   };
 }
@@ -53,7 +56,8 @@ export const runSeed = mutation({
 
 /**
  * Insert any SEED_SITES entries missing from the database, and backfill
- * contactEmail / name / domain / accentColor on existing rows (safe to re-run).
+ * contactEmail / name / domain / accentColor / phoneNumber on existing rows
+ * (safe to re-run).
  */
 export const syncSeedSites = internalMutation({
   args: {},
@@ -80,6 +84,7 @@ export const syncSeedSites = internalMutation({
         accentColor?: string;
         contactEmail?: string;
         apiKeyHash?: string;
+        phoneNumber?: string;
       } = {};
 
       if (existing.name !== site.name) patch.name = site.name;
@@ -93,6 +98,13 @@ export const syncSeedSites = internalMutation({
       // Lets a key rotation take effect by editing SEED_SITES and re-running.
       if (existing.apiKeyHash !== site.apiKeyHash) {
         patch.apiKeyHash = site.apiKeyHash;
+      }
+      if (
+        "phoneNumber" in site &&
+        site.phoneNumber &&
+        existing.phoneNumber !== site.phoneNumber
+      ) {
+        patch.phoneNumber = site.phoneNumber;
       }
 
       if (Object.keys(patch).length > 0) {
