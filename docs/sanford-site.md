@@ -40,6 +40,8 @@ Booking confirmations are sent by **Booking Broom** after a successful `/api/boo
 
 Connect the Sanford SpaceMail mailbox in Booking Broom (**Email → Connect**), or ensure Convex has shared `SMTP_*` fallback env vars.
 
+Sanford’s booking payload includes property extras (`condition`, `occupants`, `last_cleaned`, `excluded_areas`). Booking Broom’s email action must accept those fields — older validators rejected them and skipped customer email while still saving the booking.
+
 When Booking Broom sends mail for a Sanford booking:
 - **From / Reply-To** — `Sanford Cleaning <info@sanfordcleaning.com>` (or the connected mailbox)
 - **Admin notification** — `info@sanfordcleaning.com` (or the connected mailbox)

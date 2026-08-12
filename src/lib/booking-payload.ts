@@ -100,3 +100,69 @@ export function normalizeAttribution(
 export function normalizeIntent(input: unknown): "quote" | "book" | undefined {
   return input === "quote" || input === "book" ? input : undefined;
 }
+
+/**
+ * Pick only the snake_case property fields the email action validator accepts.
+ * Extra site fields must not cause ArgumentValidationError (which skips email).
+ */
+export function sanitizeEmailProperty(
+  input: CreateBookingPropertyPayload | undefined
+) {
+  if (!input || typeof input !== "object") return undefined;
+
+  const excludedAreas = Array.isArray(input.excluded_areas)
+    ? input.excluded_areas
+        .map((area) => str(area))
+        .filter((area): area is string => Boolean(area))
+        .slice(0, MAX_EXCLUDED_AREAS)
+    : undefined;
+
+  return compact({
+    bedrooms: num(input.bedrooms),
+    bathrooms: num(input.bathrooms),
+    square_feet: num(input.square_feet),
+    size_label: str(input.size_label),
+    home_type: str(input.home_type),
+    condition: str(input.condition),
+    occupants: num(input.occupants),
+    last_cleaned: str(input.last_cleaned),
+    excluded_areas: excludedAreas?.length ? excludedAreas : undefined,
+  });
+}
+
+/** Same idea for quotes — keep only fields the email action knows about. */
+export function sanitizeEmailQuote(
+  input: CreateBookingQuotePayload | undefined
+) {
+  if (!input || typeof input !== "object") return undefined;
+
+  type EmailAddOn = { label: string; price?: number; quantity?: number };
+
+  const addOns = Array.isArray(input.add_ons)
+    ? input.add_ons
+        .map((addOn) => {
+          const label = str(addOn?.label);
+          if (!label) return undefined;
+          return compact({
+            label,
+            price: num(addOn?.price),
+            quantity: num(addOn?.quantity),
+          }) as EmailAddOn;
+        })
+        .filter((addOn): addOn is EmailAddOn => Boolean(addOn))
+        .slice(0, MAX_ADD_ONS)
+    : undefined;
+
+  return compact({
+    estimate: num(input.estimate),
+    estimate_low: num(input.estimate_low),
+    estimate_high: num(input.estimate_high),
+    recurring_estimate: num(input.recurring_estimate),
+    currency: str(input.currency),
+    service_level: str(input.service_level),
+    frequency: str(input.frequency),
+    add_ons: addOns?.length ? addOns : undefined,
+    payment_terms: str(input.payment_terms),
+    internal: input.internal === true ? true : undefined,
+  });
+}

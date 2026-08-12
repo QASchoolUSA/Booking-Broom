@@ -601,6 +601,7 @@ export const sendNew = action({
   },
 });
 
+/** Snake_case property shape as sent by site booking APIs (must accept Sanford extras). */
 const bookingPropertyValidator = v.optional(
   v.object({
     bedrooms: v.optional(v.number()),
@@ -608,6 +609,10 @@ const bookingPropertyValidator = v.optional(
     square_feet: v.optional(v.number()),
     size_label: v.optional(v.string()),
     home_type: v.optional(v.string()),
+    condition: v.optional(v.string()),
+    occupants: v.optional(v.number()),
+    last_cleaned: v.optional(v.string()),
+    excluded_areas: v.optional(v.array(v.string())),
   })
 );
 

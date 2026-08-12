@@ -11,6 +11,10 @@ export type BookingEmailProperty = {
   square_feet?: number;
   size_label?: string;
   home_type?: string;
+  condition?: string;
+  occupants?: number;
+  last_cleaned?: string;
+  excluded_areas?: string[];
 };
 
 export type BookingEmailQuoteAddOn = {
@@ -72,6 +76,14 @@ function formatPropertyBlock(
       ? `${property.square_feet.toLocaleString("en-US")} sq ft`
       : property.size_label ?? null,
     property.home_type ?? null,
+    property.condition ? `Condition: ${property.condition}` : null,
+    property.occupants !== undefined
+      ? `${property.occupants} occupant${property.occupants === 1 ? "" : "s"}`
+      : null,
+    property.last_cleaned ? `Last cleaned: ${property.last_cleaned}` : null,
+    property.excluded_areas?.length
+      ? `Excluded: ${property.excluded_areas.join(", ")}`
+      : null,
   ].filter(Boolean);
 
   return parts.length ? `Property: ${parts.join(" · ")}` : null;

@@ -8,6 +8,8 @@ import {
   normalizeIntent,
   normalizeProperty,
   normalizeQuote,
+  sanitizeEmailProperty,
+  sanitizeEmailQuote,
 } from "@/lib/booking-payload";
 import type { CreateBookingPayload } from "@/lib/types";
 
@@ -58,6 +60,8 @@ export async function POST(request: Request) {
     });
 
     try {
+      // Strip unknown fields so site-specific property extras (e.g. Sanford
+      // condition/occupants) never fail Convex arg validation and skip email.
       const emailResult = await client.action(
         api.emailActions.sendBookingEmails,
         {
@@ -70,8 +74,8 @@ export async function POST(request: Request) {
           preferred_date: body.preferred_date,
           preferred_time: body.preferred_time,
           notes: body.notes,
-          property: body.property,
-          quote: body.quote,
+          property: sanitizeEmailProperty(body.property),
+          quote: sanitizeEmailQuote(body.quote),
         }
       );
       if (emailResult.errors?.length) {
