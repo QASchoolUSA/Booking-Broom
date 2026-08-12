@@ -20,6 +20,7 @@ import type * as gscActions from "../gscActions.js";
 import type * as http from "../http.js";
 import type * as lib_apiKeys from "../lib/apiKeys.js";
 import type * as lib_bookingEmailTemplates from "../lib/bookingEmailTemplates.js";
+import type * as lib_bookingSmsTemplates from "../lib/bookingSmsTemplates.js";
 import type * as lib_emailSync from "../lib/emailSync.js";
 import type * as lib_gscMatch from "../lib/gscMatch.js";
 import type * as lib_phone from "../lib/phone.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/apiKeys": typeof lib_apiKeys;
   "lib/bookingEmailTemplates": typeof lib_bookingEmailTemplates;
+  "lib/bookingSmsTemplates": typeof lib_bookingSmsTemplates;
   "lib/emailSync": typeof lib_emailSync;
   "lib/gscMatch": typeof lib_gscMatch;
   "lib/phone": typeof lib_phone;
