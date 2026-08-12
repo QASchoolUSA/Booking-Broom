@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { normalizeUsDigits, smsPartyDigits } from "./lib/phone";
+import { buildCustomerBookingSms, BOOKING_SMS_MAX } from "./lib/bookingSmsTemplates";
 import {
   buildWebhookUrl,
   defaultSyncDateRange,
@@ -301,6 +302,92 @@ export const sendMessage = action({
     });
 
     return { ok: true, voipmsId };
+  },
+});
+
+/**
+ * Customer booking confirmation SMS (one segment, ≤160 chars).
+ * Public so /api/bookings can call it without a manager session.
+ * Skips quietly when phone/DID/Voip.ms are unavailable — never fails the booking.
+ */
+export const sendBookingSms = action({
+  args: {
+    site_slug: v.string(),
+    customer_name: v.string(),
+    phone: v.optional(v.string()),
+    service_type: v.optional(v.string()),
+    preferred_date: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ sent: boolean; skipped?: string; voipmsId?: string }> => {
+    if (!args.phone?.trim()) {
+      return { sent: false, skipped: "no_phone" };
+    }
+
+    const contact = normalizeUsDigits(args.phone);
+    if (!contact) {
+      return { sent: false, skipped: "invalid_phone" };
+    }
+
+    const site = await ctx.runQuery(internal.sites.getBySlug, {
+      slug: args.site_slug,
+    });
+    if (!site) {
+      return { sent: false, skipped: "unknown_site" };
+    }
+
+    const didDoc = await ctx.runQuery(internal.sms.findDidForSiteInternal, {
+      siteId: site._id,
+    });
+    if (!didDoc) {
+      return { sent: false, skipped: "no_site_did" };
+    }
+
+    const did = normalizeUsDigits(didDoc.did);
+    if (!did) {
+      return { sent: false, skipped: "invalid_did" };
+    }
+
+    const message = buildCustomerBookingSms({
+      siteName: site.name,
+      customerName: args.customer_name,
+      serviceType: args.service_type,
+      preferredDate: args.preferred_date,
+    });
+    if (!message || message.length > BOOKING_SMS_MAX) {
+      return { sent: false, skipped: "message_too_long" };
+    }
+
+    try {
+      const { smsId } = await sendSms({ did, dst: contact, message });
+      const voipmsId = String(smsId);
+      const sentAt = Date.now();
+
+      await ctx.runMutation(internal.sms.upsertMessageInternal, {
+        voipmsId,
+        did,
+        contact,
+        direction: "out",
+        type: "sms",
+        body: message,
+        sentAt,
+        status: "sent",
+      });
+
+      return { sent: true, voipmsId };
+    } catch (err) {
+      console.error(
+        "Booking SMS failed:",
+        err instanceof Error ? err.message : err
+      );
+      return {
+        sent: false,
+        skipped:
+          err instanceof Error ? err.message : "voipms_send_failed",
+      };
+    }
   },
 });
 

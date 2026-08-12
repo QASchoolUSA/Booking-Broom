@@ -90,6 +90,21 @@ export async function POST(request: Request) {
     }
 
     try {
+      const smsResult = await client.action(api.voipmsActions.sendBookingSms, {
+        site_slug: body.site_slug,
+        customer_name: body.customer_name,
+        phone: body.phone,
+        service_type: body.service_type,
+        preferred_date: body.preferred_date,
+      });
+      if (!smsResult.sent && smsResult.skipped) {
+        console.warn("Booking SMS skipped:", smsResult.skipped);
+      }
+    } catch (error) {
+      console.error("Failed to send booking SMS:", error);
+    }
+
+    try {
       const pushResult = await client.action(api.pushActions.notifyNewBooking, {
         siteSlug: body.site_slug,
         customerName: body.customer_name,

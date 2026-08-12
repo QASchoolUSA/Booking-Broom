@@ -415,7 +415,8 @@ export default defineSchema({
     lastSyncedAt: v.number(),
   })
     .index("by_did", ["did"])
-    .index("by_sub_account", ["subAccount"]),
+    .index("by_sub_account", ["subAccount"])
+    .index("by_site", ["siteId"]),
 
   /** Inbound/outbound SMS and MMS synced from Voip.ms or received via webhook. */
   smsMessages: defineTable({

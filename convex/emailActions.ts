@@ -747,7 +747,11 @@ export const sendBookingEmails = action({
       (fromHeader.match(/<([^>]+)>/)?.[1] ?? conn.email);
 
     if (payload.email && isValidEmail(payload.email)) {
-      const { subject, text } = buildCustomerBookingEmail(siteName, payload);
+      const { subject, text, html } = buildCustomerBookingEmail(
+        siteName,
+        payload,
+        { accentColor: site?.accentColor }
+      );
       try {
         await sendSmtpMail({
           conn,
@@ -757,6 +761,7 @@ export const sendBookingEmails = action({
           to: [payload.email.trim()],
           subject,
           text,
+          html,
         });
       } catch (err) {
         errors.push(
@@ -766,7 +771,11 @@ export const sendBookingEmails = action({
     }
 
     if (adminTo) {
-      const { subject, text } = buildAdminBookingEmail(siteName, payload);
+      const { subject, text, html } = buildAdminBookingEmail(
+        siteName,
+        payload,
+        { accentColor: site?.accentColor }
+      );
       try {
         await sendSmtpMail({
           conn,
@@ -779,6 +788,7 @@ export const sendBookingEmails = action({
           to: [adminTo],
           subject,
           text,
+          html,
         });
       } catch (err) {
         errors.push(

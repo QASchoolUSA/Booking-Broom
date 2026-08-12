@@ -357,6 +357,8 @@ You can also paste that URL manually under each DID’s **SMS/MMS URL Callback**
 
 **Limits:** Voip.ms API sending is capped (~100 SMS/day by default; ask support to raise). Local anonymous Convex needs a publicly reachable `.convex.site` URL (or tunnel) for webhooks; until then, rely on **Sync messages**.
 
+**Booking confirmations:** After a public booking is created, Booking Broom sends a customer confirmation **email** (HTML + plain text) and, when the site has a linked SMS-enabled DID and the customer provided a valid US phone, a single ≤160-character **SMS**. Admin SMS is not sent (quota). Sync DIDs so `sites.phoneNumber` matches a Voip.ms line.
+
 ### Professional SMS rewrite (Groq)
 
 The Messages composer has a **wand** button that rewrites your draft into a clearer, client-ready SMS via [Groq](https://console.groq.com)’s free API (`llama-3.3-70b-versatile`). No paid membership required.

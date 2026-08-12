@@ -351,6 +351,18 @@ export const listDidsInternal = internalQuery({
   },
 });
 
+/** First SMS-enabled DID linked to a site (for booking confirmations). */
+export const findDidForSiteInternal = internalQuery({
+  args: { siteId: v.id("sites") },
+  handler: async (ctx, args) => {
+    const dids = await ctx.db
+      .query("smsDids")
+      .withIndex("by_site", (q) => q.eq("siteId", args.siteId))
+      .collect();
+    return dids.find((did) => did.smsEnabled) ?? dids[0] ?? null;
+  },
+});
+
 export const listSitesForPhoneMatchInternal = internalQuery({
   args: {},
   handler: async (ctx) => {
