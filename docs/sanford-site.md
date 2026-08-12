@@ -36,9 +36,11 @@ Add them to Vercel `ALLOWED_ORIGINS` if you override the default list.
 
 ## Email notifications
 
-Sanford Cleaning continues to send its own SMTP booking emails from `/api/emails/confirm-booking`.
-Booking Broom can also send emails when its SMTP is configured — disable one side to avoid duplicates.
+Booking confirmations are sent by **Booking Broom** after a successful `/api/bookings` create (not from the Sanford Cloudflare Worker).
+
+Connect the Sanford SpaceMail mailbox in Booking Broom (**Email → Connect**), or ensure Convex has shared `SMTP_*` fallback env vars.
 
 When Booking Broom sends mail for a Sanford booking:
-- **From / Reply-To** — `Sanford Cleaning <info@sanfordcleaning.com>`
-- **Admin notification** — `info@sanfordcleaning.com`
+- **From / Reply-To** — `Sanford Cleaning <info@sanfordcleaning.com>` (or the connected mailbox)
+- **Admin notification** — `info@sanfordcleaning.com` (or the connected mailbox)
+- **Customer** — confirmation to the address submitted on the booking form
