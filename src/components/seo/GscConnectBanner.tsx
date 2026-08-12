@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import {
   ArrowsClockwise,
+  Globe,
   LinkBreak,
   LinkSimple,
   WarningCircle,
@@ -29,10 +30,11 @@ interface GscConnectBannerProps {
 export function GscConnectBanner({ connection }: GscConnectBannerProps) {
   const getConnectUrl = useAction(api.gscActions.getConnectUrl);
   const syncNow = useAction(api.gscActions.syncNow);
+  const submitSitemaps = useAction(api.gscActions.submitSitemaps);
   const disconnect = useMutation(api.gsc.disconnect);
-  const [busy, setBusy] = useState<"connect" | "sync" | "disconnect" | null>(
-    null
-  );
+  const [busy, setBusy] = useState<
+    "connect" | "sync" | "submit" | "disconnect" | null
+  >(null);
 
   const handleConnect = async () => {
     setBusy("connect");
@@ -54,6 +56,38 @@ export function GscConnectBanner({ connection }: GscConnectBannerProps) {
       toast.success("Search Console metrics synced");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleSubmitSitemaps = async () => {
+    setBusy("submit");
+    try {
+      const { results } = await submitSitemaps({});
+      const submitted = results.filter((r) => r.status === "submitted").length;
+      const skipped = results.filter((r) => r.status === "skipped").length;
+      const errors = results.filter((r) => r.status === "error");
+      if (errors.length) {
+        toast.error(
+          `Submitted ${submitted}, skipped ${skipped}, ${errors.length} failed — ${errors[0]?.domain}: ${errors[0]?.detail}`
+        );
+      } else if (submitted === 0) {
+        toast.message(
+          "No sitemaps submitted — verify each site in Search Console, then reconnect Google if you recently upgraded permissions."
+        );
+      } else {
+        toast.success(
+          `Submitted ${submitted} sitemap${submitted === 1 ? "" : "s"} to Google${skipped ? ` (${skipped} skipped)` : ""}`
+        );
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Sitemap submit failed";
+      toast.error(
+        /insufficient|scope|permission/i.test(message)
+          ? "Google needs write access — disconnect and Connect Google again, then retry."
+          : message
+      );
     } finally {
       setBusy(null);
     }
@@ -90,8 +124,8 @@ export function GscConnectBanner({ connection }: GscConnectBannerProps) {
               <CardTitle>Connect Google Search Console</CardTitle>
               <CardDescription className="mt-1">
                 Pull clicks, impressions, CTR, and average position for each
-                cleaning site. Requires a Google account that owns the properties
-                in Search Console.
+                cleaning site, and submit sitemaps. Requires a Google account that
+                owns the properties in Search Console.
               </CardDescription>
             </div>
           </div>
@@ -139,6 +173,16 @@ export function GscConnectBanner({ connection }: GscConnectBannerProps) {
               className={busy === "sync" ? "animate-spin" : undefined}
             />
             {busy === "sync" ? "Syncing…" : "Sync now"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSubmitSitemaps}
+            disabled={busy !== null}
+            className="gap-1.5"
+          >
+            <Globe size={16} />
+            {busy === "submit" ? "Submitting…" : "Submit sitemaps"}
           </Button>
           <Button
             variant="ghost"

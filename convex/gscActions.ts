@@ -2,10 +2,10 @@ import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { dateRangeForPeriod, matchGscProperty } from "./lib/gscMatch";
+import { dateRangeForPeriod, matchGscProperty, normalizeHost } from "./lib/gscMatch";
 
 const GSC_SCOPE =
-  "https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/userinfo.email";
+  "https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/userinfo.email";
 
 /** 1 = today, 2 = yesterday, 7/28/90 = rolling windows. */
 const PERIODS = [1, 2, 7, 28, 90] as const;
@@ -240,6 +240,43 @@ async function listGscSites(accessToken: string): Promise<string[]> {
   return (data.siteEntry ?? []).map((s) => s.siteUrl);
 }
 
+/** Absolute sitemap URL for a cleaning-site domain (Weekly uses Astro index). */
+function sitemapFeedUrl(domain: string, slug: string): string {
+  const host = normalizeHost(domain);
+  if (slug === "cleaning-weekly") {
+    return `https://${host}/sitemap-index.xml`;
+  }
+  return `https://${host}/sitemap.xml`;
+}
+
+/**
+ * Submit (or re-submit) a sitemap feed for a GSC property.
+ * Google expects PUT with an empty body; both path segments are URL-encoded.
+ */
+async function putSitemap(
+  accessToken: string,
+  siteUrl: string,
+  feedUrl: string
+): Promise<void> {
+  const encodedSite = encodeURIComponent(siteUrl);
+  const encodedFeed = encodeURIComponent(feedUrl);
+  const res = await fetch(
+    `https://www.googleapis.com/webmasters/v3/sites/${encodedSite}/sitemaps/${encodedFeed}`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: { message?: string };
+    };
+    throw new Error(
+      data.error?.message || `Sitemap submit failed (${res.status}) for ${feedUrl}`
+    );
+  }
+}
+
 async function querySearchAnalytics(
   accessToken: string,
   siteUrl: string,
@@ -459,5 +496,81 @@ export const syncNow = action({
       throw new Error(result.error || "Sync failed");
     }
     return { ok: true };
+  },
+});
+
+export type SitemapSubmitResult = {
+  slug: string;
+  domain: string;
+  feedUrl: string;
+  status: "submitted" | "skipped" | "error";
+  detail?: string;
+};
+
+/**
+ * Submit each cleaning site's sitemap.xml (or Weekly's sitemap-index.xml) to
+ * Google Search Console for every property that matches a seeded site domain.
+ * Requires full `webmasters` scope — reconnect Google after upgrading from readonly.
+ */
+export const submitSitemaps = action({
+  args: {},
+  handler: async (ctx): Promise<{ results: SitemapSubmitResult[] }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) throw new Error("Google Search Console is not connected");
+
+    let accessToken = connection.accessToken;
+    if (connection.accessTokenExpiresAt <= Date.now() + 60_000) {
+      const refreshed = await refreshAccessToken(connection.refreshToken);
+      await ctx.runMutation(internal.gsc.updateTokens, {
+        connectionId: connection._id,
+        accessToken: refreshed.accessToken,
+        accessTokenExpiresAt: Date.now() + refreshed.expiresIn * 1000,
+        refreshToken: refreshed.refreshToken,
+      });
+      accessToken = refreshed.accessToken;
+    }
+
+    const properties = await listGscSites(accessToken);
+    const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+    const results: SitemapSubmitResult[] = [];
+
+    for (const site of sites) {
+      const feedUrl = sitemapFeedUrl(site.domain, site.slug);
+      const property = matchGscProperty(site.domain, properties);
+      if (!property) {
+        results.push({
+          slug: site.slug,
+          domain: site.domain,
+          feedUrl,
+          status: "skipped",
+          detail: "Site not verified in Search Console for this Google account",
+        });
+        continue;
+      }
+
+      try {
+        await putSitemap(accessToken, property, feedUrl);
+        results.push({
+          slug: site.slug,
+          domain: site.domain,
+          feedUrl,
+          status: "submitted",
+          detail: property,
+        });
+      } catch (e) {
+        results.push({
+          slug: site.slug,
+          domain: site.domain,
+          feedUrl,
+          status: "error",
+          detail: e instanceof Error ? e.message : "Submit failed",
+        });
+      }
+    }
+
+    return { results };
   },
 });
