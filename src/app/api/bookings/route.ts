@@ -8,8 +8,6 @@ import {
   normalizeIntent,
   normalizeProperty,
   normalizeQuote,
-  sanitizeEmailProperty,
-  sanitizeEmailQuote,
 } from "@/lib/booking-payload";
 import type { CreateBookingPayload } from "@/lib/types";
 
@@ -59,52 +57,8 @@ export async function POST(request: Request) {
       intent: normalizeIntent(body.intent),
     });
 
-    try {
-      // Strip unknown fields so site-specific property extras (e.g. Sanford
-      // condition/occupants) never fail Convex arg validation and skip email.
-      const emailResult = await client.action(
-        api.emailActions.sendBookingEmails,
-        {
-          site_slug: body.site_slug,
-          customer_name: body.customer_name,
-          email: body.email,
-          phone: body.phone,
-          address: body.address,
-          service_type: body.service_type,
-          preferred_date: body.preferred_date,
-          preferred_time: body.preferred_time,
-          notes: body.notes,
-          property: sanitizeEmailProperty(body.property),
-          quote: sanitizeEmailQuote(body.quote),
-        }
-      );
-      if (emailResult.errors?.length) {
-        console.error("Booking email errors:", emailResult.errors);
-      } else if (!emailResult.sent && emailResult.via === "none") {
-        console.warn(
-          "Booking emails skipped: connect a SpaceMail mailbox for this site, or set SMTP_* in Convex env"
-        );
-      }
-    } catch (error) {
-      console.error("Failed to send booking emails:", error);
-    }
-
-    try {
-      const smsResult = await client.action(api.voipmsActions.sendBookingSms, {
-        site_slug: body.site_slug,
-        customer_name: body.customer_name,
-        phone: body.phone,
-        service_type: body.service_type,
-        preferred_date: body.preferred_date,
-      });
-      if (!smsResult.sent && smsResult.skipped) {
-        console.warn("Booking SMS skipped:", smsResult.skipped);
-      }
-    } catch (error) {
-      console.error("Failed to send booking SMS:", error);
-    }
-
-    // Push is scheduled inside bookings.createPublic (Convex) so it always runs once.
+    // Email, SMS, and push are scheduled inside bookings.createPublic so the
+    // site UI can show confirmation immediately after the booking is stored.
 
     return NextResponse.json(
       { id: result.id, message: "Booking created" },

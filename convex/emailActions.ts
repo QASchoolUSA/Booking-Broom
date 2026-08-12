@@ -639,168 +639,203 @@ const bookingQuoteValidator = v.optional(
   })
 );
 
+const sendBookingEmailsArgs = {
+  site_slug: v.string(),
+  customer_name: v.string(),
+  email: v.optional(v.string()),
+  phone: v.optional(v.string()),
+  address: v.optional(v.string()),
+  service_type: v.optional(v.string()),
+  preferred_date: v.optional(v.string()),
+  preferred_time: v.optional(v.string()),
+  notes: v.optional(v.string()),
+  property: bookingPropertyValidator,
+  quote: bookingQuoteValidator,
+};
+
+type SendBookingEmailsResult = {
+  sent: boolean;
+  via: "mailbox" | "shared_smtp" | "none";
+  errors?: string[];
+};
+
+async function sendBookingEmailsHandler(
+  ctx: ActionCtx,
+  args: {
+    site_slug: string;
+    customer_name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    service_type?: string;
+    preferred_date?: string;
+    preferred_time?: string;
+    notes?: string;
+    property?: BookingEmailPayload["property"];
+    quote?: BookingEmailPayload["quote"];
+  }
+): Promise<SendBookingEmailsResult> {
+  const payload: BookingEmailPayload = {
+    site_slug: args.site_slug,
+    customer_name: args.customer_name,
+    email: args.email,
+    phone: args.phone,
+    address: args.address,
+    service_type: args.service_type,
+    preferred_date: args.preferred_date,
+    preferred_time: args.preferred_time,
+    notes: args.notes,
+    property: args.property,
+    quote: args.quote,
+  };
+
+  const site = await ctx.runQuery(internal.sites.getBySlug, {
+    slug: args.site_slug,
+  });
+  const siteName = site?.name ?? args.site_slug;
+  const siteContactEmail = site?.contactEmail ?? undefined;
+
+  const mailbox = site
+    ? await ctx.runQuery(internal.email.findMailboxBySiteInternal, {
+        siteId: site._id,
+      })
+    : null;
+
+  let conn: MailboxConn | null = null;
+  let fromHeader = "";
+  let adminTo: string | undefined;
+  let via: "mailbox" | "shared_smtp" | "none" = "none";
+
+  if (mailbox && mailbox.status !== "disabled") {
+    try {
+      conn = connFromMailbox(mailbox);
+      fromHeader = mailbox.displayName
+        ? `${mailbox.displayName} <${mailbox.email}>`
+        : `${siteName} <${mailbox.email}>`;
+      adminTo = mailbox.email;
+      via = "mailbox";
+    } catch (e) {
+      // Fall through to shared SMTP if decrypt/key missing
+      console.error(
+        "Mailbox SMTP unavailable:",
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
+  if (!conn) {
+    const host = process.env.SMTP_HOST;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    if (!host || !user || !pass) {
+      return { sent: false, via: "none" };
+    }
+    conn = {
+      email: user,
+      password: pass,
+      smtpHost: host,
+      smtpPort: Number(process.env.SMTP_PORT ?? 465),
+    };
+    const fromEmail = siteContactEmail ?? process.env.SMTP_FROM ?? user;
+    fromHeader =
+      process.env.SMTP_FROM && process.env.SMTP_FROM.includes("<")
+        ? process.env.SMTP_FROM
+        : `${siteName} <${fromEmail}>`;
+    // Prefer bare address inside angle brackets for Reply-To/admin
+    const angle = fromHeader.match(/<([^>]+)>/);
+    adminTo = siteContactEmail ?? angle?.[1] ?? user;
+    via = "shared_smtp";
+  }
+
+  const errors: string[] = [];
+  const replyToSite =
+    adminTo ?? (fromHeader.match(/<([^>]+)>/)?.[1] ?? conn.email);
+
+  if (payload.email && isValidEmail(payload.email)) {
+    const { subject, text, html } = buildCustomerBookingEmail(
+      siteName,
+      payload,
+      { accentColor: site?.accentColor }
+    );
+    try {
+      await sendSmtpMail({
+        conn,
+        from: fromHeader,
+        fromName: siteName,
+        replyTo: replyToSite,
+        to: [payload.email.trim()],
+        subject,
+        text,
+        html,
+      });
+    } catch (err) {
+      errors.push(
+        `Customer email failed: ${err instanceof Error ? err.message : "unknown error"}`
+      );
+    }
+  }
+
+  if (adminTo) {
+    const { subject, text, html } = buildAdminBookingEmail(siteName, payload, {
+      accentColor: site?.accentColor,
+    });
+    try {
+      await sendSmtpMail({
+        conn,
+        from: fromHeader,
+        fromName: siteName,
+        replyTo:
+          payload.email && isValidEmail(payload.email)
+            ? payload.email.trim()
+            : undefined,
+        to: [adminTo],
+        subject,
+        text,
+        html,
+      });
+    } catch (err) {
+      errors.push(
+        `Admin email failed: ${err instanceof Error ? err.message : "unknown error"}`
+      );
+    }
+  }
+
+  return {
+    sent: errors.length === 0,
+    via,
+    errors: errors.length > 0 ? errors : undefined,
+  };
+}
+
 /**
  * Send customer confirmation + admin alert for a new booking.
  * Prefers the site's connected SpaceMail mailbox SMTP; falls back to shared SMTP_*.
- * Public so /api/bookings can call it without a manager session.
+ * Public so callers can invoke without a manager session.
  */
 export const sendBookingEmails = action({
-  args: {
-    site_slug: v.string(),
-    customer_name: v.string(),
-    email: v.optional(v.string()),
-    phone: v.optional(v.string()),
-    address: v.optional(v.string()),
-    service_type: v.optional(v.string()),
-    preferred_date: v.optional(v.string()),
-    preferred_time: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    property: bookingPropertyValidator,
-    quote: bookingQuoteValidator,
+  args: sendBookingEmailsArgs,
+  handler: async (ctx, args): Promise<SendBookingEmailsResult> => {
+    return await sendBookingEmailsHandler(ctx, args);
   },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{
-    sent: boolean;
-    via: "mailbox" | "shared_smtp" | "none";
-    errors?: string[];
-  }> => {
-    const payload: BookingEmailPayload = {
-      site_slug: args.site_slug,
-      customer_name: args.customer_name,
-      email: args.email,
-      phone: args.phone,
-      address: args.address,
-      service_type: args.service_type,
-      preferred_date: args.preferred_date,
-      preferred_time: args.preferred_time,
-      notes: args.notes,
-      property: args.property,
-      quote: args.quote,
-    };
+});
 
-    const site = await ctx.runQuery(internal.sites.getBySlug, {
-      slug: args.site_slug,
-    });
-    const siteName = site?.name ?? args.site_slug;
-    const siteContactEmail = site?.contactEmail ?? undefined;
-
-    const mailbox = site
-      ? await ctx.runQuery(internal.email.findMailboxBySiteInternal, {
-          siteId: site._id,
-        })
-      : null;
-
-    let conn: MailboxConn | null = null;
-    let fromHeader = "";
-    let adminTo: string | undefined;
-    let via: "mailbox" | "shared_smtp" | "none" = "none";
-
-    if (mailbox && mailbox.status !== "disabled") {
-      try {
-        conn = connFromMailbox(mailbox);
-        fromHeader = mailbox.displayName
-          ? `${mailbox.displayName} <${mailbox.email}>`
-          : `${siteName} <${mailbox.email}>`;
-        adminTo = mailbox.email;
-        via = "mailbox";
-      } catch (e) {
-        // Fall through to shared SMTP if decrypt/key missing
-        console.error(
-          "Mailbox SMTP unavailable:",
-          e instanceof Error ? e.message : e
+/** Scheduled from bookings.createPublic so email is not on the HTTP critical path. */
+export const sendBookingEmailsInternal = internalAction({
+  args: sendBookingEmailsArgs,
+  handler: async (ctx, args): Promise<SendBookingEmailsResult> => {
+    try {
+      const result = await sendBookingEmailsHandler(ctx, args);
+      if (result.errors?.length) {
+        console.error("Booking email errors:", result.errors);
+      } else if (!result.sent && result.via === "none") {
+        console.warn(
+          "Booking emails skipped: connect a SpaceMail mailbox for this site, or set SMTP_* in Convex env"
         );
       }
+      return result;
+    } catch (error) {
+      console.error("Failed to send booking emails:", error);
+      return { sent: false, via: "none", errors: ["internal_send_failed"] };
     }
-
-    if (!conn) {
-      const host = process.env.SMTP_HOST;
-      const user = process.env.SMTP_USER;
-      const pass = process.env.SMTP_PASS;
-      if (!host || !user || !pass) {
-        return { sent: false, via: "none" };
-      }
-      conn = {
-        email: user,
-        password: pass,
-        smtpHost: host,
-        smtpPort: Number(process.env.SMTP_PORT ?? 465),
-      };
-      const fromEmail =
-        siteContactEmail ??
-        process.env.SMTP_FROM ??
-        user;
-      fromHeader =
-        process.env.SMTP_FROM && process.env.SMTP_FROM.includes("<")
-          ? process.env.SMTP_FROM
-          : `${siteName} <${fromEmail}>`;
-      // Prefer bare address inside angle brackets for Reply-To/admin
-      const angle = fromHeader.match(/<([^>]+)>/);
-      adminTo = siteContactEmail ?? angle?.[1] ?? user;
-      via = "shared_smtp";
-    }
-
-    const errors: string[] = [];
-    const replyToSite =
-      adminTo ??
-      (fromHeader.match(/<([^>]+)>/)?.[1] ?? conn.email);
-
-    if (payload.email && isValidEmail(payload.email)) {
-      const { subject, text, html } = buildCustomerBookingEmail(
-        siteName,
-        payload,
-        { accentColor: site?.accentColor }
-      );
-      try {
-        await sendSmtpMail({
-          conn,
-          from: fromHeader,
-          fromName: siteName,
-          replyTo: replyToSite,
-          to: [payload.email.trim()],
-          subject,
-          text,
-          html,
-        });
-      } catch (err) {
-        errors.push(
-          `Customer email failed: ${err instanceof Error ? err.message : "unknown error"}`
-        );
-      }
-    }
-
-    if (adminTo) {
-      const { subject, text, html } = buildAdminBookingEmail(
-        siteName,
-        payload,
-        { accentColor: site?.accentColor }
-      );
-      try {
-        await sendSmtpMail({
-          conn,
-          from: fromHeader,
-          fromName: siteName,
-          replyTo:
-            payload.email && isValidEmail(payload.email)
-              ? payload.email.trim()
-              : undefined,
-          to: [adminTo],
-          subject,
-          text,
-          html,
-        });
-      } catch (err) {
-        errors.push(
-          `Admin email failed: ${err instanceof Error ? err.message : "unknown error"}`
-        );
-      }
-    }
-
-    return {
-      sent: errors.length === 0,
-      via,
-      errors: errors.length > 0 ? errors : undefined,
-    };
   },
 });

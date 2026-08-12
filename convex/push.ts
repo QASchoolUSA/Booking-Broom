@@ -148,12 +148,24 @@ export const saveExpoPushToken = mutation({
     const token = args.token.trim();
     if (!token) throw new Error("Invalid Expo push token");
 
+    const now = Date.now();
+
+    // Keep a single token per user so one booking never fans out twice.
+    const forUser = await ctx.db
+      .query("expoPushTokens")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const row of forUser) {
+      if (row.token !== token) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
     const existing = await ctx.db
       .query("expoPushTokens")
       .withIndex("by_token", (q) => q.eq("token", token))
       .unique();
 
-    const now = Date.now();
     if (existing) {
       await ctx.db.patch(existing._id, {
         userId,

@@ -120,6 +120,8 @@ export default defineSchema({
     attribution: v.optional(bookingAttribution),
     /** Quote request vs booking request; absent when the site has one flow. */
     intent: v.optional(bookingIntent),
+    /** Set when Expo/web push for this booking was claimed (idempotent notify). */
+    pushNotifiedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

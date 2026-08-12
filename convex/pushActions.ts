@@ -105,6 +105,32 @@ async function notifyNewBookingHandler(
   ctx: ActionCtx,
   args: NotifyArgs
 ): Promise<NotifyResult> {
+  if (args.bookingId) {
+    try {
+      const claim = await ctx.runMutation(
+        internal.bookings.claimPushNotifyInternal,
+        { bookingId: args.bookingId as Id<"bookings"> }
+      );
+      if (!claim.claimed) {
+        console.info(
+          `Expo push: skip booking ${args.bookingId} (${claim.reason})`
+        );
+        return {
+          sent: 0,
+          removed: 0,
+          expoSent: 0,
+          skipped: `push_already_${claim.reason}`,
+          expoErrors: [],
+        };
+      }
+    } catch (e) {
+      console.error(
+        "Push claim failed:",
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
   const site = await ctx.runQuery(internal.push.getSiteNameBySlugInternal, {
     slug: args.siteSlug,
   });
@@ -165,10 +191,18 @@ async function notifyNewBookingHandler(
     skipped = "VAPID keys not configured";
   }
 
-  const expoTokens = (await ctx.runQuery(
+  const expoTokensRaw = (await ctx.runQuery(
     internal.push.listExpoTokensInternal,
     {}
   )) as ExpoTokenRow[];
+
+  const seenTokens = new Set<string>();
+  const expoTokens: ExpoTokenRow[] = [];
+  for (const row of expoTokensRaw) {
+    if (seenTokens.has(row.token)) continue;
+    seenTokens.add(row.token);
+    expoTokens.push(row);
+  }
 
   if (expoTokens.length === 0) {
     console.info("Expo push: no registered tokens");

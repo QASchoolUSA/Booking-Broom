@@ -1,4 +1,4 @@
-import { query, mutation, internalQuery } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -9,6 +9,39 @@ import {
   bookingIntent,
 } from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
+
+/** Map Convex camelCase property → snake_case email action args. */
+function toEmailProperty(property: Doc<"bookings">["property"]) {
+  if (!property) return undefined;
+  return {
+    bedrooms: property.bedrooms,
+    bathrooms: property.bathrooms,
+    square_feet: property.squareFeet,
+    size_label: property.sizeLabel,
+    home_type: property.homeType,
+    condition: property.condition,
+    occupants: property.occupants,
+    last_cleaned: property.lastCleaned,
+    excluded_areas: property.excludedAreas,
+  };
+}
+
+/** Map Convex camelCase quote → snake_case email action args. */
+function toEmailQuote(quote: Doc<"bookings">["quote"]) {
+  if (!quote) return undefined;
+  return {
+    estimate: quote.estimate,
+    estimate_low: quote.estimateLow,
+    estimate_high: quote.estimateHigh,
+    recurring_estimate: quote.recurringEstimate,
+    currency: quote.currency,
+    service_level: quote.serviceLevel,
+    frequency: quote.frequency,
+    add_ons: quote.addOns,
+    payment_terms: quote.paymentTerms,
+    internal: quote.internal,
+  };
+}
 
 function mapSite(doc: Doc<"sites">) {
   return {
@@ -248,6 +281,53 @@ export const createPublic = mutation({
       }
     );
 
+    await ctx.scheduler.runAfter(
+      0,
+      internal.emailActions.sendBookingEmailsInternal,
+      {
+        site_slug: args.siteSlug,
+        customer_name: args.customerName,
+        email: args.email,
+        phone: args.phone,
+        address: args.address,
+        service_type: args.serviceType,
+        preferred_date: args.preferredDate,
+        preferred_time: args.preferredTime,
+        notes: args.notes,
+        property: toEmailProperty(args.property),
+        quote: toEmailQuote(args.quote),
+      }
+    );
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.voipmsActions.sendBookingSmsInternal,
+      {
+        site_slug: args.siteSlug,
+        customer_name: args.customerName,
+        phone: args.phone,
+        service_type: args.serviceType,
+        preferred_date: args.preferredDate,
+      }
+    );
+
     return { id };
+  },
+});
+
+/** Claim push notify for a booking once; retries / dual callers no-op. */
+export const claimPushNotifyInternal = internalMutation({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) return { claimed: false as const, reason: "missing" as const };
+    if (booking.pushNotifiedAt != null) {
+      return { claimed: false as const, reason: "already" as const };
+    }
+    await ctx.db.patch(args.bookingId, {
+      pushNotifiedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return { claimed: true as const };
   },
 });
