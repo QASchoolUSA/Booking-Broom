@@ -417,6 +417,19 @@ pnpm dev
 - Cleaner mobile app (React Native + same Convex backend)
 - Outbound MMS attachments from Messages
 
+## Manager mobile app
+
+Native Expo manager app lives in [`mobile/`](mobile/) (SDK 57). Same Convex backend and Password auth as the web dashboard.
+
+```bash
+pnpm install
+pnpm mobile        # Expo start
+pnpm mobile:ios
+pnpm mobile:android
+```
+
+Copy [`mobile/.env.example`](mobile/.env.example) → `mobile/.env` (Convex URLs). Design tokens: [`docs/mobile-design.md`](docs/mobile-design.md).
+
 ## Email notifications
 
 After a successful booking, Booking Broom sends:

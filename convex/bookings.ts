@@ -1,5 +1,6 @@
 import { query, mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import {
   bookingStatus,
   bookingProperty,
@@ -235,6 +236,17 @@ export const createPublic = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.pushActions.notifyNewBookingInternal,
+      {
+        siteSlug: args.siteSlug,
+        customerName: args.customerName,
+        serviceType: args.serviceType,
+        bookingId: id,
+      }
+    );
 
     return { id };
   },

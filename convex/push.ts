@@ -137,3 +137,70 @@ export const getSiteNameBySlugInternal = internalQuery({
     return site ? { name: site.name, slug: site.slug } : null;
   },
 });
+
+export const saveExpoPushToken = mutation({
+  args: {
+    token: v.string(),
+    platform: v.union(v.literal("ios"), v.literal("android")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const token = args.token.trim();
+    if (!token) throw new Error("Invalid Expo push token");
+
+    const existing = await ctx.db
+      .query("expoPushTokens")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .unique();
+
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        userId,
+        platform: args.platform,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+
+    return await ctx.db.insert("expoPushTokens", {
+      userId,
+      token,
+      platform: args.platform,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const removeExpoPushToken = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const existing = await ctx.db
+      .query("expoPushTokens")
+      .withIndex("by_token", (q) => q.eq("token", args.token.trim()))
+      .unique();
+    if (!existing) return false;
+    if (existing.userId !== userId) throw new Error("Unauthorized");
+    await ctx.db.delete(existing._id);
+    return true;
+  },
+});
+
+export const listExpoTokensInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("expoPushTokens").collect();
+  },
+});
+
+export const removeExpoTokenByIdInternal = internalMutation({
+  args: { id: v.id("expoPushTokens") },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.id);
+    if (!doc) return false;
+    await ctx.db.delete(args.id);
+    return true;
+  },
+});

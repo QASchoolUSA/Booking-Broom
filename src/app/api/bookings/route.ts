@@ -104,19 +104,7 @@ export async function POST(request: Request) {
       console.error("Failed to send booking SMS:", error);
     }
 
-    try {
-      const pushResult = await client.action(api.pushActions.notifyNewBooking, {
-        siteSlug: body.site_slug,
-        customerName: body.customer_name,
-        serviceType: body.service_type,
-        bookingId: String(result.id),
-      });
-      if (pushResult.skipped) {
-        console.warn("Booking push skipped:", pushResult.skipped);
-      }
-    } catch (error) {
-      console.error("Failed to send booking push:", error);
-    }
+    // Push is scheduled inside bookings.createPublic (Convex) so it always runs once.
 
     return NextResponse.json(
       { id: result.id, message: "Booking created" },

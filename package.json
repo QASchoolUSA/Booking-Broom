@@ -12,7 +12,11 @@
     "icons": "node scripts/generate-icons.mjs",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
-    "convex:auth": "node scripts/setup-convex-auth.mjs"
+    "convex:auth": "node scripts/setup-convex-auth.mjs",
+    "mobile": "pnpm --filter @booking-broom/mobile start",
+    "mobile:ios": "pnpm --filter @booking-broom/mobile ios",
+    "mobile:android": "pnpm --filter @booking-broom/mobile android",
+    "mobile:typecheck": "pnpm --filter @booking-broom/mobile typecheck"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -41,7 +45,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/mailparser": "^3.4.6",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/nodemailer": "^6.4.17",
     "@types/react": "^19",
     "@types/react-dom": "^19",

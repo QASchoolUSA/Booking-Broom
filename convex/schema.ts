@@ -549,4 +549,15 @@ export default defineSchema({
   })
     .index("by_endpoint", ["endpoint"])
     .index("by_user", ["userId"]),
+
+  /** Expo Push tokens for the native manager app. */
+  expoPushTokens: defineTable({
+    userId: v.string(),
+    token: v.string(),
+    platform: v.union(v.literal("ios"), v.literal("android")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_user", ["userId"]),
 });
