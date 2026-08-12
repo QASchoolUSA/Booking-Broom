@@ -1,6 +1,7 @@
 /**
  * Voip.ms booking confirmation SMS copy.
  * Hard-capped at 160 characters (Voip.ms / Messages UI limit).
+ * Keeps wording generic — no specific service name (privacy + brevity).
  */
 
 export const BOOKING_SMS_MAX = 160;
@@ -41,35 +42,29 @@ function clip(value: string, max: number): string {
 
 /**
  * Build a professional customer SMS that always fits in one segment (≤160).
- * Example: "Hi Jane, we got your Deep Cleaning request for Aug 20. We'll confirm soon. – Sanford Cleaning"
+ * Example: "Hi Jane, we got your cleaning request for Aug 20. We'll be in touch shortly. – Sanford Cleaning"
  */
 export function buildCustomerBookingSms(args: {
   siteName: string;
   customerName: string;
-  serviceType?: string;
   preferredDate?: string;
 }): string {
   const name = firstName(args.customerName);
   const date = formatShortDate(args.preferredDate);
-  const service = (args.serviceType ?? "cleaning").trim() || "cleaning";
+  const dateBit = date ? ` for ${date}` : "";
 
-  const build = (svc: string, site: string) => {
-    const dateBit = date ? ` for ${date}` : "";
-    return `Hi ${name}, we got your ${svc} request${dateBit}. We'll confirm soon. – ${site}`;
-  };
+  const build = (site: string) =>
+    `Hi ${name}, we got your cleaning request${dateBit}. We'll be in touch shortly. – ${site}`;
 
-  let message = build(service, args.siteName.trim() || "our team");
+  let message = build(args.siteName.trim() || "our team");
   if (message.length <= BOOKING_SMS_MAX) return message;
 
-  // Shorten service, then site, until it fits.
-  for (const serviceMax of [28, 18, 12, 8]) {
-    for (const siteMax of [28, 18, 12, 8]) {
-      message = build(clip(service, serviceMax), clip(args.siteName, siteMax));
-      if (message.length <= BOOKING_SMS_MAX) return message;
-    }
+  for (const siteMax of [28, 18, 12, 8]) {
+    message = build(clip(args.siteName, siteMax));
+    if (message.length <= BOOKING_SMS_MAX) return message;
   }
 
   // Absolute fallback — drop date if still long.
-  message = `Hi ${name}, we got your booking request. We'll confirm soon. – ${clip(args.siteName, 20)}`;
+  message = `Hi ${name}, we got your cleaning request. We'll be in touch shortly. – ${clip(args.siteName, 20)}`;
   return message.slice(0, BOOKING_SMS_MAX);
 }

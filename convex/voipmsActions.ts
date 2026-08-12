@@ -353,7 +353,6 @@ export const sendBookingSms = action({
     const message = buildCustomerBookingSms({
       siteName: site.name,
       customerName: args.customer_name,
-      serviceType: args.service_type,
       preferredDate: args.preferred_date,
     });
     if (!message || message.length > BOOKING_SMS_MAX) {
