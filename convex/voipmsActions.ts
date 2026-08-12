@@ -311,6 +311,7 @@ const sendBookingSmsArgs = {
   phone: v.optional(v.string()),
   service_type: v.optional(v.string()),
   preferred_date: v.optional(v.string()),
+  bookingId: v.optional(v.id("bookings")),
 };
 
 type SendBookingSmsResult = {
@@ -327,8 +328,22 @@ async function sendBookingSmsHandler(
     phone?: string;
     service_type?: string;
     preferred_date?: string;
+    bookingId?: Id<"bookings">;
   }
 ): Promise<SendBookingSmsResult> {
+  if (args.bookingId) {
+    const claim = await ctx.runMutation(
+      internal.bookings.claimSmsNotifyInternal,
+      { bookingId: args.bookingId }
+    );
+    if (!claim.claimed) {
+      console.info(
+        `Booking SMS: skip ${args.bookingId} (${claim.reason})`
+      );
+      return { sent: false, skipped: `sms_already_${claim.reason}` };
+    }
+  }
+
   if (!args.phone?.trim()) {
     return { sent: false, skipped: "no_phone" };
   }
@@ -397,12 +412,16 @@ async function sendBookingSmsHandler(
 
 /**
  * Customer booking confirmation SMS (one segment, ≤160 chars).
- * Public so callers can invoke without a manager session.
- * Skips quietly when phone/DID/Voip.ms are unavailable — never fails the booking.
+ * Prefer bookings.createPublic → sendBookingSmsInternal.
+ * Without bookingId, no-ops so stale Next.js hosts neither block nor double-send.
+ * Pass bookingId for manual one-shot sends.
  */
 export const sendBookingSms = action({
   args: sendBookingSmsArgs,
   handler: async (ctx, args): Promise<SendBookingSmsResult> => {
+    if (!args.bookingId) {
+      return { sent: false, skipped: "scheduled_from_createPublic" };
+    }
     return await sendBookingSmsHandler(ctx, args);
   },
 });

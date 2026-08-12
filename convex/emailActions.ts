@@ -651,6 +651,7 @@ const sendBookingEmailsArgs = {
   notes: v.optional(v.string()),
   property: bookingPropertyValidator,
   quote: bookingQuoteValidator,
+  bookingId: v.optional(v.id("bookings")),
 };
 
 type SendBookingEmailsResult = {
@@ -673,8 +674,26 @@ async function sendBookingEmailsHandler(
     notes?: string;
     property?: BookingEmailPayload["property"];
     quote?: BookingEmailPayload["quote"];
+    bookingId?: Id<"bookings">;
   }
 ): Promise<SendBookingEmailsResult> {
+  if (args.bookingId) {
+    const claim = await ctx.runMutation(
+      internal.bookings.claimEmailNotifyInternal,
+      { bookingId: args.bookingId }
+    );
+    if (!claim.claimed) {
+      console.info(
+        `Booking email: skip ${args.bookingId} (${claim.reason})`
+      );
+      return {
+        sent: false,
+        via: "none",
+        errors: [`email_already_${claim.reason}`],
+      };
+    }
+  }
+
   const payload: BookingEmailPayload = {
     site_slug: args.site_slug,
     customer_name: args.customer_name,
@@ -809,12 +828,16 @@ async function sendBookingEmailsHandler(
 
 /**
  * Send customer confirmation + admin alert for a new booking.
- * Prefers the site's connected SpaceMail mailbox SMTP; falls back to shared SMTP_*.
- * Public so callers can invoke without a manager session.
+ * Prefer bookings.createPublic → sendBookingEmailsInternal.
+ * Without bookingId, no-ops so stale Next.js hosts neither block nor double-send.
+ * Pass bookingId for manual one-shot sends.
  */
 export const sendBookingEmails = action({
   args: sendBookingEmailsArgs,
   handler: async (ctx, args): Promise<SendBookingEmailsResult> => {
+    if (!args.bookingId) {
+      return { sent: false, via: "none", errors: ["scheduled_from_createPublic"] };
+    }
     return await sendBookingEmailsHandler(ctx, args);
   },
 });

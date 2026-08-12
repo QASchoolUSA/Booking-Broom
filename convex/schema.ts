@@ -122,6 +122,10 @@ export default defineSchema({
     intent: v.optional(bookingIntent),
     /** Set when Expo/web push for this booking was claimed (idempotent notify). */
     pushNotifiedAt: v.optional(v.number()),
+    /** Set when booking confirmation SMS was claimed (idempotent send). */
+    smsNotifiedAt: v.optional(v.number()),
+    /** Set when booking confirmation emails were claimed (idempotent send). */
+    emailNotifiedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

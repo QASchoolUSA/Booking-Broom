@@ -1,4 +1,4 @@
-import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -296,6 +296,7 @@ export const createPublic = mutation({
         notes: args.notes,
         property: toEmailProperty(args.property),
         quote: toEmailQuote(args.quote),
+        bookingId: id,
       }
     );
 
@@ -308,6 +309,7 @@ export const createPublic = mutation({
         phone: args.phone,
         service_type: args.serviceType,
         preferred_date: args.preferredDate,
+        bookingId: id,
       }
     );
 
@@ -315,19 +317,48 @@ export const createPublic = mutation({
   },
 });
 
+type ClaimResult =
+  | { claimed: true }
+  | { claimed: false; reason: "missing" | "already" };
+
+async function claimNotifyField(
+  ctx: MutationCtx,
+  bookingId: Id<"bookings">,
+  field: "pushNotifiedAt" | "smsNotifiedAt" | "emailNotifiedAt"
+): Promise<ClaimResult> {
+  const booking = await ctx.db.get(bookingId);
+  if (!booking) return { claimed: false, reason: "missing" };
+  if (booking[field] != null) {
+    return { claimed: false, reason: "already" };
+  }
+  const now = Date.now();
+  await ctx.db.patch(bookingId, {
+    [field]: now,
+    updatedAt: now,
+  });
+  return { claimed: true };
+}
+
 /** Claim push notify for a booking once; retries / dual callers no-op. */
 export const claimPushNotifyInternal = internalMutation({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
-    const booking = await ctx.db.get(args.bookingId);
-    if (!booking) return { claimed: false as const, reason: "missing" as const };
-    if (booking.pushNotifiedAt != null) {
-      return { claimed: false as const, reason: "already" as const };
-    }
-    await ctx.db.patch(args.bookingId, {
-      pushNotifiedAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    return { claimed: true as const };
+    return await claimNotifyField(ctx, args.bookingId, "pushNotifiedAt");
+  },
+});
+
+/** Claim booking SMS once; retries / dual callers no-op. */
+export const claimSmsNotifyInternal = internalMutation({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    return await claimNotifyField(ctx, args.bookingId, "smsNotifiedAt");
+  },
+});
+
+/** Claim booking emails once; retries / dual callers no-op. */
+export const claimEmailNotifyInternal = internalMutation({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    return await claimNotifyField(ctx, args.bookingId, "emailNotifiedAt");
   },
 });
