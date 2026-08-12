@@ -240,13 +240,9 @@ async function listGscSites(accessToken: string): Promise<string[]> {
   return (data.siteEntry ?? []).map((s) => s.siteUrl);
 }
 
-/** Absolute sitemap URL for a cleaning-site domain (Weekly uses Astro index). */
-function sitemapFeedUrl(domain: string, slug: string): string {
-  const host = normalizeHost(domain);
-  if (slug === "cleaning-weekly") {
-    return `https://${host}/sitemap-index.xml`;
-  }
-  return `https://${host}/sitemap.xml`;
+/** Absolute sitemap URL for a cleaning-site domain. */
+function sitemapFeedUrl(domain: string): string {
+  return `https://${normalizeHost(domain)}/sitemap.xml`;
 }
 
 /**
@@ -508,8 +504,8 @@ export type SitemapSubmitResult = {
 };
 
 /**
- * Submit each cleaning site's sitemap.xml (or Weekly's sitemap-index.xml) to
- * Google Search Console for every property that matches a seeded site domain.
+ * Submit each cleaning site's sitemap.xml to Google Search Console for every
+ * property that matches a seeded site domain.
  * Requires full `webmasters` scope — reconnect Google after upgrading from readonly.
  */
 export const submitSitemaps = action({
@@ -538,7 +534,7 @@ export const submitSitemaps = action({
     const results: SitemapSubmitResult[] = [];
 
     for (const site of sites) {
-      const feedUrl = sitemapFeedUrl(site.domain, site.slug);
+      const feedUrl = sitemapFeedUrl(site.domain);
       const property = matchGscProperty(site.domain, properties);
       if (!property) {
         results.push({

@@ -279,7 +279,7 @@ Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Vercel if not alre
 
 6. Ensure each cleaning site property exists in the Google account you connect (Domain or URL-prefix property). Domains are matched automatically to `sites.domain`.
 
-7. In the app: open **SEO** → **Connect Google** → approve Search Console access (read + submit sitemaps). Metrics sync daily at 06:00 UTC and on demand via **Sync now**. Use **Submit sitemaps** to push each site’s `sitemap.xml` (Weekly: `sitemap-index.xml`) to Search Console for every verified property. If you previously connected with read-only access, **Disconnect** and **Connect Google** again so the new scope is granted. Sites that are not in the connected Search Console account show a **Not in Google Search Console** badge.
+7. In the app: open **SEO** → **Connect Google** → approve Search Console access (read + submit sitemaps). Metrics sync daily at 06:00 UTC and on demand via **Sync now**. Use **Submit sitemaps** to push each site’s `sitemap.xml` to Search Console for every verified property. If you previously connected with read-only access, **Disconnect** and **Connect Google** again so the new scope is granted. Sites that are not in the connected Search Console account show a **Not in Google Search Console** badge.
 
 ## Bing Webmaster (SEO page)
 
