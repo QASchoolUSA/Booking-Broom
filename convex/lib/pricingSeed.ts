@@ -768,6 +768,12 @@ export const SEED_PRICING: SeedPricing[] = [
     config: sanford,
   },
   {
+    slug: "boca-raton",
+    engine: "inline-wizard",
+    currency: "USD",
+    config: sanford,
+  },
+  {
     slug: "celebration",
     engine: "headline-only",
     currency: "USD",

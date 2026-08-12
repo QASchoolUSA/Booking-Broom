@@ -95,4 +95,13 @@ export const SEED_SITES = [
     apiKeyHash:
       "dcf4fdf3f91594880e14d460d0ab9029c7ccb90132dba61686efb62b27cd92de",
   },
+  {
+    slug: "boca-raton",
+    name: "Cleaning Boca Raton",
+    domain: "cleaningbocaraton.com",
+    accentColor: "#0B3D4A",
+    contactEmail: "hello@cleaningbocaraton.com",
+    apiKeyHash:
+      "e3f6a870828c648e9283b055dbbe80b58f966184a193c5359b3dad4aa438a688",
+  },
 ] as const;

@@ -46,6 +46,10 @@ const SITE_EMAILS: Record<
     name: "Windermere Cleaning",
     email: "hello@windermerecleaning.com",
   },
+  "boca-raton": {
+    name: "Cleaning Boca Raton",
+    email: "hello@cleaningbocaraton.com",
+  },
 };
 
 export function getAdminEmail(siteSlug: string): string | undefined {
