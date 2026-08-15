@@ -38,6 +38,7 @@ export function DashboardView({
   emptyTitle,
   emptyDescription,
 }: DashboardViewProps) {
+  const [listMode, setListMode] = useState<"active" | "archived">("active");
   const {
     bookings,
     allBookings,
@@ -49,7 +50,9 @@ export function DashboardView({
     updateBookingStatus,
     updateInternalNotes,
     deleteBooking,
-  } = useBookings(siteSlug);
+    archiveBooking,
+    unarchiveBooking,
+  } = useBookings(siteSlug, { includeArchived: listMode === "archived" });
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">("all");
@@ -134,6 +137,24 @@ export function DashboardView({
         </div>
 
         <StatsCards bookings={bookings} />
+
+        <div className="flex gap-2">
+          {(["active", "archived"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setListMode(mode)}
+              className={cn(
+                "rounded-lg border px-3 py-1.5 text-sm font-semibold capitalize transition-colors",
+                listMode === mode
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
 
         {/* Mobile site filter */}
         <div className="md:hidden">
@@ -240,6 +261,8 @@ export function DashboardView({
         }}
         onStatusChange={updateBookingStatus}
         onNotesChange={updateInternalNotes}
+        onArchive={archiveBooking}
+        onUnarchive={unarchiveBooking}
         onDelete={deleteBooking}
       />
     </>

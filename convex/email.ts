@@ -307,6 +307,47 @@ export const markThreadReadLocal = mutation({
   },
 });
 
+/**
+ * Delete a thread and its messages from Booking Broom only (IMAP untouched).
+ */
+export const deleteThread = mutation({
+  args: { threadId: v.id("emailThreads") },
+  handler: async (ctx, args) => {
+    await requireIdentity(ctx);
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) return { ok: true as const, deleted: 0 };
+
+    const messages = await ctx.db
+      .query("emailMessages")
+      .withIndex("by_thread_and_sentAt", (q) =>
+        q.eq("threadId", args.threadId)
+      )
+      .collect();
+
+    let deleted = 0;
+    for (const m of messages) {
+      for (const att of m.attachmentMeta ?? []) {
+        if (att.storageId) {
+          try {
+            await ctx.storage.delete(att.storageId);
+          } catch {
+            // ignore missing blobs
+          }
+        }
+      }
+      await ctx.db.delete(m._id);
+      deleted += 1;
+    }
+
+    const unread = thread.unreadCount ?? 0;
+    if (unread > 0) {
+      await bumpMailboxUnread(ctx, thread.mailboxId, -unread);
+    }
+    await ctx.db.delete(args.threadId);
+    return { ok: true as const, deleted };
+  },
+});
+
 export const markThreadReadInternal = internalMutation({
   args: {
     threadId: v.id("emailThreads"),

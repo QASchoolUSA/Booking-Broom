@@ -1,13 +1,11 @@
 import { Tabs } from "expo-router";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useTheme } from "@/theme";
-import { useChrome } from "@/components/chrome/ChromeContext";
-import { LiquidGlassTabBar } from "@/components/chrome/LiquidGlassTabBar";
+import { tabsBarRenderer } from "@/components/chrome/LiquidGlassTabBar";
 import { api } from "@/lib/api";
 
 export default function TabsLayout() {
   const { isTablet, colors } = useTheme();
-  const { hideTabBar } = useChrome();
   const { isAuthenticated } = useConvexAuth();
   const unread = useQuery(
     api.email.countUnread,
@@ -16,14 +14,13 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      tabBar={(props) => {
-        if (isTablet || hideTabBar) return null;
-        return <LiquidGlassTabBar {...props} />;
-      }}
+      tabBar={tabsBarRenderer(isTablet)}
       screenOptions={{
-        headerShown: true,
+        headerShown: false,
         headerShadowVisible: false,
+        lazy: true,
         freezeOnBlur: true,
+        animation: "none",
         headerStyle: { backgroundColor: colors.background },
         headerTitleStyle: {
           fontFamily: "Poppins_600SemiBold",
@@ -33,7 +30,7 @@ export default function TabsLayout() {
         headerTintColor: colors.primary,
         sceneStyle: {
           backgroundColor: colors.background,
-          paddingBottom: isTablet || hideTabBar ? 0 : 88,
+          paddingBottom: 0,
         },
       }}
     >
@@ -43,14 +40,13 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="messages"
-        options={{ title: "Messages", tabBarLabel: "Messages", headerShown: false }}
+        options={{ title: "Messages", tabBarLabel: "Messages" }}
       />
       <Tabs.Screen
         name="email"
         options={{
           title: "Email",
           tabBarLabel: "Email",
-          headerShown: false,
           tabBarBadge:
             typeof unread === "number" && unread > 0
               ? unread > 99
@@ -61,11 +57,21 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="ops"
-        options={{ title: "Ops", tabBarLabel: "Ops" }}
+        options={{
+          title: "Ops",
+          tabBarLabel: "Ops",
+          headerShown: true,
+          freezeOnBlur: false,
+        }}
       />
       <Tabs.Screen
         name="settings"
-        options={{ title: "Settings", tabBarLabel: "Settings" }}
+        options={{
+          title: "Settings",
+          tabBarLabel: "Settings",
+          headerShown: true,
+          freezeOnBlur: false,
+        }}
       />
     </Tabs>
   );

@@ -56,8 +56,8 @@ export function ConversationView({
 }: ConversationViewProps) {
   const sendMessage = useAction(api.voipmsActions.sendMessage);
   const rewriteDraft = useAction(api.smsRewrite.rewriteSmsDraft);
-  const deleteMessage = useAction(api.voipmsActions.deleteMessage);
-  const deleteConversation = useAction(api.voipmsActions.deleteConversation);
+  const deleteMessage = useMutation(api.sms.deleteMessage);
+  const deleteConversation = useMutation(api.sms.deleteConversation);
   const upsertMeta = useMutation(api.sms.upsertConversationMeta);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);

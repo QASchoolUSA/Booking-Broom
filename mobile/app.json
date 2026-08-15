@@ -21,10 +21,11 @@
     "android": {
       "label": "Booking Broom",
       "adaptiveIcon": {
-        "backgroundColor": "#1E40AF",
+        "backgroundColor": "#5A3ED6",
         "foregroundImage": "./assets/images/icon.png"
       },
       "package": "com.bookingbroom.manager",
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE"
@@ -42,14 +43,14 @@
         {
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#F5F7FB"
+          "backgroundColor": "#5A3ED6"
         }
       ],
       [
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",
-          "color": "#1E40AF"
+          "color": "#5A3ED6"
         }
       ],
       "expo-asset"

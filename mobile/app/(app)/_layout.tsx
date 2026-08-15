@@ -17,7 +17,6 @@ export default function AppLayout() {
       <Stack.Screen
         name="ops"
         options={{
-          presentation: "modal",
           headerShown: false,
           gestureEnabled: true,
           contentStyle: { backgroundColor: colors.background },

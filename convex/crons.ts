@@ -55,4 +55,12 @@ crons.interval(
   internal.emailActions.syncNextMailboxInternal
 );
 
+/** Convex Auth never deletes expired sessions/refresh tokens on its own. */
+crons.daily(
+  "prune expired auth sessions",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.authCleanup.pruneExpired,
+  {}
+);
+
 export default crons;

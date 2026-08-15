@@ -116,6 +116,9 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
         }
       : null,
     intent: doc.intent ?? null,
+    archived_at: doc.archivedAt
+      ? new Date(doc.archivedAt).toISOString()
+      : null,
     created_at: new Date(doc.createdAt).toISOString(),
     updated_at: new Date(doc.updatedAt).toISOString(),
     site: site ? mapSite(site) : undefined,
@@ -123,8 +126,10 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
 }
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
@@ -137,11 +142,29 @@ export const list = query({
       .query("bookings")
       .withIndex("by_created")
       .order("desc")
-      .take(200);
+      .take(400);
 
-    return bookings.map((booking) =>
-      mapBooking(booking, siteMap.get(booking.siteId))
-    );
+    const includeArchived = args.includeArchived === true;
+    const filtered = includeArchived
+      ? bookings.filter((b) => b.archivedAt != null)
+      : bookings.filter((b) => b.archivedAt == null);
+
+    return filtered
+      .slice(0, 200)
+      .map((booking) => mapBooking(booking, siteMap.get(booking.siteId)));
+  },
+});
+
+export const get = query({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) return null;
+    const site = await ctx.db.get(booking.siteId);
+    return mapBooking(booking, site ?? undefined);
   },
 });
 
@@ -216,6 +239,35 @@ export const remove = mutation({
     if (!booking) throw new Error("Booking not found");
 
     await ctx.db.delete(args.bookingId);
+  },
+});
+
+export const archive = mutation({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) throw new Error("Booking not found");
+    const now = Date.now();
+    await ctx.db.patch(args.bookingId, {
+      archivedAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const unarchive = mutation({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) throw new Error("Booking not found");
+    await ctx.db.patch(args.bookingId, {
+      archivedAt: undefined,
+      updatedAt: Date.now(),
+    });
   },
 });
 

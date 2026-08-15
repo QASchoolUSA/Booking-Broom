@@ -457,6 +457,30 @@ async function bestEffortVoipmsDelete(
   }
 }
 
+/** Background Voip.ms cleanup after local-first SMS deletes. */
+export const cleanupVoipmsMessages = internalAction({
+  args: {
+    items: v.array(
+      v.object({
+        voipmsId: v.string(),
+        type: v.union(v.literal("sms"), v.literal("mms")),
+      })
+    ),
+  },
+  handler: async (_ctx, args) => {
+    const chunk = 8;
+    for (let i = 0; i < args.items.length; i += chunk) {
+      const batch = args.items.slice(i, i + chunk);
+      await Promise.all(
+        batch.map((item) => bestEffortVoipmsDelete(item.voipmsId, item.type))
+      );
+    }
+  },
+});
+
+/**
+ * @deprecated Prefer api.sms.deleteMessage (local-first). Kept for older clients.
+ */
 export const deleteMessage = action({
   args: {
     messageId: v.id("smsMessages"),
@@ -473,15 +497,17 @@ export const deleteMessage = action({
     });
     if (!msg) return { ok: true };
 
-    await bestEffortVoipmsDelete(msg.voipmsId, msg.type);
-
     await ctx.runMutation(internal.sms.deleteMessageInternal, {
       messageId: args.messageId,
     });
+    await bestEffortVoipmsDelete(msg.voipmsId, msg.type);
     return { ok: true };
   },
 });
 
+/**
+ * @deprecated Prefer api.sms.deleteConversation (local-first). Kept for older clients.
+ */
 export const deleteConversation = action({
   args: {
     did: v.string(),
@@ -503,14 +529,19 @@ export const deleteConversation = action({
       { did, contact }
     );
 
-    for (const msg of messages) {
-      await bestEffortVoipmsDelete(msg.voipmsId, msg.type);
-    }
-
     const result = await ctx.runMutation(
       internal.sms.deleteConversationInternal,
       { did, contact }
     );
+
+    const chunk = 8;
+    for (let i = 0; i < messages.length; i += chunk) {
+      const batch = messages.slice(i, i + chunk);
+      await Promise.all(
+        batch.map((msg) => bestEffortVoipmsDelete(msg.voipmsId, msg.type))
+      );
+    }
+
     return { ok: true, deletedMessages: result.deletedMessages };
   },
 });

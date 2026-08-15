@@ -5,9 +5,10 @@ import {
   dateRangeForBingPeriod,
   matchBingProperty,
   parseBingDate,
+  SEO_SYNC_PERIODS,
 } from "./lib/gscMatch";
 
-const PERIODS = [1, 2, 7, 28, 90] as const;
+const PERIODS = SEO_SYNC_PERIODS;
 const CRAWL_ISSUES_CAP = 25;
 
 function requireBingApiKey(): string {

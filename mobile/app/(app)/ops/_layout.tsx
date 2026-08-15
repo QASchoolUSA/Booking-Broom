@@ -1,30 +1,5 @@
-import { Pressable } from "react-native";
-import { Stack, useRouter } from "expo-router";
-import { AppText } from "@/components/ui";
+import { Stack } from "expo-router";
 import { useTheme } from "@/theme";
-
-function CloseButton() {
-  const { colors } = useTheme();
-  const router = useRouter();
-  return (
-    <Pressable
-      onPress={() => {
-        if (router.canDismiss()) {
-          router.dismiss();
-        } else {
-          router.back();
-        }
-      }}
-      hitSlop={12}
-      accessibilityRole="button"
-      accessibilityLabel="Close"
-    >
-      <AppText weight="semibold" style={{ color: colors.primary }}>
-        Close
-      </AppText>
-    </Pressable>
-  );
-}
 
 export default function OpsStackLayout() {
   const { colors } = useTheme();
@@ -38,8 +13,7 @@ export default function OpsStackLayout() {
           fontFamily: "Poppins_600SemiBold",
           color: colors.foreground,
         },
-        headerTitleAlign: "center",
-        headerLeft: () => <CloseButton />,
+        headerBackTitle: "Ops",
         gestureEnabled: true,
         contentStyle: { backgroundColor: colors.background },
       }}

@@ -59,6 +59,7 @@ export type BookingRow = {
   notes: string | null;
   internal_notes: string | null;
   created_at: string;
+  archived_at?: string | null;
   site?: {
     slug: string;
     name: string;

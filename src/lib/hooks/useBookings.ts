@@ -7,18 +7,28 @@ import type { BookingStatus, BookingWithSite, Site } from "@/lib/types";
 import type { Id } from "convex/_generated/dataModel";
 import { useConnectionState } from "@/lib/hooks/useConnectionState";
 
-export function useBookings(siteSlug?: string) {
+export function useBookings(
+  siteSlug?: string,
+  options?: { includeArchived?: boolean }
+) {
   const { isLoading: authLoading, isAuthenticated } = useConvexAuth();
   const connectionState = useConnectionState();
+  const includeArchived = options?.includeArchived === true;
   const allBookingsRaw = useQuery(
     api.bookings.list,
-    isAuthenticated ? {} : "skip"
+    isAuthenticated
+      ? includeArchived
+        ? { includeArchived: true }
+        : {}
+      : "skip"
   );
   const sitesRaw = useQuery(api.sites.list, isAuthenticated ? {} : "skip");
 
   const updateStatusMutation = useMutation(api.bookings.updateStatus);
   const updateNotesMutation = useMutation(api.bookings.updateInternalNotes);
   const deleteMutation = useMutation(api.bookings.remove);
+  const archiveMutation = useMutation(api.bookings.archive);
+  const unarchiveMutation = useMutation(api.bookings.unarchive);
 
   const loading =
     authLoading ||
@@ -51,6 +61,18 @@ export function useBookings(siteSlug?: string) {
     });
   };
 
+  const archiveBooking = async (bookingId: string) => {
+    await archiveMutation({
+      bookingId: bookingId as Id<"bookings">,
+    });
+  };
+
+  const unarchiveBooking = async (bookingId: string) => {
+    await unarchiveMutation({
+      bookingId: bookingId as Id<"bookings">,
+    });
+  };
+
   const refresh = async () => {
     // Convex useQuery auto-refreshes; no-op kept for AppShell API compatibility
   };
@@ -66,5 +88,7 @@ export function useBookings(siteSlug?: string) {
     updateBookingStatus,
     updateInternalNotes,
     deleteBooking,
+    archiveBooking,
+    unarchiveBooking,
   };
 }

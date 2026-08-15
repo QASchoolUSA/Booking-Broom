@@ -44,6 +44,8 @@ interface BookingDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   onStatusChange: (id: string, status: BookingStatus) => Promise<void>;
   onNotesChange: (id: string, notes: string) => Promise<void>;
+  onArchive: (id: string) => Promise<void>;
+  onUnarchive: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
@@ -84,11 +86,14 @@ export function BookingDetailSheet({
   onOpenChange,
   onStatusChange,
   onNotesChange,
+  onArchive,
+  onUnarchive,
   onDelete,
 }: BookingDetailSheetProps) {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
+  const isArchived = Boolean(booking?.archived_at);
 
   useEffect(() => {
     if (booking) {
@@ -139,6 +144,32 @@ export function BookingDetailSheet({
     } finally {
       setSaving(false);
       setConfirmDelete(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    setSaving(true);
+    try {
+      await onArchive(booking.id);
+      toast.success("Booking archived");
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to archive");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUnarchive = async () => {
+    setSaving(true);
+    try {
+      await onUnarchive(booking.id);
+      toast.success("Booking restored");
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to unarchive");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -294,42 +325,63 @@ export function BookingDetailSheet({
 
           <Separator />
 
-          <section>
-            {confirmDelete ? (
-              <div className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-                <p className="text-sm leading-relaxed">
-                  Permanently delete{" "}
-                  <span className="font-medium">{booking.customer_name}</span>
-                  &apos;s booking? This cannot be undone.
-                </p>
-                <div className="grid grid-cols-2 gap-2">
+          <section className="space-y-2">
+            {isArchived ? (
+              <>
+                <Button
+                  variant="outline"
+                  className="h-11 w-full"
+                  onClick={handleUnarchive}
+                  disabled={saving}
+                >
+                  Restore from archive
+                </Button>
+                {confirmDelete ? (
+                  <div className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+                    <p className="text-sm leading-relaxed">
+                      Permanently delete{" "}
+                      <span className="font-medium">{booking.customer_name}</span>
+                      &apos;s booking? This cannot be undone.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant="outline"
+                        className="h-11"
+                        onClick={() => setConfirmDelete(false)}
+                        disabled={saving}
+                      >
+                        Keep booking
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="h-11"
+                        onClick={handleDelete}
+                        disabled={saving}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
                   <Button
                     variant="outline"
-                    className="h-11"
-                    onClick={() => setConfirmDelete(false)}
+                    className="h-11 w-full gap-2 border-destructive/40 text-destructive hover:bg-destructive/5 hover:text-destructive"
+                    onClick={() => setConfirmDelete(true)}
                     disabled={saving}
                   >
-                    Keep booking
+                    <Trash size={18} weight="duotone" className="size-[18px]" />
+                    Delete permanently
                   </Button>
-                  <Button
-                    variant="destructive"
-                    className="h-11"
-                    onClick={handleDelete}
-                    disabled={saving}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
+                )}
+              </>
             ) : (
               <Button
                 variant="outline"
-                className="h-11 w-full gap-2 border-destructive/40 text-destructive hover:bg-destructive/5 hover:text-destructive"
-                onClick={() => setConfirmDelete(true)}
+                className="h-11 w-full"
+                onClick={handleArchive}
                 disabled={saving}
               >
-                <Trash size={18} weight="duotone" className="size-[18px]" />
-                Delete booking
+                Archive booking
               </Button>
             )}
           </section>

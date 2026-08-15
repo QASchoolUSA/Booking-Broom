@@ -21,11 +21,10 @@ import { PageLoader } from "@/components/loading/PageLoader";
 import type { SeoPeriodDays, SeoSource, SiteSeoRow } from "@/lib/types";
 
 const PERIODS: { value: SeoPeriodDays; label: string }[] = [
-  { value: 1, label: "Today" },
-  { value: 2, label: "Yesterday" },
+  { value: 1, label: "24 hours" },
   { value: 7, label: "7 days" },
   { value: 28, label: "28 days" },
-  { value: 90, label: "90 days" },
+  { value: 90, label: "3 months" },
 ];
 
 function SeoPageContent() {
@@ -140,7 +139,7 @@ function SeoPageContent() {
               value={String(period)}
               onValueChange={(v) => {
                 const n = Number(v);
-                if (n === 1 || n === 2 || n === 7 || n === 28 || n === 90) {
+                if (n === 1 || n === 7 || n === 28 || n === 90) {
                   setPeriod(n);
                 }
               }}

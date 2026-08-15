@@ -13,7 +13,7 @@ export type BookingStatus =
 
 export type HostingProvider = "vercel" | "cloudflare";
 
-export type SeoPeriodDays = 1 | 2 | 7 | 28 | 90;
+export type SeoPeriodDays = 1 | 7 | 28 | 90;
 
 export interface Site {
   id: string;
@@ -295,6 +295,7 @@ export interface Booking {
   intent: BookingIntent | null;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
   site?: Site;
 }
 

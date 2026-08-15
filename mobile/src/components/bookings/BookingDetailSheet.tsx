@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { format, parseISO, isValid } from "date-fns";
@@ -48,9 +49,10 @@ type Props = {
   notesDraft: string;
   onNotesDraftChange: (value: string) => void;
   saving: boolean;
-  onClose: () => void;
   onStatusChange: (status: BookingStatus) => Promise<void>;
   onSaveNotes: () => Promise<void>;
+  onArchive: () => Promise<void>;
+  onUnarchive: () => Promise<void>;
   onDelete: () => Promise<void>;
   bottomInset: number;
 };
@@ -120,12 +122,14 @@ export function BookingDetailSheet({
   notesDraft,
   onNotesDraftChange,
   saving,
-  onClose,
   onStatusChange,
   onSaveNotes,
+  onArchive,
+  onUnarchive,
   onDelete,
   bottomInset,
 }: Props) {
+  const isArchived = Boolean(booking.archived_at);
   const { colors } = useTheme();
   const [phoneCopied, setPhoneCopied] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
@@ -259,16 +263,13 @@ export function BookingDetailSheet({
             </AppText>
           </View>
         </View>
-        <Pressable onPress={onClose} hitSlop={12}>
-          <AppText weight="semibold" style={{ color: colors.primary }}>
-            Close
-          </AppText>
-        </Pressable>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={spacing.xxl + spacing.xl}
       >
         {hasContact ? (
           <View
@@ -774,12 +775,45 @@ export function BookingDetailSheet({
           multiline
         />
         <Button label="Save notes" loading={saving} onPress={onSaveNotes} />
-        <Button
-          label="Delete booking"
-          variant="destructive"
-          onPress={onDelete}
-        />
-      </ScrollView>
+        {isArchived ? (
+          <>
+            <Button
+              label="Unarchive"
+              variant="secondary"
+              loading={saving}
+              onPress={onUnarchive}
+            />
+            <Button
+              label="Delete permanently"
+              variant="destructive"
+              loading={saving}
+              onPress={() => {
+                Alert.alert(
+                  "Delete permanently?",
+                  "This cannot be undone.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Delete",
+                      style: "destructive",
+                      onPress: () => {
+                        void onDelete();
+                      },
+                    },
+                  ]
+                );
+              }}
+            />
+          </>
+        ) : (
+          <Button
+            label="Archive booking"
+            variant="secondary"
+            loading={saving}
+            onPress={onArchive}
+          />
+        )}
+      </KeyboardAwareScrollView>
     </View>
   );
 }

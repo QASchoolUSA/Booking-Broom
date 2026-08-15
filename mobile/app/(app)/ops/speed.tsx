@@ -1,28 +1,43 @@
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { useState } from "react";
+import { formatDistanceToNow } from "date-fns";
 import {
   AppText,
-  Badge,
   Button,
-  Card,
   EmptyState,
   LoadingBlock,
   Screen,
 } from "@/components/ui";
-import { api } from "@/lib/api";
-import { spacing } from "@/theme/tokens";
+import { SpeedOverview } from "@/components/performance/SpeedOverview";
+import {
+  SiteSpeedCard,
+  type SiteSpeedRow,
+} from "@/components/performance/SiteSpeedCard";
+import { api, type Id } from "@/lib/api";
+import { useTheme } from "@/theme";
+import { radius, spacing } from "@/theme/tokens";
+
+type Strategy = "mobile" | "desktop";
 
 export default function SpeedOpsScreen() {
+  const { colors } = useTheme();
   const { isAuthenticated } = useConvexAuth();
-  const metrics = useQuery(
-    api.pagespeed.listMetrics,
-    isAuthenticated ? { strategy: "mobile" } : "skip"
-  );
-  const syncNow = useAction(api.pagespeedActions.syncNow);
+  const [strategy, setStrategy] = useState<Strategy>("mobile");
   const [busy, setBusy] = useState(false);
 
-  if (metrics === undefined) {
+  const metrics = useQuery(
+    api.pagespeed.listMetrics,
+    isAuthenticated ? { strategy } : "skip"
+  );
+  const syncState = useQuery(
+    api.pagespeed.getSyncState,
+    isAuthenticated ? {} : "skip"
+  );
+  const syncNow = useAction(api.pagespeedActions.syncNow);
+  const syncSite = useAction(api.pagespeedActions.syncSite);
+
+  if (metrics === undefined || syncState === undefined) {
     return (
       <Screen>
         <LoadingBlock />
@@ -30,69 +45,93 @@ export default function SpeedOpsScreen() {
     );
   }
 
+  const rows = metrics as SiteSpeedRow[];
+  const lastSync = syncState?.last_sync_at
+    ? formatDistanceToNow(new Date(syncState.last_sync_at), { addSuffix: true })
+    : null;
+
   return (
     <Screen padded={false}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Button
-          label={busy ? "Auditing…" : "Sync PageSpeed (mobile)"}
-          loading={busy}
-          onPress={async () => {
-            setBusy(true);
-            try {
-              await syncNow({});
-            } finally {
-              setBusy(false);
-            }
-          }}
-        />
-        {metrics.length === 0 ? (
+        <View style={styles.strategyRow}>
+          {(["mobile", "desktop"] as const).map((s) => {
+            const on = strategy === s;
+            return (
+              <Pressable
+                key={s}
+                onPress={() => setStrategy(s)}
+                style={[
+                  styles.strategyChip,
+                  {
+                    backgroundColor: on ? colors.primary : colors.muted,
+                    borderColor: on ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <AppText
+                  size={13}
+                  weight="semibold"
+                  style={{
+                    color: on ? colors.primaryForeground : colors.foreground,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {s}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View
+          style={[
+            styles.syncStrip,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText weight="semibold" size={14}>
+              PageSpeed sync
+            </AppText>
+            <AppText muted size={12}>
+              {lastSync
+                ? `Last synced ${lastSync}`
+                : "No sync yet — run an audit"}
+            </AppText>
+            {syncState?.last_sync_error ? (
+              <AppText size={12} style={{ color: colors.destructive }}>
+                {syncState.last_sync_error}
+              </AppText>
+            ) : null}
+          </View>
+          <Button
+            label={busy ? "Syncing…" : "Sync now"}
+            loading={busy}
+            onPress={async () => {
+              setBusy(true);
+              try {
+                await syncNow({});
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </View>
+
+        <SpeedOverview rows={rows} />
+
+        {rows.length === 0 ? (
           <EmptyState title="No performance data" />
         ) : (
-          metrics.map(
-            (row: {
-              site: { slug: string; name: string; domain: string };
-              metrics: {
-                performance_score: number | null;
-                lcp_ms: number | null;
-                cls: number | null;
-              } | null;
-            }) => (
-              <Card key={row.site.slug}>
-                <View style={styles.row}>
-                  <AppText weight="semibold" style={{ flex: 1 }}>
-                    {row.site.name}
-                  </AppText>
-                  <Badge
-                    label={
-                      row.metrics?.performance_score != null
-                        ? String(Math.round(row.metrics.performance_score))
-                        : "—"
-                    }
-                    tone="primary"
-                  />
-                </View>
-                <AppText muted size={12} style={{ marginTop: 4 }}>
-                  {row.site.domain}
-                </AppText>
-                {row.metrics ? (
-                  <AppText muted size={13} style={{ marginTop: 8 }}>
-                    LCP{" "}
-                    {row.metrics.lcp_ms != null
-                      ? `${Math.round(row.metrics.lcp_ms)}ms`
-                      : "—"}{" "}
-                    · CLS{" "}
-                    {row.metrics.cls != null
-                      ? row.metrics.cls.toFixed(3)
-                      : "—"}
-                  </AppText>
-                ) : (
-                  <AppText muted size={13} style={{ marginTop: 8 }}>
-                    Run sync to audit this site.
-                  </AppText>
-                )}
-              </Card>
-            )
-          )
+          rows.map((row) => (
+            <SiteSpeedCard
+              key={row.site.slug}
+              row={row}
+              onRefresh={async (siteId: Id<"sites">) => {
+                await syncSite({ siteId, strategy });
+              }}
+            />
+          ))
         )}
       </ScrollView>
     </Screen>
@@ -100,6 +139,28 @@ export default function SpeedOpsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: 40 },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  content: {
+    padding: spacing.lg,
+    gap: spacing.md,
+    paddingBottom: spacing.xl * 2,
+  },
+  strategyRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  strategyChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  syncStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+  },
 });

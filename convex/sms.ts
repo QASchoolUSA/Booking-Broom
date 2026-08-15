@@ -5,6 +5,7 @@ import {
   internalMutation,
 } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { formatUsPhone, smsPartyDigits } from "./lib/phone";
 
@@ -432,5 +433,81 @@ export const deleteConversationInternal = internalMutation({
     if (meta) await ctx.db.delete(meta._id);
 
     return { deletedMessages: messages.length };
+  },
+});
+
+/**
+ * Local-first delete — UI updates immediately; Voip.ms cleanup is scheduled.
+ */
+export const deleteMessage = mutation({
+  args: { messageId: v.id("smsMessages") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const doc = await ctx.db.get(args.messageId);
+    if (!doc) return { ok: true as const };
+
+    await ctx.db.delete(args.messageId);
+    await ctx.scheduler.runAfter(
+      0,
+      internal.voipmsActions.cleanupVoipmsMessages,
+      {
+        items: [{ voipmsId: doc.voipmsId, type: doc.type }],
+      }
+    );
+    return { ok: true as const };
+  },
+});
+
+/**
+ * Local-first conversation delete — same model as email.deleteThread.
+ */
+export const deleteConversation = mutation({
+  args: {
+    did: v.string(),
+    contact: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const did = smsPartyDigits(args.did);
+    const contact = smsPartyDigits(args.contact);
+    if (!did || !contact) throw new Error("Invalid phone number");
+
+    const messages = await ctx.db
+      .query("smsMessages")
+      .withIndex("by_did_contact_sentAt", (q) =>
+        q.eq("did", did).eq("contact", contact)
+      )
+      .collect();
+
+    const items = messages.map((m) => ({
+      voipmsId: m.voipmsId,
+      type: m.type as "sms" | "mms",
+    }));
+
+    for (const msg of messages) {
+      await ctx.db.delete(msg._id);
+    }
+
+    const meta = await ctx.db
+      .query("smsConversationMeta")
+      .withIndex("by_did_contact", (q) =>
+        q.eq("did", did).eq("contact", contact)
+      )
+      .unique();
+    if (meta) await ctx.db.delete(meta._id);
+
+    if (items.length > 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.voipmsActions.cleanupVoipmsMessages,
+        { items }
+      );
+    }
+
+    return { ok: true as const, deletedMessages: messages.length };
   },
 });

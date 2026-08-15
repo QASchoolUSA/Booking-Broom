@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import {
   Alert,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -10,6 +11,7 @@ import {
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
+import { formatDistanceToNow } from "date-fns";
 import { AppText, Button, Card, Screen } from "@/components/ui";
 import { api } from "@/lib/api";
 import {
@@ -20,12 +22,24 @@ import {
 import { useTheme } from "@/theme";
 import { radius, spacing } from "@/theme/tokens";
 
+const WEB_URL =
+  process.env.EXPO_PUBLIC_WEB_APP_URL ?? "https://bookings.kedrik.com";
+
 export default function SettingsScreen() {
   const { colors, preference, setPreference, mode } = useTheme();
   const { signOut } = useAuthActions();
   const router = useRouter();
   const { isAuthenticated } = useConvexAuth();
   const sites = useQuery(api.sites.list, isAuthenticated ? {} : "skip");
+  const gscConnection = useQuery(
+    api.gsc.getConnection,
+    isAuthenticated ? {} : "skip"
+  );
+  const bingSync = useQuery(
+    api.bing.getSyncState,
+    isAuthenticated ? {} : "skip"
+  );
+  const disconnectGsc = useMutation(api.gsc.disconnect);
   const saveToken = useMutation(api.push.saveExpoPushToken);
   const removeToken = useMutation(api.push.removeExpoPushToken);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -171,6 +185,55 @@ export default function SettingsScreen() {
           <AppText muted size={13} style={{ marginTop: 8 }}>
             {(sites ?? []).map((s: { name: string }) => s.name).join(" · ") ||
               "Loading…"}
+          </AppText>
+        </Card>
+
+        <Card>
+          <AppText weight="semibold">Search Console</AppText>
+          <AppText muted size={13} style={{ marginTop: 4, marginBottom: 12 }}>
+            {gscConnection
+              ? `Connected · ${gscConnection.google_email}`
+              : "Not connected — finish Google OAuth in the web app."}
+          </AppText>
+          <View style={{ gap: 8 }}>
+            <Button
+              label="Open web to connect"
+              variant="secondary"
+              onPress={() => Linking.openURL(`${WEB_URL}/seo`)}
+            />
+            {gscConnection ? (
+              <Button
+                label="Disconnect Google"
+                variant="ghost"
+                onPress={() => {
+                  Alert.alert(
+                    "Disconnect Search Console?",
+                    "You can reconnect from the web app anytime.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Disconnect",
+                        style: "destructive",
+                        onPress: () => void disconnectGsc({}),
+                      },
+                    ]
+                  );
+                }}
+              />
+            ) : null}
+          </View>
+        </Card>
+
+        <Card>
+          <AppText weight="semibold">Bing Webmaster</AppText>
+          <AppText muted size={13} style={{ marginTop: 8 }}>
+            {bingSync
+              ? bingSync.last_sync_at
+                ? `Last sync ${formatDistanceToNow(new Date(bingSync.last_sync_at), { addSuffix: true })}`
+                : bingSync.last_sync_error
+                  ? `Last error: ${bingSync.last_sync_error}`
+                  : "API key is configured on the server. Sync from the SEO page."
+              : "No Bing sync yet. The API key lives in Convex env."}
           </AppText>
         </Card>
 

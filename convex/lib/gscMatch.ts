@@ -17,11 +17,15 @@ export function formatDateUTC(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** periodDays: 1 = today, 2 = yesterday, 7/28/90 = rolling windows. */
-export type GscPeriodDays = 1 | 2 | 7 | 28 | 90;
+/**
+ * GSC Performance presets: 24 hours, 7 days, 28 days, 3 months.
+ * `90` is the stored key for the 3-month window.
+ * `2` is a legacy "yesterday" key kept in DB validators until leftover rows are wiped.
+ */
+export type GscPeriodDays = 1 | 7 | 28 | 90;
+export type GscPeriodDaysStored = 1 | 2 | 7 | 28 | 90;
 
-export const PERIOD_TODAY = 1 as const;
-export const PERIOD_YESTERDAY = 2 as const;
+export const SEO_SYNC_PERIODS = [1, 7, 28, 90] as const;
 
 /**
  * Match an app site domain to a GSC or Bing Webmaster property URL.
@@ -56,37 +60,47 @@ export function matchGscProperty(
 export const matchBingProperty = matchGscProperty;
 
 /**
- * GSC Search Analytics typically lags ~2–3 days behind wall-clock.
- * All period ranges end at UTC today minus this lag so Today/Yesterday
- * mean the latest available Search Console days (not calendar today).
+ * Daily GSC windows end yesterday so they match the Performance UI
+ * (`dataState: "all"` includes fresh rows through yesterday).
  */
-export const GSC_DATA_LAG_DAYS = 3;
+export const GSC_DATA_LAG_DAYS = 1;
 
 /** Bing traffic data is typically ~1 day behind wall-clock. */
 export const BING_DATA_LAG_DAYS = 1;
 
-function dateRangeWithLag(
-  periodDays: GscPeriodDays,
+function utcDay(offsetDays: number): Date {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  return d;
+}
+
+function rollingRange(
+  periodDays: GscPeriodDaysStored,
   lagDays: number
 ): { startDate: string; endDate: string } {
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  const end = utcDay(-lagDays);
 
-  const latest = new Date(today);
-  latest.setUTCDate(latest.getUTCDate() - lagDays);
-
-  if (periodDays === PERIOD_TODAY) {
-    const d = formatDateUTC(latest);
+  if (periodDays === 1) {
+    const d = formatDateUTC(end);
     return { startDate: d, endDate: d };
   }
-  if (periodDays === PERIOD_YESTERDAY) {
-    const previous = new Date(latest);
-    previous.setUTCDate(previous.getUTCDate() - 1);
+
+  if (periodDays === 2) {
+    const previous = utcDay(-lagDays - 1);
     const d = formatDateUTC(previous);
     return { startDate: d, endDate: d };
   }
 
-  const end = latest;
+  if (periodDays === 90) {
+    const start = new Date(end);
+    start.setUTCMonth(start.getUTCMonth() - 3);
+    return {
+      startDate: formatDateUTC(start),
+      endDate: formatDateUTC(end),
+    };
+  }
+
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - (periodDays - 1));
   return {
@@ -96,23 +110,27 @@ function dateRangeWithLag(
 }
 
 /**
- * Date ranges for GSC queries.
- * Today = latest available day (todayUTC − lag).
- * Yesterday = day before that (todayUTC − lag − 1).
- * Rolling windows end at the same lag-adjusted day.
+ * GSC date ranges. 24 hours uses today+yesterday so the hourly API
+ * can return the last available 24 hour buckets.
  */
-export function dateRangeForPeriod(periodDays: GscPeriodDays): {
+export function dateRangeForPeriod(periodDays: GscPeriodDaysStored): {
   startDate: string;
   endDate: string;
 } {
-  return dateRangeWithLag(periodDays, GSC_DATA_LAG_DAYS);
+  if (periodDays === 1) {
+    return {
+      startDate: formatDateUTC(utcDay(-1)),
+      endDate: formatDateUTC(utcDay(0)),
+    };
+  }
+  return rollingRange(periodDays, GSC_DATA_LAG_DAYS);
 }
 
-export function dateRangeForBingPeriod(periodDays: GscPeriodDays): {
+export function dateRangeForBingPeriod(periodDays: GscPeriodDaysStored): {
   startDate: string;
   endDate: string;
 } {
-  return dateRangeWithLag(periodDays, BING_DATA_LAG_DAYS);
+  return rollingRange(periodDays, BING_DATA_LAG_DAYS);
 }
 
 /** Parse Bing `/Date(ms)` or `/Date(ms±offset)/` into YYYY-MM-DD (UTC). */

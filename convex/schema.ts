@@ -126,6 +126,8 @@ export default defineSchema({
     smsNotifiedAt: v.optional(v.number()),
     /** Set when booking confirmation emails were claimed (idempotent send). */
     emailNotifiedAt: v.optional(v.number()),
+    /** Soft-archive timestamp; active lists exclude docs where this is set. */
+    archivedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -179,7 +181,8 @@ export default defineSchema({
 
   /**
    * Latest Search Console snapshot per site and period.
-   * periodDays: 1 = today, 2 = yesterday, 7/28/90 = rolling windows.
+   * periodDays: 1 = 24 hours, 7/28 = rolling days, 90 = 3 months.
+   * 2 is a legacy yesterday key kept until leftover rows are wiped.
    */
   siteSearchMetrics: defineTable({
     siteId: v.id("sites"),

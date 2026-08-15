@@ -1,14 +1,17 @@
-import React, { memo, useMemo, useState } from "react";
+import React, { memo, useLayoutEffect, useMemo, useState } from "react";
 import {
-  Modal,
+  ActionSheetIOS,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from "react-native";
+import { useNavigation, useRouter, type Href } from "expo-router";
+import { ListFilter } from "lucide-react-native";
 import { VirtualList } from "@/components/ui/VirtualList";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { formatDistanceToNow } from "date-fns";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/lib/api";
@@ -22,7 +25,6 @@ import {
   LoadingBlock,
   Screen,
 } from "@/components/ui";
-import { BookingDetailSheet } from "@/components/bookings/BookingDetailSheet";
 import {
   BOOKING_STATUSES,
   statusTone,
@@ -67,24 +69,81 @@ const BookingCard = memo(function BookingCard({
   );
 });
 
-export default function BookingsScreen() {
+export default function BookingsIndexScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const navigation = useNavigation();
   const { isAuthenticated } = useConvexAuth();
-  const bookings = useQuery(api.bookings.list, isAuthenticated ? {} : "skip");
+  const [listMode, setListMode] = useState<"active" | "archived">("active");
+
+  const openListFilter = () => {
+    const apply = (mode: "active" | "archived") => setListMode(mode);
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Active bookings", "Archived"],
+          cancelButtonIndex: 0,
+        },
+        (index) => {
+          if (index === 1) apply("active");
+          if (index === 2) apply("archived");
+        }
+      );
+      return;
+    }
+    Alert.alert("Filter", undefined, [
+      { text: "Active bookings", onPress: () => apply("active") },
+      { text: "Archived", onPress: () => apply("archived") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: listMode === "archived" ? "Archived" : "Bookings",
+      headerRight: () => (
+        <Pressable
+          onPress={openListFilter}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Filter bookings"
+          style={{ paddingHorizontal: 4 }}
+        >
+          <View>
+            <ListFilter size={22} color={colors.primary} />
+            {listMode === "archived" ? (
+              <View
+                style={{
+                  position: "absolute",
+                  top: -2,
+                  right: -2,
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: colors.accent,
+                }}
+              />
+            ) : null}
+          </View>
+        </Pressable>
+      ),
+    });
+  }, [colors.accent, colors.primary, listMode, navigation]);
+  const bookings = useQuery(
+    api.bookings.list,
+    isAuthenticated
+      ? listMode === "archived"
+        ? { includeArchived: true }
+        : {}
+      : "skip"
+  );
   const sites = useQuery(api.sites.list, isAuthenticated ? {} : "skip");
-  const updateStatus = useMutation(api.bookings.updateStatus);
-  const updateNotes = useMutation(api.bookings.updateInternalNotes);
-  const removeBooking = useMutation(api.bookings.remove);
 
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">(
     "all"
   );
   const [siteFilter, setSiteFilter] = useState<string | "all">("all");
-  const [selected, setSelected] = useState<BookingRow | null>(null);
-  const [sheetVisible, setSheetVisible] = useState(false);
-  const [notesDraft, setNotesDraft] = useState("");
-  const [saving, setSaving] = useState(false);
 
   const filtered = useMemo(() => {
     const rows = (bookings ?? []) as BookingRow[];
@@ -94,23 +153,6 @@ export default function BookingsScreen() {
       return true;
     });
   }, [bookings, statusFilter, siteFilter]);
-
-  const openDetail = (item: BookingRow) => {
-    setSelected(item);
-    setNotesDraft(item.internal_notes ?? "");
-    setSheetVisible(true);
-  };
-
-  const requestCloseDetail = () => {
-    setSheetVisible(false);
-    if (Platform.OS === "android") {
-      setSelected(null);
-    }
-  };
-
-  const onDetailDismiss = () => {
-    setSelected(null);
-  };
 
   if (bookings === undefined) {
     return (
@@ -218,8 +260,12 @@ export default function BookingsScreen() {
 
       {filtered.length === 0 ? (
         <EmptyState
-          title="No bookings"
-          subtitle="New leads from your cleaning sites appear here in real time."
+          title={listMode === "archived" ? "No archived bookings" : "No bookings"}
+          subtitle={
+            listMode === "archived"
+              ? "Archived bookings will show up here."
+              : "New leads from your cleaning sites appear here in real time."
+          }
         />
       ) : (
         <VirtualList
@@ -230,63 +276,16 @@ export default function BookingsScreen() {
             paddingBottom: insets.bottom + 100,
           }}
           renderItem={({ item }) => (
-            <BookingCard item={item} onPress={() => openDetail(item)} />
+            <BookingCard
+              item={item}
+              onPress={() =>
+                router.push(`/bookings/${item.id}` as Href)
+              }
+            />
           )}
           ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
         />
       )}
-
-      <Modal
-        visible={sheetVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={requestCloseDetail}
-        onDismiss={onDetailDismiss}
-      >
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-          {selected ? (
-            <BookingDetailSheet
-              booking={selected}
-              notesDraft={notesDraft}
-              onNotesDraftChange={setNotesDraft}
-              saving={saving}
-              bottomInset={insets.bottom}
-              onClose={requestCloseDetail}
-              onStatusChange={async (status) => {
-                setSaving(true);
-                try {
-                  await updateStatus({
-                    bookingId: selected.id,
-                    status,
-                  });
-                  setSelected({ ...selected, status });
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              onSaveNotes={async () => {
-                setSaving(true);
-                try {
-                  await updateNotes({
-                    bookingId: selected.id,
-                    notes: notesDraft,
-                  });
-                  setSelected({
-                    ...selected,
-                    internal_notes: notesDraft,
-                  });
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              onDelete={async () => {
-                await removeBooking({ bookingId: selected.id });
-                requestCloseDetail();
-              }}
-            />
-          ) : null}
-        </View>
-      </Modal>
     </Screen>
   );
 }

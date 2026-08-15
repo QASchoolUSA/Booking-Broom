@@ -6,11 +6,7 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import {
-  formatDateUTC,
-  PERIOD_TODAY,
-  PERIOD_YESTERDAY,
-} from "./lib/gscMatch";
+import { formatDateUTC } from "./lib/gscMatch";
 
 const periodDays = v.union(
   v.literal(1),
@@ -158,33 +154,19 @@ export const listMetrics = query({
       let delta: ReturnType<typeof computeDelta> | null = null;
 
       if (metric) {
-        if (args.periodDays === PERIOD_TODAY) {
-          const yesterday = await ctx.db
-            .query("siteBingSearchMetrics")
-            .withIndex("by_site_period", (q) =>
-              q.eq("siteId", site._id).eq("periodDays", PERIOD_YESTERDAY)
-            )
-            .unique();
-          if (yesterday) {
-            delta = computeDelta(metric, yesterday, "yesterday");
-          }
-        }
+        const history = await ctx.db
+          .query("siteBingSearchMetricsHistory")
+          .withIndex("by_site_period_date", (q) =>
+            q.eq("siteId", site._id).eq("periodDays", args.periodDays)
+          )
+          .collect();
 
-        if (!delta) {
-          const history = await ctx.db
-            .query("siteBingSearchMetricsHistory")
-            .withIndex("by_site_period_date", (q) =>
-              q.eq("siteId", site._id).eq("periodDays", args.periodDays)
-            )
-            .collect();
+        const prior = history
+          .filter((h) => h.snapshotDate < today)
+          .sort((a, b) => b.snapshotDate.localeCompare(a.snapshotDate))[0];
 
-          const prior = history
-            .filter((h) => h.snapshotDate < today)
-            .sort((a, b) => b.snapshotDate.localeCompare(a.snapshotDate))[0];
-
-          if (prior) {
-            delta = computeDelta(metric, prior, prior.snapshotDate);
-          }
+        if (prior) {
+          delta = computeDelta(metric, prior, prior.snapshotDate);
         }
       }
 

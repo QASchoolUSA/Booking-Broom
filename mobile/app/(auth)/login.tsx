@@ -1,11 +1,6 @@
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { StyleSheet, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Sparkles } from "lucide-react-native";
@@ -40,98 +35,96 @@ export default function LoginScreen() {
 
   return (
     <Screen padded={false} style={{ paddingTop: insets.top }}>
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + spacing.xl },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={spacing.xl}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: insets.bottom + spacing.xl },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={[styles.hero, { backgroundColor: colors.primary }]}>
-            <View
-              style={[
-                styles.heroIcon,
-                { backgroundColor: "rgba(255,255,255,0.18)" },
-              ]}
-            >
-              <Sparkles size={28} color="#fff" />
-            </View>
-            <AppText
-              weight="bold"
-              size={28}
-              style={{ color: "#fff", marginTop: spacing.lg }}
-            >
-              Booking Broom
-            </AppText>
-            <AppText
-              size={15}
-              style={{ color: "rgba(255,255,255,0.85)", marginTop: spacing.sm }}
-            >
-              Manager control for every cleaning site — live bookings, messages,
-              and ops.
-            </AppText>
+        <View style={[styles.hero, { backgroundColor: colors.primary }]}>
+          <View
+            style={[
+              styles.heroIcon,
+              { backgroundColor: "rgba(255,255,255,0.18)" },
+            ]}
+          >
+            <Sparkles size={28} color="#fff" />
           </View>
+          <AppText
+            weight="bold"
+            size={28}
+            style={{ color: "#fff", marginTop: spacing.lg }}
+          >
+            Booking Broom
+          </AppText>
+          <AppText
+            size={15}
+            style={{ color: "rgba(255,255,255,0.85)", marginTop: spacing.sm }}
+          >
+            Manager control for every cleaning site — live bookings, messages,
+            and ops.
+          </AppText>
+        </View>
 
-          <View style={styles.form}>
-            <AppText weight="semibold" size={22}>
-              {isSignUp ? "Create manager account" : "Sign in"}
+        <View style={styles.form}>
+          <AppText weight="semibold" size={22}>
+            {isSignUp ? "Create manager account" : "Sign in"}
+          </AppText>
+          <AppText muted style={{ marginTop: spacing.xs, marginBottom: spacing.xl }}>
+            {isSignUp
+              ? "First time only — use a strong password."
+              : "Use your Booking Broom manager credentials."}
+          </AppText>
+
+          <TextField
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            placeholder="you@company.com"
+          />
+          <TextField
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholder="••••••••"
+          />
+
+          {error ? (
+            <AppText
+              style={{ color: colors.destructive, marginBottom: spacing.md }}
+              size={13}
+            >
+              {error}
             </AppText>
-            <AppText muted style={{ marginTop: spacing.xs, marginBottom: spacing.xl }}>
-              {isSignUp
-                ? "First time only — use a strong password."
-                : "Use your Booking Broom manager credentials."}
-            </AppText>
+          ) : null}
 
-            <TextField
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              placeholder="you@company.com"
-            />
-            <TextField
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholder="••••••••"
-            />
+          <Button
+            label={isSignUp ? "Create account" : "Sign in"}
+            onPress={onSubmit}
+            loading={loading}
+          />
 
-            {error ? (
-              <AppText
-                style={{ color: colors.destructive, marginBottom: spacing.md }}
-                size={13}
-              >
-                {error}
-              </AppText>
-            ) : null}
-
-            <Button
-              label={isSignUp ? "Create account" : "Sign in"}
-              onPress={onSubmit}
-              loading={loading}
-            />
-
-            <Button
-              label={
-                isSignUp
-                  ? "Already have an account? Sign in"
-                  : "First time? Create manager account"
-              }
-              variant="ghost"
-              onPress={() => {
-                setIsSignUp((v) => !v);
-                setError(null);
-              }}
-              style={{ marginTop: spacing.md }}
-            />
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          <Button
+            label={
+              isSignUp
+                ? "Already have an account? Sign in"
+                : "First time? Create manager account"
+            }
+            variant="ghost"
+            onPress={() => {
+              setIsSignUp((v) => !v);
+              setError(null);
+            }}
+            style={{ marginTop: spacing.md }}
+          />
+        </View>
+      </KeyboardAwareScrollView>
     </Screen>
   );
 }

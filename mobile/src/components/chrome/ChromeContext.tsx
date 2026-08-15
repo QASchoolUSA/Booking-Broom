@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 type ChromeContextValue = {
   hideTabBar: boolean;
@@ -22,4 +29,21 @@ export function useChrome() {
   const ctx = useContext(ChromeContext);
   if (!ctx) throw new Error("useChrome must be used within ChromeProvider");
   return ctx;
+}
+
+/** Show the tab bar as soon as a nested stack pop starts; hide on push. */
+export function useNestedStackTabBarListeners() {
+  const { setHideTabBar } = useChrome();
+
+  return useCallback(
+    ({ navigation }: { navigation: { getState: () => { index?: number } } }) => ({
+      transitionStart: (e: { data: { closing: boolean } }) => {
+        setHideTabBar(!e.data.closing);
+      },
+      transitionEnd: () => {
+        setHideTabBar((navigation.getState()?.index ?? 0) > 0);
+      },
+    }),
+    [setHideTabBar]
+  );
 }

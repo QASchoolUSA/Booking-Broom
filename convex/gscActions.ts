@@ -2,13 +2,17 @@ import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { dateRangeForPeriod, matchGscProperty, normalizeHost } from "./lib/gscMatch";
+import {
+  dateRangeForPeriod,
+  matchGscProperty,
+  normalizeHost,
+  SEO_SYNC_PERIODS,
+} from "./lib/gscMatch";
 
 const GSC_SCOPE =
   "https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/userinfo.email";
 
-/** 1 = today, 2 = yesterday, 7/28/90 = rolling windows. */
-const PERIODS = [1, 2, 7, 28, 90] as const;
+const PERIODS = SEO_SYNC_PERIODS;
 
 /** Must match an authorized redirect URI on the Google OAuth client (Next.js app). */
 function redirectUri(): string {
@@ -277,7 +281,8 @@ async function querySearchAnalytics(
   accessToken: string,
   siteUrl: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  hourly = false
 ): Promise<{
   clicks: number;
   impressions: number;
@@ -285,6 +290,20 @@ async function querySearchAnalytics(
   position: number;
 }> {
   const encoded = encodeURIComponent(siteUrl);
+  const body = hourly
+    ? {
+        startDate,
+        endDate,
+        dimensions: ["HOUR"],
+        rowLimit: 25000,
+        dataState: "hourly_all",
+      }
+    : {
+        startDate,
+        endDate,
+        dataState: "all",
+      };
+
   const res = await fetch(
     `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
     {
@@ -293,16 +312,12 @@ async function querySearchAnalytics(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        startDate,
-        endDate,
-        // Match GSC Performance UI: include fresh/partial recent rows.
-        dataState: "all",
-      }),
+      body: JSON.stringify(body),
     }
   );
   const data = (await res.json()) as {
     rows?: {
+      keys?: string[];
       clicks: number;
       impressions: number;
       ctr: number;
@@ -315,15 +330,38 @@ async function querySearchAnalytics(
       data.error?.message || `Search analytics failed for ${siteUrl}`
     );
   }
-  const row = data.rows?.[0];
-  if (!row) {
+  const rows = data.rows ?? [];
+  if (rows.length === 0) {
     return { clicks: 0, impressions: 0, ctr: 0, position: 0 };
   }
+
+  if (!hourly) {
+    const row = rows[0]!;
+    return {
+      clicks: row.clicks ?? 0,
+      impressions: row.impressions ?? 0,
+      ctr: row.ctr ?? 0,
+      position: row.position ?? 0,
+    };
+  }
+
+  const hours = [...rows].sort((a, b) =>
+    (a.keys?.[0] ?? "").localeCompare(b.keys?.[0] ?? "")
+  );
+  const last24 = hours.slice(-24);
+  let clicks = 0;
+  let impressions = 0;
+  let posWeight = 0;
+  for (const row of last24) {
+    clicks += row.clicks ?? 0;
+    impressions += row.impressions ?? 0;
+    posWeight += (row.position ?? 0) * (row.impressions ?? 0);
+  }
   return {
-    clicks: row.clicks ?? 0,
-    impressions: row.impressions ?? 0,
-    ctr: row.ctr ?? 0,
-    position: row.position ?? 0,
+    clicks,
+    impressions,
+    ctr: impressions > 0 ? clicks / impressions : 0,
+    position: impressions > 0 ? posWeight / impressions : 0,
   };
 }
 
@@ -339,7 +377,8 @@ async function queryTopQueries(
   accessToken: string,
   siteUrl: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  hourly = false
 ): Promise<TopQueryRow[]> {
   const encoded = encodeURIComponent(siteUrl);
   const res = await fetch(
@@ -355,7 +394,7 @@ async function queryTopQueries(
         endDate,
         dimensions: ["query"],
         rowLimit: 5,
-        dataState: "all",
+        dataState: hourly ? "hourly_all" : "all",
       }),
     }
   );
@@ -430,12 +469,26 @@ export const syncAllInternal = internalAction({
 
         for (const periodDays of PERIODS) {
           const { startDate, endDate } = dateRangeForPeriod(periodDays);
-          const stats = await querySearchAnalytics(
-            accessToken,
-            property,
-            startDate,
-            endDate
-          );
+          const hourly = periodDays === 1;
+          let stats;
+          try {
+            stats = await querySearchAnalytics(
+              accessToken,
+              property,
+              startDate,
+              endDate,
+              hourly
+            );
+          } catch (e) {
+            if (!hourly) throw e;
+            stats = await querySearchAnalytics(
+              accessToken,
+              property,
+              startDate,
+              endDate,
+              false
+            );
+          }
           await ctx.runMutation(internal.gsc.upsertMetric, {
             siteId: site._id as Id<"sites">,
             periodDays,
@@ -448,12 +501,25 @@ export const syncAllInternal = internalAction({
             endDate,
           });
 
-          const queries = await queryTopQueries(
-            accessToken,
-            property,
-            startDate,
-            endDate
-          );
+          let queries;
+          try {
+            queries = await queryTopQueries(
+              accessToken,
+              property,
+              startDate,
+              endDate,
+              hourly
+            );
+          } catch (e) {
+            if (!hourly) throw e;
+            queries = await queryTopQueries(
+              accessToken,
+              property,
+              startDate,
+              endDate,
+              false
+            );
+          }
           await ctx.runMutation(internal.gsc.upsertQueries, {
             siteId: site._id as Id<"sites">,
             periodDays,

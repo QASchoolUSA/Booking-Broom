@@ -14,6 +14,7 @@ import {
 } from "@expo-google-fonts/open-sans";
 import { useConvexAuth } from "convex/react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ConvexClientProvider } from "@/lib/convex";
 import { initNotifications } from "@/lib/notifications";
@@ -86,13 +87,15 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ConvexClientProvider>
-          <ThemeProvider>
-            <ChromeProvider>
-              <RootNavigator />
-            </ChromeProvider>
-          </ThemeProvider>
-        </ConvexClientProvider>
+        <KeyboardProvider>
+          <ConvexClientProvider>
+            <ThemeProvider>
+              <ChromeProvider>
+                <RootNavigator />
+              </ChromeProvider>
+            </ThemeProvider>
+          </ConvexClientProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

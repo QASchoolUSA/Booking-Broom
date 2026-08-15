@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as authCleanup from "../authCleanup.js";
 import type * as bing from "../bing.js";
 import type * as bingActions from "../bingActions.js";
 import type * as bookings from "../bookings.js";
@@ -36,6 +37,7 @@ import type * as pricing from "../pricing.js";
 import type * as push from "../push.js";
 import type * as pushActions from "../pushActions.js";
 import type * as seed from "../seed.js";
+import type * as seoCleanup from "../seoCleanup.js";
 import type * as seoScan from "../seoScan.js";
 import type * as seoScanActions from "../seoScanActions.js";
 import type * as siteHealth from "../siteHealth.js";
@@ -53,6 +55,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  authCleanup: typeof authCleanup;
   bing: typeof bing;
   bingActions: typeof bingActions;
   bookings: typeof bookings;
@@ -80,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   push: typeof push;
   pushActions: typeof pushActions;
   seed: typeof seed;
+  seoCleanup: typeof seoCleanup;
   seoScan: typeof seoScan;
   seoScanActions: typeof seoScanActions;
   siteHealth: typeof siteHealth;
