@@ -104,4 +104,13 @@ export const SEED_SITES = [
     apiKeyHash:
       "e3f6a870828c648e9283b055dbbe80b58f966184a193c5359b3dad4aa438a688",
   },
+  {
+    slug: "sanford-nc",
+    name: "Cleaning Sanford",
+    domain: "cleaningsanford.com",
+    accentColor: "#0F5C5B",
+    contactEmail: "info@cleaningsanford.com",
+    apiKeyHash:
+      "0e7461f3f46600f13286a97bcc97c999b2501270892aee942a65567305491474",
+  },
 ] as const;

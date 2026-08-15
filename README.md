@@ -107,10 +107,11 @@ node scripts/setup-convex-auth.mjs https://your-app.vercel.app
 | `kissimmee` | Cleaning Kissimmee | `bb_kissimmee_dev_key` |
 | `windermere` | Windermere Cleaning | `bb_windermere_dev_key` |
 | `boca-raton` | Cleaning Boca Raton | `bb_boca-raton_dev_key` |
+| `sanford-nc` | Cleaning Sanford | `bb_sanford-nc_dev_key` |
 
 Use the **Test booking** button in development to simulate incoming bookings.
 
-Site-specific production keys and env setup: see `docs/*-site.md` (including `docs/apopka-site.md`, `docs/kissimmee-site.md`, `docs/windermere-site.md`, `docs/boca-raton-site.md`).
+Site-specific production keys and env setup: see `docs/*-site.md` (including `docs/apopka-site.md`, `docs/kissimmee-site.md`, `docs/windermere-site.md`, `docs/boca-raton-site.md`, `docs/sanford-nc-site.md`).
 
 ## Public Booking API
 
@@ -205,6 +206,7 @@ When a booking is submitted via the public API, Booking Broom can send:
 | Cleaning Kissimmee | `hello@cleaningkissimmee.com` |
 | Windermere Cleaning | `hello@windermerecleaning.com` |
 | Cleaning Boca Raton | `hello@cleaningbocaraton.com` |
+| Cleaning Sanford | `info@cleaningsanford.com` |
 
 Configure SpaceMail SMTP in Vercel (or `.env.local` for local dev):
 

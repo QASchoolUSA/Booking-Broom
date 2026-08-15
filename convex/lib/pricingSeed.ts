@@ -737,6 +737,18 @@ export const SEED_PRICING: SeedPricing[] = [
     ]),
   },
   {
+    slug: "sanford-nc",
+    engine: "bedroom-band",
+    currency: "USD",
+    config: bedroomBandDefaults([
+      {
+        key: "airbnb-cleaning",
+        label: "Airbnb / Turnover Cleaning",
+        canonicalKey: "airbnb-turnover",
+      },
+    ]),
+  },
+  {
     slug: "windermere",
     engine: "service-base-mult",
     currency: "USD",
