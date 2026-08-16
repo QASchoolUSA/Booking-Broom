@@ -307,44 +307,147 @@ export const markThreadReadLocal = mutation({
   },
 });
 
+async function purgeThreadMessages(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: { db: any; storage: any },
+  threadId: Id<"emailThreads">
+): Promise<{ ok: true; deleted: number }> {
+  const thread = await ctx.db.get(threadId);
+  if (!thread) return { ok: true as const, deleted: 0 };
+
+  const messages = await ctx.db
+    .query("emailMessages")
+    .withIndex("by_thread_and_sentAt", (q: any) => q.eq("threadId", threadId))
+    .collect();
+
+  let deleted = 0;
+  for (const m of messages) {
+    for (const att of m.attachmentMeta ?? []) {
+      if (att.storageId) {
+        try {
+          await ctx.storage.delete(att.storageId);
+        } catch {
+          // ignore missing blobs
+        }
+      }
+    }
+    await ctx.db.delete(m._id);
+    deleted += 1;
+  }
+
+  const unread = thread.unreadCount ?? 0;
+  if (unread > 0) {
+    await bumpMailboxUnread(ctx, thread.mailboxId, -unread);
+  }
+  await ctx.db.delete(threadId);
+  return { ok: true as const, deleted };
+}
+
 /**
- * Delete a thread and its messages from Booking Broom only (IMAP untouched).
+ * Delete a thread and its messages from Booking Broom only.
+ * Prefer emailActions.deleteThread so SpaceMail INBOX is updated too.
  */
+export const deleteThreadLocalInternal = internalMutation({
+  args: { threadId: v.id("emailThreads") },
+  handler: async (ctx, args) => {
+    return await purgeThreadMessages(ctx, args.threadId);
+  },
+});
+
+/** Prefer emailActions.deleteThread (also deletes on SpaceMail). */
 export const deleteThread = mutation({
   args: { threadId: v.id("emailThreads") },
   handler: async (ctx, args) => {
     await requireIdentity(ctx);
-    const thread = await ctx.db.get(args.threadId);
-    if (!thread) return { ok: true as const, deleted: 0 };
+    return await purgeThreadMessages(ctx, args.threadId);
+  },
+});
 
+/** Local INBOX UIDs (uid > 0). Outbound placeholders with uid 0 are excluded. */
+export const listLocalInboxUidsInternal = internalQuery({
+  args: { mailboxId: v.id("emailMailboxes") },
+  handler: async (ctx, args) => {
     const messages = await ctx.db
       .query("emailMessages")
-      .withIndex("by_thread_and_sentAt", (q) =>
-        q.eq("threadId", args.threadId)
+      .withIndex("by_mailbox_and_uid", (q) =>
+        q.eq("mailboxId", args.mailboxId)
       )
       .collect();
+    return messages.filter((m) => m.uid > 0).map((m) => m.uid);
+  },
+});
 
-    let deleted = 0;
-    for (const m of messages) {
-      for (const att of m.attachmentMeta ?? []) {
+/**
+ * Remove local messages whose IMAP UIDs no longer exist in SpaceMail INBOX.
+ * Rebuilds affected threads; deletes empty threads.
+ */
+export const removeVanishedMessagesInternal = internalMutation({
+  args: {
+    mailboxId: v.id("emailMailboxes"),
+    uids: v.array(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const unique = [...new Set(args.uids.filter((u) => u > 0))];
+    if (unique.length === 0) return { removed: 0 };
+
+    const affectedThreadIds = new Set<Id<"emailThreads">>();
+    let removed = 0;
+
+    for (const uid of unique) {
+      const msg = await ctx.db
+        .query("emailMessages")
+        .withIndex("by_mailbox_and_uid", (q) =>
+          q.eq("mailboxId", args.mailboxId).eq("uid", uid)
+        )
+        .unique();
+      if (!msg) continue;
+
+      affectedThreadIds.add(msg.threadId);
+      for (const att of msg.attachmentMeta ?? []) {
         if (att.storageId) {
           try {
             await ctx.storage.delete(att.storageId);
           } catch {
-            // ignore missing blobs
+            // ignore
           }
         }
       }
-      await ctx.db.delete(m._id);
-      deleted += 1;
+      await ctx.db.delete(msg._id);
+      removed += 1;
     }
 
-    const unread = thread.unreadCount ?? 0;
-    if (unread > 0) {
-      await bumpMailboxUnread(ctx, thread.mailboxId, -unread);
+    for (const threadId of affectedThreadIds) {
+      const remaining = await ctx.db
+        .query("emailMessages")
+        .withIndex("by_thread_and_sentAt", (q) => q.eq("threadId", threadId))
+        .collect();
+
+      if (remaining.length === 0) {
+        const thread = await ctx.db.get(threadId);
+        if (thread) await ctx.db.delete(threadId);
+        continue;
+      }
+
+      remaining.sort((a, b) => a.sentAt - b.sentAt);
+      const last = remaining[remaining.length - 1]!;
+      const unreadCount = remaining.filter((m) => !m.seen).length;
+      const participants = [
+        ...new Set(
+          remaining.flatMap((m) => [m.from, ...m.to, ...(m.cc ?? [])])
+        ),
+      ];
+      await ctx.db.patch(threadId, {
+        subject: last.subject,
+        participants,
+        lastMessageAt: last.sentAt,
+        lastSnippet: last.textBody?.slice(0, 160) ?? last.subject,
+        unreadCount,
+        messageCount: remaining.length,
+      });
     }
-    await ctx.db.delete(args.threadId);
-    return { ok: true as const, deleted };
+
+    await recomputeMailboxUnread(ctx, args.mailboxId);
+    return { removed };
   },
 });
 

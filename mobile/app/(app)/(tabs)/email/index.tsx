@@ -3,7 +3,7 @@ import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { useRouter, type Href } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { VirtualList } from "@/components/ui/VirtualList";
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { formatDistanceToNow } from "date-fns";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -54,7 +54,7 @@ export default function EmailIndexScreen() {
     isAuthenticated ? {} : "skip"
   );
   const syncMailbox = useAction(api.emailActions.syncMailboxNow);
-  const deleteThread = useMutation(api.email.deleteThread);
+  const deleteThread = useAction(api.emailActions.deleteThread);
 
   const [selectedMailboxId, setSelectedMailboxId] = useState<string | null>(
     null
@@ -125,7 +125,7 @@ export default function EmailIndexScreen() {
   const confirmDeleteThread = (t: Thread) => {
     Alert.alert(
       "Delete thread?",
-      "Removes this conversation from Booking Broom. Mail on the provider is unchanged.",
+      "Removes this conversation from Booking Broom and deletes it from SpaceMail INBOX.",
       [
         { text: "Cancel", style: "cancel" },
         {

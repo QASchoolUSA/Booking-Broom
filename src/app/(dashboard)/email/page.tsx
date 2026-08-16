@@ -311,6 +311,7 @@ export default function EmailPage() {
                 thread={selectedThread}
                 messages={messages}
                 onBack={() => setSelectedThreadId(null)}
+                onDeleted={() => setSelectedThreadId(null)}
                 className="h-full min-h-0"
               />
             </div>
@@ -324,6 +325,7 @@ export default function EmailPage() {
             thread={selectedThread}
             messages={messages}
             onBack={() => setSelectedThreadId(null)}
+            onDeleted={() => setSelectedThreadId(null)}
             immersiveMobile
             className="min-h-0"
           />

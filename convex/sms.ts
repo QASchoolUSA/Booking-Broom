@@ -461,7 +461,8 @@ export const deleteMessage = mutation({
 });
 
 /**
- * Local-first conversation delete — same model as email.deleteThread.
+ * Local-first conversation delete — SMS stays local-only (unlike
+ * emailActions.deleteThread which also expunges SpaceMail).
  */
 export const deleteConversation = mutation({
   args: {

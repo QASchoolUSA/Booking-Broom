@@ -10,6 +10,7 @@ import {
   CaretLeft,
   DownloadSimple,
   PaperPlaneTilt,
+  Trash,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { EmailMessage, EmailThread } from "@/lib/types";
@@ -22,6 +23,7 @@ interface EmailThreadViewProps {
   thread: EmailThread | null;
   messages: EmailMessage[] | undefined;
   onBack?: () => void;
+  onDeleted?: () => void;
   immersiveMobile?: boolean;
   className?: string;
 }
@@ -150,13 +152,16 @@ export function EmailThreadView({
   thread,
   messages,
   onBack,
+  onDeleted,
   immersiveMobile = false,
   className,
 }: EmailThreadViewProps) {
   const sendReply = useAction(api.emailActions.sendReply);
   const markSeen = useAction(api.emailActions.markSeen);
+  const deleteThread = useAction(api.emailActions.deleteThread);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const markedRef = useRef<string | null>(null);
 
@@ -198,6 +203,33 @@ export function EmailThreadView({
       toast.error(e instanceof Error ? e.message : "Failed to send reply");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!thread || deleting) return;
+    const ok = window.confirm(
+      "Delete this conversation from Booking Broom and SpaceMail INBOX?"
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      const result = await deleteThread({
+        threadId: thread.id as Id<"emailThreads">,
+      });
+      if (result.imapError) {
+        toast.warning("Removed locally; SpaceMail delete had an issue", {
+          description: result.imapError,
+        });
+      } else {
+        toast.success("Conversation deleted");
+      }
+      onDeleted?.();
+      onBack?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -245,6 +277,17 @@ export function EmailThreadView({
             {` · ${thread.message_count} message${thread.message_count === 1 ? "" : "s"}`}
           </p>
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="mt-0.5 h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={() => void handleDelete()}
+          disabled={deleting}
+          aria-label="Delete conversation"
+        >
+          <Trash size={18} />
+        </Button>
       </div>
 
       <div

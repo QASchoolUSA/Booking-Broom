@@ -207,11 +207,16 @@ export type SyncFetchResult = {
   lastUid: number;
   messages: ParsedInboundMessage[];
   reset: boolean;
+  /** All UIDs currently present in INBOX (for remote-delete reconcile). */
+  inboxUids: number[];
+  /** False when UID search failed — do not reconcile deletes. */
+  inboxUidsComplete: boolean;
 };
 
 /**
  * Incremental INBOX fetch. If uidValidity changes vs stored, resets and
  * fetches recent messages (lookback / maxInitialMessages).
+ * Always returns the full INBOX UID set for delete reconciliation.
  */
 export async function fetchInboxIncremental(
   conn: MailboxConn,
@@ -222,6 +227,8 @@ export async function fetchInboxIncremental(
   let uidValidity = 0;
   let lastUid = stored.lastUid ?? 0;
   let reset = false;
+  let inboxUids: number[] = [];
+  let inboxUidsComplete = false;
 
   try {
     await client.connect();
@@ -235,21 +242,38 @@ export async function fetchInboxIncremental(
     }
 
     if (exists === 0) {
-      return { uidValidity, lastUid: 0, messages: [], reset };
+      return {
+        uidValidity,
+        lastUid: 0,
+        messages: [],
+        reset,
+        inboxUids: [],
+        inboxUidsComplete: true,
+      };
+    }
+
+    try {
+      const allUids = await client.search({ all: true }, { uid: true });
+      inboxUids = (Array.isArray(allUids) ? allUids : [])
+        .map(Number)
+        .filter((u) => u > 0);
+      inboxUidsComplete = true;
+    } catch {
+      inboxUids = [];
+      inboxUidsComplete = false;
     }
 
     let uids: number[] = [];
 
     if (!lastUid || reset) {
       // Fresh sync: last N by UID, then filter by lookback date when parsing.
-      const start = Math.max(1, exists - EMAIL_SYNC_LIMITS.maxInitialMessages + 1);
-      // Prefer UID search for all; fall back to sequence.
-      try {
-        const allUids = await client.search({ all: true }, { uid: true });
-        const list = Array.isArray(allUids) ? allUids.map(Number) : [];
-        uids = list.slice(-EMAIL_SYNC_LIMITS.maxInitialMessages);
-      } catch {
-        // sequence range as fallback — fetch by seq then use uid from envelope
+      if (inboxUidsComplete && inboxUids.length > 0) {
+        uids = inboxUids.slice(-EMAIL_SYNC_LIMITS.maxInitialMessages);
+      } else {
+        const start = Math.max(
+          1,
+          exists - EMAIL_SYNC_LIMITS.maxInitialMessages + 1
+        );
         const range = `${start}:*`;
         for await (const msg of client.fetch(range, {
           uid: true,
@@ -258,11 +282,6 @@ export async function fetchInboxIncremental(
         })) {
           if (msg.source) {
             const parsed = await simpleParser(msg.source);
-            const cutoff =
-              Date.now() - EMAIL_SYNC_LIMITS.initialLookbackMs;
-            if ((parsed.date?.getTime() ?? 0) < cutoff && !reset) {
-              // still allow on reset path below
-            }
             const flags = new Set(
               [...(msg.flags ?? [])].map((f) => String(f))
             );
@@ -272,7 +291,6 @@ export async function fetchInboxIncremental(
           }
           lastUid = Math.max(lastUid, msg.uid);
         }
-        // Filter lookback for initial
         const cutoff = Date.now() - EMAIL_SYNC_LIMITS.initialLookbackMs;
         const filtered = messages.filter((m) => m.sentAt >= cutoff);
         const keep =
@@ -284,14 +302,20 @@ export async function fetchInboxIncremental(
           lastUid,
           messages: keep,
           reset,
+          inboxUids,
+          inboxUidsComplete,
         };
       }
+    } else if (inboxUidsComplete) {
+      uids = inboxUids.filter((u) => u > lastUid);
     } else {
       const found = await client.search(
         { uid: `${lastUid + 1}:*` },
         { uid: true }
       );
-      uids = (Array.isArray(found) ? found : []).map(Number).filter((u) => u > lastUid);
+      uids = (Array.isArray(found) ? found : [])
+        .map(Number)
+        .filter((u) => u > lastUid);
     }
 
     // Cap batch size for cron friendliness
@@ -300,7 +324,14 @@ export async function fetchInboxIncremental(
     }
 
     if (uids.length === 0) {
-      return { uidValidity, lastUid, messages: [], reset };
+      return {
+        uidValidity,
+        lastUid,
+        messages: [],
+        reset,
+        inboxUids,
+        inboxUidsComplete,
+      };
     }
 
     const uidRange = uids.join(",");
@@ -322,7 +353,38 @@ export async function fetchInboxIncremental(
       lastUid = Math.max(lastUid, msg.uid);
     }
 
-    return { uidValidity, lastUid, messages, reset };
+    return {
+      uidValidity,
+      lastUid,
+      messages,
+      reset,
+      inboxUids,
+      inboxUidsComplete,
+    };
+  } finally {
+    try {
+      await client.logout();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
+ * Mark INBOX messages \\Deleted and expunge (permanent remove from INBOX).
+ * ImapFlow messageDelete flags + expunges in one step.
+ */
+export async function deleteImapUids(
+  conn: MailboxConn,
+  uids: number[]
+): Promise<void> {
+  const unique = [...new Set(uids.filter((u) => u > 0))];
+  if (unique.length === 0) return;
+  const client = createImapClient(conn);
+  try {
+    await client.connect();
+    await client.mailboxOpen("INBOX");
+    await client.messageDelete(unique, { uid: true });
   } finally {
     try {
       await client.logout();

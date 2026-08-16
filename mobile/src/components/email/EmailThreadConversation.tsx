@@ -57,7 +57,7 @@ export function EmailThreadConversation({
   const sendReply = useAction(api.emailActions.sendReply);
   const markSeen = useAction(api.emailActions.markSeen);
   const markLocal = useMutation(api.email.markThreadReadLocal);
-  const deleteThread = useMutation(api.email.deleteThread);
+  const deleteThread = useAction(api.emailActions.deleteThread);
 
   const messages = useQuery(
     api.email.listMessages,
@@ -87,7 +87,7 @@ export function EmailThreadConversation({
   const confirmDeleteThread = () => {
     Alert.alert(
       "Delete thread?",
-      "Removes this conversation from Booking Broom. Mail on the provider is unchanged.",
+      "Removes this conversation from Booking Broom and deletes it from SpaceMail INBOX.",
       [
         { text: "Cancel", style: "cancel" },
         {

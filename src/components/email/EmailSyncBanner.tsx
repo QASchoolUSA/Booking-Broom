@@ -89,7 +89,9 @@ export function EmailSyncBanner({
         }
         setDismissedError(null);
         toast.success(
-          `Synced ${result.upserted} message${result.upserted === 1 ? "" : "s"}`
+          result.removed > 0
+            ? `Synced ${result.upserted} new, removed ${result.removed} deleted`
+            : `Synced ${result.upserted} message${result.upserted === 1 ? "" : "s"}`
         );
       }
     } catch (e) {
@@ -191,7 +193,9 @@ export function EmailSyncBanner({
         <div className="min-w-0 space-y-1.5">
           <p className="text-sm font-medium text-foreground">SpaceMail</p>
           <p className="text-xs text-muted-foreground">
-            Last sync: {syncLabel} · Auto every 5 min (one mailbox per tick)
+            Last sync: {syncLabel} · Auto every 5 min (one mailbox per tick).
+            Deletes in SpaceMail are removed here on sync; deleting here also
+            deletes from SpaceMail INBOX.
           </p>
           {errorRow}
         </div>

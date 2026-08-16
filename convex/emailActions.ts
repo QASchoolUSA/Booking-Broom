@@ -21,6 +21,7 @@ import {
 import {
   appendToSent,
   buildRawMime,
+  deleteImapUids,
   fetchInboxIncremental,
   markImapSeen,
   sendSmtpMail,
@@ -130,11 +131,11 @@ async function persistParsedMessages(
 async function syncOneMailbox(
   ctx: ActionCtx,
   mailboxId: Id<"emailMailboxes">
-): Promise<{ upserted: number; error: string | null }> {
+): Promise<{ upserted: number; removed: number; error: string | null }> {
   const box = await ctx.runQuery(internal.email.getMailboxInternal, {
     mailboxId,
   });
-  if (!box) return { upserted: 0, error: "Mailbox not found" };
+  if (!box) return { upserted: 0, removed: 0, error: "Mailbox not found" };
 
   try {
     const conn = connFromMailbox(box);
@@ -155,6 +156,28 @@ async function syncOneMailbox(
       result.messages
     );
 
+    // Reconcile remote deletes only when we have a complete INBOX UID list.
+    let removed = 0;
+    if (result.inboxUidsComplete) {
+      const remoteSet = new Set(result.inboxUids);
+      const localUids: number[] = await ctx.runQuery(
+        internal.email.listLocalInboxUidsInternal,
+        { mailboxId }
+      );
+      const vanished = localUids.filter((uid) => !remoteSet.has(uid));
+      if (vanished.length > 0) {
+        const CHUNK = 200;
+        for (let i = 0; i < vanished.length; i += CHUNK) {
+          const slice = vanished.slice(i, i + CHUNK);
+          const r = await ctx.runMutation(
+            internal.email.removeVanishedMessagesInternal,
+            { mailboxId, uids: slice }
+          );
+          removed += r.removed;
+        }
+      }
+    }
+
     await ctx.runMutation(internal.email.setMailboxSyncCursorInternal, {
       mailboxId,
       uidValidity: result.uidValidity,
@@ -168,14 +191,14 @@ async function syncOneMailbox(
       mailboxId,
     });
 
-    return { upserted, error: null };
+    return { upserted, removed, error: null };
   } catch (e) {
     const error = e instanceof Error ? e.message : "Sync failed";
     await ctx.runMutation(internal.email.setMailboxErrorInternal, {
       mailboxId,
       error,
     });
-    return { upserted: 0, error };
+    return { upserted: 0, removed: 0, error };
   }
 }
 
@@ -269,6 +292,7 @@ export const syncMailboxNow = action({
     args
   ): Promise<{
     upserted: number;
+    removed: number;
     error: string | null;
     mailboxes: number;
   }> => {
@@ -284,6 +308,7 @@ export const syncMailboxNow = action({
       });
       return {
         upserted: result.upserted,
+        removed: result.removed,
         error: result.error,
         mailboxes: 1,
       };
@@ -294,10 +319,12 @@ export const syncMailboxNow = action({
       {}
     );
     let upserted = 0;
+    let removed = 0;
     const errors: string[] = [];
     for (const id of ids) {
       const result = await syncOneMailbox(ctx, id);
       upserted += result.upserted;
+      removed += result.removed;
       if (result.error) errors.push(result.error);
     }
     const error = errors.length ? errors.slice(0, 3).join("; ") : null;
@@ -306,7 +333,57 @@ export const syncMailboxNow = action({
       clearError: !error,
       lastSyncError: error ?? undefined,
     });
-    return { upserted, error, mailboxes: ids.length };
+    return { upserted, removed, error, mailboxes: ids.length };
+  },
+});
+
+/**
+ * Delete a thread in Booking Broom and permanently remove its INBOX UIDs
+ * from SpaceMail (\\Deleted + expunge).
+ */
+export const deleteThread = action({
+  args: { threadId: v.id("emailThreads") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: true; deleted: number; imapError: string | null }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const thread = await ctx.runQuery(internal.email.getThreadInternal, {
+      threadId: args.threadId,
+    });
+    if (!thread) return { ok: true as const, deleted: 0, imapError: null };
+
+    const messages = await ctx.runQuery(internal.email.listMessagesInternal, {
+      threadId: args.threadId,
+    });
+    const uids = messages.map((m) => m.uid).filter((u) => u > 0);
+
+    let imapError: string | null = null;
+    if (uids.length > 0) {
+      const box = await ctx.runQuery(internal.email.getMailboxInternal, {
+        mailboxId: thread.mailboxId,
+      });
+      if (box) {
+        try {
+          await deleteImapUids(connFromMailbox(box), uids);
+        } catch (e) {
+          imapError = e instanceof Error ? e.message : "IMAP delete failed";
+        }
+      }
+    }
+
+    const local = await ctx.runMutation(
+      internal.email.deleteThreadLocalInternal,
+      { threadId: args.threadId }
+    );
+
+    return {
+      ok: true as const,
+      deleted: local.deleted,
+      imapError,
+    };
   },
 });
 
@@ -320,6 +397,7 @@ export const syncNextMailboxInternal = internalAction({
     | {
         mailboxId: Id<"emailMailboxes">;
         upserted: number;
+        removed: number;
         error: string | null;
       }
   > => {
@@ -350,6 +428,7 @@ export const syncNextMailboxInternal = internalAction({
     return {
       mailboxId,
       upserted: result.upserted,
+      removed: result.removed,
       error: result.error,
     };
   },
