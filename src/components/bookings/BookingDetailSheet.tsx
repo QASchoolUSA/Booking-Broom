@@ -16,6 +16,7 @@ import {
   BookingPropertySection,
   BookingQuoteSection,
 } from "@/components/bookings/BookingQuotePanel";
+import { ScheduleJobFields } from "@/components/calendar/ScheduleJobFields";
 import { SiteBadge } from "@/components/bookings/SiteBadge";
 import { StatusBadge } from "@/components/bookings/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -263,6 +264,8 @@ export function BookingDetailSheet({
               </p>
             </section>
           )}
+
+          <ScheduleJobFields booking={booking} />
 
           <Separator />
 

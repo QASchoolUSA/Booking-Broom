@@ -18,19 +18,20 @@ type ExpoTokenRow = {
   token: string;
 };
 
-type NotifyArgs = {
-  siteSlug: string;
-  customerName: string;
-  serviceType?: string;
-  bookingId?: string;
-};
-
 type NotifyResult = {
   sent: number;
   removed: number;
   expoSent: number;
   skipped: string | null;
   expoErrors: string[];
+};
+
+type FanOutArgs = {
+  title: string;
+  body: string;
+  url: string;
+  mobilePath?: string;
+  tag: string;
 };
 
 function configureVapid() {
@@ -101,58 +102,26 @@ async function sendExpoPush(
   return { sent, staleIds, errors };
 }
 
-async function notifyNewBookingHandler(
+/** Fan-out web push + Expo push to all registered manager devices. */
+async function fanOutPush(
   ctx: ActionCtx,
-  args: NotifyArgs
+  args: FanOutArgs
 ): Promise<NotifyResult> {
-  if (args.bookingId) {
-    try {
-      const claim = await ctx.runMutation(
-        internal.bookings.claimPushNotifyInternal,
-        { bookingId: args.bookingId as Id<"bookings"> }
-      );
-      if (!claim.claimed) {
-        console.info(
-          `Expo push: skip booking ${args.bookingId} (${claim.reason})`
-        );
-        return {
-          sent: 0,
-          removed: 0,
-          expoSent: 0,
-          skipped: `push_already_${claim.reason}`,
-          expoErrors: [],
-        };
-      }
-    } catch (e) {
-      console.error(
-        "Push claim failed:",
-        e instanceof Error ? e.message : e
-      );
-    }
-  }
-
-  const site = await ctx.runQuery(internal.push.getSiteNameBySlugInternal, {
-    slug: args.siteSlug,
-  });
-  const siteName = site?.name ?? args.siteSlug;
-  const service = (args.serviceType ?? "Cleaning").trim() || "Cleaning";
-  const customer = args.customerName.trim() || "Customer";
-  const url = site?.slug ? `/sites/${site.slug}` : "/";
-  const title = `New booking · ${siteName}`;
-  const body = `${customer} — ${service}`;
-  const tag = args.bookingId
-    ? `booking-${args.bookingId}`
-    : `booking-${args.siteSlug}-${Date.now()}`;
-
   let sent = 0;
   let removed = 0;
   let expoSent = 0;
   let skipped: string | null = null;
   const expoErrors: string[] = [];
 
+  const mobilePath = args.mobilePath ?? args.url;
   const vapid = configureVapid();
   if (vapid) {
-    const payload = JSON.stringify({ title, body, url, tag });
+    const payload = JSON.stringify({
+      title: args.title,
+      body: args.body,
+      url: args.url,
+      tag: args.tag,
+    });
     const subs = (await ctx.runQuery(
       internal.push.listAllInternal,
       {}
@@ -209,10 +178,15 @@ async function notifyNewBookingHandler(
   } else {
     const messages = expoTokens.map((row) => ({
       to: row.token,
-      title,
-      body,
+      title: args.title,
+      body: args.body,
       sound: "default",
-      data: { url, tag },
+      channelId: "reminders",
+      data: {
+        url: args.url,
+        mobilePath,
+        tag: args.tag,
+      },
     }));
     const expoResult = await sendExpoPush(
       messages,
@@ -232,6 +206,69 @@ async function notifyNewBookingHandler(
   }
 
   return { sent, removed, expoSent, skipped, expoErrors };
+}
+
+type NotifyBookingArgs = {
+  siteSlug: string;
+  customerName: string;
+  serviceType?: string;
+  bookingId?: string;
+};
+
+async function notifyNewBookingHandler(
+  ctx: ActionCtx,
+  args: NotifyBookingArgs
+): Promise<NotifyResult> {
+  if (args.bookingId) {
+    try {
+      const claim = await ctx.runMutation(
+        internal.bookings.claimPushNotifyInternal,
+        { bookingId: args.bookingId as Id<"bookings"> }
+      );
+      if (!claim.claimed) {
+        console.info(
+          `Expo push: skip booking ${args.bookingId} (${claim.reason})`
+        );
+        return {
+          sent: 0,
+          removed: 0,
+          expoSent: 0,
+          skipped: `push_already_${claim.reason}`,
+          expoErrors: [],
+        };
+      }
+    } catch (e) {
+      console.error(
+        "Push claim failed:",
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
+  const site = await ctx.runQuery(internal.push.getSiteNameBySlugInternal, {
+    slug: args.siteSlug,
+  });
+  const siteName = site?.name ?? args.siteSlug;
+  const service = (args.serviceType ?? "Cleaning").trim() || "Cleaning";
+  const customer = args.customerName.trim() || "Customer";
+  const bookingId = args.bookingId;
+  const url = bookingId
+    ? `/calendar?bookingId=${bookingId}`
+    : site?.slug
+      ? `/sites/${site.slug}`
+      : "/";
+  const mobilePath = bookingId
+    ? `/bookings/${bookingId}`
+    : site?.slug
+      ? `/bookings?site=${site.slug}`
+      : "/bookings";
+  const title = `New booking · ${siteName}`;
+  const body = `${customer} — ${service}`;
+  const tag = bookingId
+    ? `booking-${bookingId}`
+    : `booking-${args.siteSlug}-${Date.now()}`;
+
+  return await fanOutPush(ctx, { title, body, url, mobilePath, tag });
 }
 
 const notifyArgs = {
@@ -257,5 +294,30 @@ export const notifyNewBookingInternal = internalAction({
   args: notifyArgs,
   handler: async (ctx, args): Promise<NotifyResult> => {
     return await notifyNewBookingHandler(ctx, args);
+  },
+});
+
+const reminderNotifyArgs = {
+  title: v.string(),
+  body: v.string(),
+  url: v.string(),
+  mobilePath: v.optional(v.string()),
+  tag: v.string(),
+  bookingId: v.optional(v.id("bookings")),
+  reminderId: v.optional(v.id("reminders")),
+  siteSlug: v.optional(v.string()),
+};
+
+/** Push a manager reminder (scheduled or standalone). */
+export const notifyReminderInternal = internalAction({
+  args: reminderNotifyArgs,
+  handler: async (ctx, args): Promise<NotifyResult> => {
+    return await fanOutPush(ctx, {
+      title: args.title,
+      body: args.body,
+      url: args.url,
+      mobilePath: args.mobilePath,
+      tag: args.tag,
+    });
   },
 });

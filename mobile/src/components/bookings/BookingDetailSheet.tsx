@@ -35,6 +35,7 @@ import { useTheme } from "@/theme";
 import { radius, spacing } from "@/theme/tokens";
 import { formatUsPhone } from "@/lib/phone";
 import { formatBedrooms, formatMoney } from "@/lib/money";
+import { ScheduleSection } from "@/components/calendar/ScheduleSection";
 import {
   BOOKING_STATUSES,
   hasPropertyContent,
@@ -731,6 +732,8 @@ export function BookingDetailSheet({
             <AppText style={{ marginTop: 6 }}>{booking.notes}</AppText>
           </Card>
         ) : null}
+
+        <ScheduleSection booking={booking} />
 
         <View style={styles.block}>
           <SectionLabel>Status</SectionLabel>

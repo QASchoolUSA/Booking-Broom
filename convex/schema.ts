@@ -72,6 +72,12 @@ export const bookingAttribution = v.object({
 /** Whether the customer asked to book or was only price shopping. */
 export const bookingIntent = v.union(v.literal("quote"), v.literal("book"));
 
+export const reminderStatus = v.union(
+  v.literal("pending"),
+  v.literal("sent"),
+  v.literal("cancelled")
+);
+
 export default defineSchema({
   ...authTables,
 
@@ -110,6 +116,12 @@ export default defineSchema({
     serviceType: v.string(),
     preferredDate: v.optional(v.string()),
     preferredTime: v.optional(v.string()),
+    /** Confirmed job start (unix ms). Absent until a manager schedules it. */
+    scheduledStartAt: v.optional(v.number()),
+    /** Confirmed job end (unix ms). */
+    scheduledEndAt: v.optional(v.number()),
+    /** IANA timezone for the scheduled slot (default America/New_York). */
+    timezone: v.optional(v.string()),
     notes: v.optional(v.string()),
     internalNotes: v.optional(v.string()),
     /** Structured property details; absent on bookings sent before this existed. */
@@ -132,7 +144,32 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_site", ["siteId"])
-    .index("by_created", ["createdAt"]),
+    .index("by_created", ["createdAt"])
+    .index("by_scheduled_start", ["scheduledStartAt"])
+    .index("by_preferred_date", ["preferredDate"]),
+
+  /**
+   * Manager reminders — standalone or linked to a booking (fire before a job).
+   * Pushed to all manager devices via web push + Expo.
+   */
+  reminders: defineTable({
+    title: v.string(),
+    notes: v.optional(v.string()),
+    dueAt: v.number(),
+    allDay: v.optional(v.boolean()),
+    bookingId: v.optional(v.id("bookings")),
+    /** Minutes before scheduledStartAt when this reminder is relative to a job. */
+    offsetMinutes: v.optional(v.number()),
+    status: reminderStatus,
+    /** Convex scheduled function id for cancel/reschedule. */
+    scheduledFunctionId: v.optional(v.id("_scheduled_functions")),
+    createdBy: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_due", ["dueAt"])
+    .index("by_booking", ["bookingId"])
+    .index("by_status_due", ["status", "dueAt"]),
 
   /**
    * Live pricing numbers for each cleaning site. The site owns the algorithm;

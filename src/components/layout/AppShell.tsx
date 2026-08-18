@@ -17,6 +17,7 @@ import {
   GearSix,
   Globe,
   List,
+  ListChecks,
   SignOut,
   WifiHigh,
   WifiSlash,
@@ -70,8 +71,14 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/",
     label: "Bookings",
-    icon: CalendarBlank,
+    icon: ListChecks,
     match: (p) => p === "/" || p.startsWith("/sites"),
+  },
+  {
+    href: "/calendar",
+    label: "Calendar",
+    icon: CalendarBlank,
+    match: (p) => p === "/calendar" || p.startsWith("/calendar"),
   },
   {
     href: "/messages",

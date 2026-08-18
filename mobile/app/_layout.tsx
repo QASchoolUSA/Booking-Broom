@@ -1,5 +1,6 @@
 import "../src/polyfills";
 import { useEffect } from "react";
+import { ActivityIndicator, Modal, StyleSheet, View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -20,7 +21,6 @@ import { ConvexClientProvider } from "@/lib/convex";
 import { initNotifications } from "@/lib/notifications";
 import { ThemeProvider, useTheme } from "@/theme";
 import { ChromeProvider } from "@/components/chrome/ChromeContext";
-import { LoadingBlock } from "@/components/ui";
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -39,8 +39,20 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, isLoading, segments, router]);
 
-  if (isLoading) return <LoadingBlock />;
-  return <>{children}</>;
+  // Keep the root Stack mounted while auth resolves. Unmounting it (returning
+  // only a spinner) causes "Unmatched Route" / silent kills on physical Expo Go
+  // where auth + network are slower than the simulator.
+  // Fragment only — never wrap the root navigator in a View.
+  return (
+    <>
+      {children}
+      <Modal visible={isLoading} transparent animationType="fade">
+        <View style={styles.authOverlay}>
+          <ActivityIndicator size="large" color="#1E40AF" />
+        </View>
+      </Modal>
+    </>
+  );
 }
 
 function RootNavigator() {
@@ -100,3 +112,12 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  authOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.92)",
+  },
+});

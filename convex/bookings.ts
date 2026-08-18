@@ -9,6 +9,10 @@ import {
   bookingIntent,
 } from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
+import {
+  DEFAULT_JOB_DURATION_MS,
+  DEFAULT_TIMEZONE,
+} from "./lib/calendarTime";
 
 /** Map Convex camelCase property → snake_case email action args. */
 function toEmailProperty(property: Doc<"bookings">["property"]) {
@@ -116,6 +120,15 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
         }
       : null,
     intent: doc.intent ?? null,
+    scheduled_start_at: doc.scheduledStartAt
+      ? new Date(doc.scheduledStartAt).toISOString()
+      : null,
+    scheduled_end_at: doc.scheduledEndAt
+      ? new Date(doc.scheduledEndAt).toISOString()
+      : null,
+    scheduled_start_at_ms: doc.scheduledStartAt ?? null,
+    scheduled_end_at_ms: doc.scheduledEndAt ?? null,
+    timezone: doc.timezone ?? null,
     archived_at: doc.archivedAt
       ? new Date(doc.archivedAt).toISOString()
       : null,
@@ -227,6 +240,119 @@ export const updateInternalNotes = mutation({
   },
 });
 
+/**
+ * Set or clear a confirmed job slot. Optionally mark status confirmed and
+ * create preset manager alerts (minutes before start).
+ */
+export const schedule = mutation({
+  args: {
+    bookingId: v.id("bookings"),
+    scheduledStartAt: v.union(v.number(), v.null()),
+    scheduledEndAt: v.optional(v.union(v.number(), v.null())),
+    timezone: v.optional(v.string()),
+    confirm: v.optional(v.boolean()),
+    /** Offset minutes before start for new alerts (e.g. [1440, 60]). */
+    alertOffsetsMinutes: v.optional(v.array(v.number())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) throw new Error("Booking not found");
+
+    const now = Date.now();
+    const timezone = (args.timezone?.trim() || DEFAULT_TIMEZONE).trim();
+
+    if (args.scheduledStartAt === null) {
+      await ctx.db.patch(args.bookingId, {
+        scheduledStartAt: undefined,
+        scheduledEndAt: undefined,
+        timezone: undefined,
+        updatedAt: now,
+      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.reminders.cancelRelativeForBookingInternal,
+        { bookingId: args.bookingId }
+      );
+      return { id: args.bookingId };
+    }
+
+    const startAt = args.scheduledStartAt;
+    if (!Number.isFinite(startAt)) throw new Error("Invalid start time");
+
+    let endAt =
+      args.scheduledEndAt === null
+        ? undefined
+        : args.scheduledEndAt ?? startAt + DEFAULT_JOB_DURATION_MS;
+    if (endAt == null) endAt = startAt + DEFAULT_JOB_DURATION_MS;
+    if (endAt <= startAt) {
+      endAt = startAt + DEFAULT_JOB_DURATION_MS;
+    }
+
+    const patch: Partial<Doc<"bookings">> = {
+      scheduledStartAt: startAt,
+      scheduledEndAt: endAt,
+      timezone,
+      updatedAt: now,
+    };
+    if (args.confirm && booking.status === "new") {
+      patch.status = "confirmed";
+    }
+
+    await ctx.db.patch(args.bookingId, patch);
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.reminders.rescheduleRelativeForBookingInternal,
+      { bookingId: args.bookingId, scheduledStartAt: startAt }
+    );
+
+    const offsets = args.alertOffsetsMinutes ?? [];
+    for (const offset of offsets) {
+      if (!Number.isFinite(offset) || offset < 0) continue;
+      const dueAt = startAt - offset * 60 * 1000;
+      const title =
+        offset === 0
+          ? `Job now · ${booking.customerName}`
+          : offset < 60
+            ? `Job in ${offset}m · ${booking.customerName}`
+            : offset < 1440
+              ? `Job in ${Math.round(offset / 60)}h · ${booking.customerName}`
+              : `Job tomorrow · ${booking.customerName}`;
+
+      const reminderId = await ctx.db.insert("reminders", {
+        title,
+        notes: booking.serviceType,
+        dueAt,
+        bookingId: args.bookingId,
+        offsetMinutes: offset,
+        status: "pending",
+        createdBy: identity.subject,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const scheduledFunctionId =
+        dueAt <= now
+          ? await ctx.scheduler.runAfter(
+              0,
+              internal.reminders.dispatchInternal,
+              { reminderId }
+            )
+          : await ctx.scheduler.runAt(
+              dueAt,
+              internal.reminders.dispatchInternal,
+              { reminderId }
+            );
+      await ctx.db.patch(reminderId, { scheduledFunctionId });
+    }
+
+    return { id: args.bookingId };
+  },
+});
+
 export const remove = mutation({
   args: {
     bookingId: v.id("bookings"),
@@ -238,6 +364,11 @@ export const remove = mutation({
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) throw new Error("Booking not found");
 
+    await ctx.scheduler.runAfter(
+      0,
+      internal.reminders.cancelForBookingInternal,
+      { bookingId: args.bookingId }
+    );
     await ctx.db.delete(args.bookingId);
   },
 });

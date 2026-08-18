@@ -56,6 +56,11 @@ export type BookingRow = {
   address: string | null;
   preferred_date: string | null;
   preferred_time: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  scheduled_start_at_ms: number | null;
+  scheduled_end_at_ms: number | null;
+  timezone: string | null;
   notes: string | null;
   internal_notes: string | null;
   created_at: string;

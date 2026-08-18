@@ -1,4 +1,4 @@
-import React, { memo, useLayoutEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActionSheetIOS,
   Alert,
@@ -8,13 +8,14 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { useNavigation, useRouter, type Href } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter, type Href } from "expo-router";
 import { ListFilter } from "lucide-react-native";
 import { VirtualList } from "@/components/ui/VirtualList";
 import { useConvexAuth, useQuery } from "convex/react";
 import { formatDistanceToNow } from "date-fns";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/lib/api";
+import { consumeCalendarViewRequest } from "@/lib/calendar-nav";
 import { useTheme } from "@/theme";
 import { radius, spacing } from "@/theme/tokens";
 import {
@@ -32,6 +33,10 @@ import {
   type BookingStatus,
 } from "@/components/bookings/types";
 import { formatMoney } from "@/lib/money";
+import {
+  rangeForMonth,
+  type MobileCalendarEvent,
+} from "@/lib/calendar-utils";
 
 const BookingCard = memo(function BookingCard({
   item,
@@ -76,6 +81,46 @@ export default function BookingsIndexScreen() {
   const navigation = useNavigation();
   const { isAuthenticated } = useConvexAuth();
   const [listMode, setListMode] = useState<"active" | "archived">("active");
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState(() => new Date());
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [reminderDue, setReminderDue] = useState<Date | undefined>();
+  const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">(
+    "all"
+  );
+  const [siteFilter, setSiteFilter] = useState<string | "all">("all");
+  const [CalendarPane, setCalendarPane] = useState<{
+    MonthAgenda: typeof import("@/components/calendar/MonthAgenda").MonthAgenda;
+    ReminderModal: typeof import("@/components/calendar/ReminderModal").ReminderModal;
+  } | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (consumeCalendarViewRequest()) {
+        setViewMode("calendar");
+      }
+    }, [])
+  );
+
+  // Lazy-load calendar UI so a calendar bug cannot take down app launch / list.
+  useEffect(() => {
+    if (viewMode !== "calendar" && !reminderOpen) return;
+    let cancelled = false;
+    void Promise.all([
+      import("@/components/calendar/MonthAgenda"),
+      import("@/components/calendar/ReminderModal"),
+    ]).then(([monthMod, reminderMod]) => {
+      if (cancelled) return;
+      setCalendarPane({
+        MonthAgenda: monthMod.MonthAgenda,
+        ReminderModal: reminderMod.ReminderModal,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewMode, reminderOpen]);
 
   const openListFilter = () => {
     const apply = (mode: "active" | "archived") => setListMode(mode);
@@ -101,35 +146,42 @@ export default function BookingsIndexScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: listMode === "archived" ? "Archived" : "Bookings",
-      headerRight: () => (
-        <Pressable
-          onPress={openListFilter}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Filter bookings"
-          style={{ paddingHorizontal: 4 }}
-        >
-          <View>
-            <ListFilter size={22} color={colors.primary} />
-            {listMode === "archived" ? (
-              <View
-                style={{
-                  position: "absolute",
-                  top: -2,
-                  right: -2,
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: colors.accent,
-                }}
-              />
-            ) : null}
-          </View>
-        </Pressable>
-      ),
+      title:
+        viewMode === "calendar"
+          ? "Calendar"
+          : listMode === "archived"
+            ? "Archived"
+            : "Bookings",
+      headerRight: () =>
+        viewMode === "list" ? (
+          <Pressable
+            onPress={openListFilter}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Filter bookings"
+            style={{ paddingHorizontal: 4 }}
+          >
+            <View>
+              <ListFilter size={22} color={colors.primary} />
+              {listMode === "archived" ? (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: -2,
+                    right: -2,
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: colors.accent,
+                  }}
+                />
+              ) : null}
+            </View>
+          </Pressable>
+        ) : null,
     });
-  }, [colors.accent, colors.primary, listMode, navigation]);
+  }, [colors.accent, colors.primary, listMode, navigation, viewMode]);
+
   const bookings = useQuery(
     api.bookings.list,
     isAuthenticated
@@ -140,10 +192,13 @@ export default function BookingsIndexScreen() {
   );
   const sites = useQuery(api.sites.list, isAuthenticated ? {} : "skip");
 
-  const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">(
-    "all"
+  const monthRange = useMemo(() => rangeForMonth(cursor), [cursor]);
+  const calendarEvents = useQuery(
+    api.calendar.listInRange,
+    isAuthenticated && viewMode === "calendar"
+      ? { startAt: monthRange.startAt, endAt: monthRange.endAt }
+      : "skip"
   );
-  const [siteFilter, setSiteFilter] = useState<string | "all">("all");
 
   const filtered = useMemo(() => {
     const rows = (bookings ?? []) as BookingRow[];
@@ -154,7 +209,9 @@ export default function BookingsIndexScreen() {
     });
   }, [bookings, statusFilter, siteFilter]);
 
-  if (bookings === undefined) {
+  const events = (calendarEvents ?? []) as MobileCalendarEvent[];
+
+  if (bookings === undefined && viewMode === "list") {
     return (
       <Screen>
         <LoadingBlock />
@@ -162,135 +219,226 @@ export default function BookingsIndexScreen() {
     );
   }
 
+  const MonthAgenda = CalendarPane?.MonthAgenda;
+  const ReminderModal = CalendarPane?.ReminderModal;
+
   return (
     <Screen padded={false}>
-      <View style={styles.filters}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}
-        >
-          {(["all", ...BOOKING_STATUSES] as const).map((s) => {
-            const active = statusFilter === s;
-            return (
-              <Pressable
-                key={s}
-                onPress={() => setStatusFilter(s)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: active ? colors.primary : colors.muted,
-                    borderColor: active ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <AppText
-                  size={12}
-                  weight="semibold"
-                  style={{
-                    color: active
-                      ? colors.primaryForeground
-                      : colors.foreground,
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {s}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}
-        >
-          <Pressable
-            onPress={() => setSiteFilter("all")}
-            style={[
-              styles.chip,
-              {
-                backgroundColor:
-                  siteFilter === "all" ? colors.primary : colors.muted,
-              },
-            ]}
-          >
-            <AppText
-              size={12}
-              weight="semibold"
-              style={{
-                color:
-                  siteFilter === "all"
-                    ? colors.primaryForeground
-                    : colors.foreground,
-              }}
+      <View style={[styles.segmentWrap, { backgroundColor: colors.muted }]}>
+        {(["list", "calendar"] as const).map((mode) => {
+          const active = viewMode === mode;
+          return (
+            <Pressable
+              key={mode}
+              onPress={() => setViewMode(mode)}
+              style={[
+                styles.segment,
+                {
+                  backgroundColor: active ? colors.primary : "transparent",
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
             >
-              All sites
-            </AppText>
-          </Pressable>
-          {(sites ?? []).map((site: { slug: string; name: string }) => {
-            const active = siteFilter === site.slug;
-            return (
-              <Pressable
-                key={site.slug}
-                onPress={() => setSiteFilter(site.slug)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: active ? colors.primary : colors.muted,
-                  },
-                ]}
+              <AppText
+                size={13}
+                weight="semibold"
+                style={{
+                  color: active
+                    ? colors.primaryForeground
+                    : colors.mutedForeground,
+                  textTransform: "capitalize",
+                }}
               >
-                <AppText
-                  size={12}
-                  weight="semibold"
-                  style={{
-                    color: active
-                      ? colors.primaryForeground
-                      : colors.foreground,
-                  }}
-                >
-                  {site.name}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                {mode}
+              </AppText>
+            </Pressable>
+          );
+        })}
       </View>
 
-      {filtered.length === 0 ? (
-        <EmptyState
-          title={listMode === "archived" ? "No archived bookings" : "No bookings"}
-          subtitle={
-            listMode === "archived"
-              ? "Archived bookings will show up here."
-              : "New leads from your cleaning sites appear here in real time."
-          }
-        />
+      {viewMode === "calendar" ? (
+        calendarEvents === undefined || !MonthAgenda ? (
+          <LoadingBlock />
+        ) : (
+          <MonthAgenda
+            cursor={cursor}
+            selectedDay={selectedDay}
+            events={events}
+            onCursorChange={(d) => {
+              setCursor(d);
+              setSelectedDay(d);
+            }}
+            onSelectDay={setSelectedDay}
+            onSelectEvent={(ev) => {
+              if (ev.booking_id) {
+                router.push(`/bookings/${ev.booking_id}` as Href);
+              }
+            }}
+            onAddReminder={(day) => {
+              setReminderDue(day);
+              setReminderOpen(true);
+            }}
+            bottomPad={insets.bottom + 100}
+          />
+        )
       ) : (
-        <VirtualList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{
-            paddingHorizontal: spacing.lg,
-            paddingBottom: insets.bottom + 100,
-          }}
-          renderItem={({ item }) => (
-            <BookingCard
-              item={item}
-              onPress={() =>
-                router.push(`/bookings/${item.id}` as Href)
+        <>
+          <View style={styles.filters}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+            >
+              {(["all", ...BOOKING_STATUSES] as const).map((s) => {
+                const active = statusFilter === s;
+                return (
+                  <Pressable
+                    key={s}
+                    onPress={() => setStatusFilter(s)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: active ? colors.primary : colors.muted,
+                        borderColor: active ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <AppText
+                      size={12}
+                      weight="semibold"
+                      style={{
+                        color: active
+                          ? colors.primaryForeground
+                          : colors.foreground,
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {s}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+            >
+              <Pressable
+                onPress={() => setSiteFilter("all")}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor:
+                      siteFilter === "all" ? colors.primary : colors.muted,
+                  },
+                ]}
+              >
+                <AppText
+                  size={12}
+                  weight="semibold"
+                  style={{
+                    color:
+                      siteFilter === "all"
+                        ? colors.primaryForeground
+                        : colors.foreground,
+                  }}
+                >
+                  All sites
+                </AppText>
+              </Pressable>
+              {(sites ?? []).map((site: { slug: string; name: string }) => {
+                const active = siteFilter === site.slug;
+                return (
+                  <Pressable
+                    key={site.slug}
+                    onPress={() => setSiteFilter(site.slug)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: active ? colors.primary : colors.muted,
+                      },
+                    ]}
+                  >
+                    <AppText
+                      size={12}
+                      weight="semibold"
+                      style={{
+                        color: active
+                          ? colors.primaryForeground
+                          : colors.foreground,
+                      }}
+                    >
+                      {site.name}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {filtered.length === 0 ? (
+            <EmptyState
+              title={
+                listMode === "archived" ? "No archived bookings" : "No bookings"
+              }
+              subtitle={
+                listMode === "archived"
+                  ? "Archived bookings will show up here."
+                  : "New leads from your cleaning sites appear here in real time."
               }
             />
+          ) : (
+            <VirtualList
+              data={filtered}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{
+                paddingHorizontal: spacing.lg,
+                paddingBottom: insets.bottom + 100,
+              }}
+              renderItem={({ item }) => (
+                <BookingCard
+                  item={item}
+                  onPress={() => router.push(`/bookings/${item.id}` as Href)}
+                />
+              )}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: spacing.md }} />
+              )}
+            />
           )}
-          ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-        />
+        </>
       )}
+
+      {ReminderModal ? (
+        <ReminderModal
+          open={reminderOpen}
+          onClose={() => setReminderOpen(false)}
+          initialDue={reminderDue}
+        />
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  segmentWrap: {
+    flexDirection: "row",
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    padding: 3,
+    borderRadius: radius.pill,
+  },
+  segment: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    minHeight: 36,
+  },
   filters: { gap: spacing.sm, paddingVertical: spacing.sm },
   chipRow: {
     paddingHorizontal: spacing.lg,

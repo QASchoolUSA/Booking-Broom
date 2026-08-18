@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  Calendar,
   CalendarDays,
   MessageSquare,
   Mail,
@@ -18,12 +19,15 @@ import { useTheme } from "@/theme";
 import { SIDEBAR_WIDTH, spacing, radius } from "@/theme/tokens";
 import { AppText } from "@/components/ui";
 import { api } from "@/lib/api";
+import { requestCalendarView } from "@/lib/calendar-nav";
 
 type NavItem = {
   href: string;
   label: string;
   icon: typeof CalendarDays;
   match: (path: string) => boolean;
+  /** Open Bookings in calendar mode instead of pushing a distinct route. */
+  openCalendar?: boolean;
 };
 
 const NAV: NavItem[] = [
@@ -32,6 +36,13 @@ const NAV: NavItem[] = [
     label: "Bookings",
     icon: CalendarDays,
     match: (p) => p.includes("bookings") || p === "/",
+  },
+  {
+    href: "/bookings",
+    label: "Calendar",
+    icon: Calendar,
+    match: () => false,
+    openCalendar: true,
   },
   {
     href: "/messages",
@@ -122,8 +133,13 @@ export function TabletSidebar() {
           const showBadge = item.label === "Email" && typeof unread === "number" && unread > 0;
           return (
             <Pressable
-              key={item.href}
-              onPress={() => router.push(item.href as never)}
+              key={`${item.label}-${item.href}`}
+              onPress={() => {
+                if (item.openCalendar) {
+                  requestCalendarView();
+                }
+                router.push(item.href as never);
+              }}
               style={[
                 styles.navItem,
                 active && {

@@ -509,6 +509,27 @@ export const clearSiteMetrics = internalMutation({
   },
 });
 
+/** Delete all Google Search Console metric snapshots (used before each sync). */
+export const wipeGoogleSearchMetricsInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const metrics = await ctx.db.query("siteSearchMetrics").collect();
+    for (const row of metrics) await ctx.db.delete(row._id);
+
+    const history = await ctx.db.query("siteSearchMetricsHistory").collect();
+    for (const row of history) await ctx.db.delete(row._id);
+
+    const queries = await ctx.db.query("siteSearchQueries").collect();
+    for (const row of queries) await ctx.db.delete(row._id);
+
+    return {
+      metrics: metrics.length,
+      history: history.length,
+      queries: queries.length,
+    };
+  },
+});
+
 export const setSyncResult = internalMutation({
   args: {
     connectionId: v.id("gscConnections"),

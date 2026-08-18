@@ -8,6 +8,11 @@ import {
   normalizeHost,
   SEO_SYNC_PERIODS,
 } from "./lib/gscMatch";
+import {
+  aggregateHourlyMetrics,
+  aggregateQueryHourlyRows,
+  type GscAnalyticsRow,
+} from "./lib/gscAggregate";
 
 const GSC_SCOPE =
   "https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/userinfo.email";
@@ -288,6 +293,8 @@ async function querySearchAnalytics(
   impressions: number;
   ctr: number;
   position: number;
+  startDate: string;
+  endDate: string;
 }> {
   const encoded = encodeURIComponent(siteUrl);
   const body = hourly
@@ -316,13 +323,7 @@ async function querySearchAnalytics(
     }
   );
   const data = (await res.json()) as {
-    rows?: {
-      keys?: string[];
-      clicks: number;
-      impressions: number;
-      ctr: number;
-      position: number;
-    }[];
+    rows?: GscAnalyticsRow[];
     error?: { message?: string };
   };
   if (!res.ok) {
@@ -332,7 +333,14 @@ async function querySearchAnalytics(
   }
   const rows = data.rows ?? [];
   if (rows.length === 0) {
-    return { clicks: 0, impressions: 0, ctr: 0, position: 0 };
+    return {
+      clicks: 0,
+      impressions: 0,
+      ctr: 0,
+      position: 0,
+      startDate,
+      endDate,
+    };
   }
 
   if (!hourly) {
@@ -342,26 +350,19 @@ async function querySearchAnalytics(
       impressions: row.impressions ?? 0,
       ctr: row.ctr ?? 0,
       position: row.position ?? 0,
+      startDate,
+      endDate,
     };
   }
 
-  const hours = [...rows].sort((a, b) =>
-    (a.keys?.[0] ?? "").localeCompare(b.keys?.[0] ?? "")
-  );
-  const last24 = hours.slice(-24);
-  let clicks = 0;
-  let impressions = 0;
-  let posWeight = 0;
-  for (const row of last24) {
-    clicks += row.clicks ?? 0;
-    impressions += row.impressions ?? 0;
-    posWeight += (row.position ?? 0) * (row.impressions ?? 0);
-  }
+  const aggregated = aggregateHourlyMetrics(rows);
   return {
-    clicks,
-    impressions,
-    ctr: impressions > 0 ? clicks / impressions : 0,
-    position: impressions > 0 ? posWeight / impressions : 0,
+    clicks: aggregated.clicks,
+    impressions: aggregated.impressions,
+    ctr: aggregated.ctr,
+    position: aggregated.position,
+    startDate: aggregated.startDate || startDate,
+    endDate: aggregated.endDate || endDate,
   };
 }
 
@@ -389,23 +390,27 @@ async function queryTopQueries(
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        startDate,
-        endDate,
-        dimensions: ["query"],
-        rowLimit: 5,
-        dataState: hourly ? "hourly_all" : "all",
-      }),
+      body: JSON.stringify(
+        hourly
+          ? {
+              startDate,
+              endDate,
+              dimensions: ["query", "HOUR"],
+              rowLimit: 25000,
+              dataState: "hourly_all",
+            }
+          : {
+              startDate,
+              endDate,
+              dimensions: ["query"],
+              rowLimit: 5,
+              dataState: "all",
+            }
+      ),
     }
   );
   const data = (await res.json()) as {
-    rows?: {
-      keys?: string[];
-      clicks: number;
-      impressions: number;
-      ctr: number;
-      position: number;
-    }[];
+    rows?: GscAnalyticsRow[];
     error?: { message?: string };
   };
   if (!res.ok) {
@@ -413,7 +418,13 @@ async function queryTopQueries(
       data.error?.message || `Search query analytics failed for ${siteUrl}`
     );
   }
-  return (data.rows ?? [])
+  const rows = data.rows ?? [];
+
+  if (hourly) {
+    return aggregateQueryHourlyRows(rows, 5);
+  }
+
+  return rows
     .map((row) => ({
       query: row.keys?.[0] ?? "",
       clicks: row.clicks ?? 0,
@@ -443,6 +454,8 @@ export const syncAllInternal = internalAction({
         accessToken = refreshed.accessToken;
       }
 
+      await ctx.runMutation(internal.gsc.wipeGoogleSearchMetricsInternal, {});
+
       const properties = await listGscSites(accessToken);
       await ctx.runMutation(internal.gsc.stripGscPropertyOverrides, {});
       const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
@@ -470,25 +483,13 @@ export const syncAllInternal = internalAction({
         for (const periodDays of PERIODS) {
           const { startDate, endDate } = dateRangeForPeriod(periodDays);
           const hourly = periodDays === 1;
-          let stats;
-          try {
-            stats = await querySearchAnalytics(
-              accessToken,
-              property,
-              startDate,
-              endDate,
-              hourly
-            );
-          } catch (e) {
-            if (!hourly) throw e;
-            stats = await querySearchAnalytics(
-              accessToken,
-              property,
-              startDate,
-              endDate,
-              false
-            );
-          }
+          const stats = await querySearchAnalytics(
+            accessToken,
+            property,
+            startDate,
+            endDate,
+            hourly
+          );
           await ctx.runMutation(internal.gsc.upsertMetric, {
             siteId: site._id as Id<"sites">,
             periodDays,
@@ -497,29 +498,17 @@ export const syncAllInternal = internalAction({
             impressions: stats.impressions,
             ctr: stats.ctr,
             position: stats.position,
-            startDate,
-            endDate,
+            startDate: stats.startDate,
+            endDate: stats.endDate,
           });
 
-          let queries;
-          try {
-            queries = await queryTopQueries(
-              accessToken,
-              property,
-              startDate,
-              endDate,
-              hourly
-            );
-          } catch (e) {
-            if (!hourly) throw e;
-            queries = await queryTopQueries(
-              accessToken,
-              property,
-              startDate,
-              endDate,
-              false
-            );
-          }
+          const queries = await queryTopQueries(
+            accessToken,
+            property,
+            startDate,
+            endDate,
+            hourly
+          );
           await ctx.runMutation(internal.gsc.upsertQueries, {
             siteId: site._id as Id<"sites">,
             periodDays,

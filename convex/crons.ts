@@ -63,4 +63,11 @@ crons.daily(
   {}
 );
 
+/** Safety net for reminder push if a scheduled job was missed. */
+crons.interval(
+  "dispatch due reminders",
+  { minutes: 5 },
+  internal.reminders.dispatchDueInternal
+);
+
 export default crons;

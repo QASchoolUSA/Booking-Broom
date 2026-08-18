@@ -3,8 +3,10 @@ import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
 import {
   GlassView,
+  isGlassEffectAPIAvailable,
   isLiquidGlassAvailable,
 } from "expo-glass-effect";
+import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   CalendarDays,
@@ -36,6 +38,24 @@ function nestedIndex(route: { state?: { index?: number } } | undefined) {
   return route?.state?.index ?? 0;
 }
 
+/**
+ * GlassView can SIGABRT on some iOS 26 builds when the API is advertised but
+ * UIGlassEffect isn't actually callable (Expo #40911). Also skip in Expo Go —
+ * store client + device glass mismatches have caused silent kills.
+ */
+function canUseLiquidGlass(): boolean {
+  if (Platform.OS !== "ios") return false;
+  const inExpoGo =
+    Constants.appOwnership === "expo" ||
+    Constants.executionEnvironment === "storeClient";
+  if (inExpoGo) return false;
+  try {
+    return isLiquidGlassAvailable() && isGlassEffectAPIAvailable();
+  } catch {
+    return false;
+  }
+}
+
 function LiquidGlassTabBarComponent({
   state,
   descriptors,
@@ -53,10 +73,7 @@ function LiquidGlassTabBarComponent({
     setHideTabBar(nestedIndex(route) > 0);
   }, [state.index, state.routes, setHideTabBar]);
 
-  const liquidGlass =
-    !reduceTransparency &&
-    Platform.OS === "ios" &&
-    isLiquidGlassAvailable();
+  const liquidGlass = !reduceTransparency && canUseLiquidGlass();
   const useBlur =
     !liquidGlass && !reduceTransparency && Platform.OS === "ios";
 

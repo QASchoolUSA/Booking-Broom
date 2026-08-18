@@ -9,24 +9,24 @@
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		8E1515158D8ABFC695FCD392 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 35FC347BB5593A799CFAAA12 /* PrivacyInfo.xcprivacy */; };
-		9C1231E8C29BE7900C4B1B17 /* libPods-BookingBroom.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 725CD9A03FD5CA1BA0F59D41 /* libPods-BookingBroom.a */; };
+		745AE7477E6379CAC46AA406 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE602A39616362CAC945FB4A /* ExpoModulesProvider.swift */; };
+		817CA8B91A7F9F9A1D00F9D7 /* libPods-BookingBroom.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DA06A6DA32E4707AEA8432F1 /* libPods-BookingBroom.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		C9F6C54B41B1ADB89573C1B8 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7567D31D80492DE12705C77 /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
+		F8F09D33C49C54C300B4FEC7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 51EBF7864BEA68D702BBD41A /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0FD8BD2146C62305D031CFCD /* Pods-BookingBroom.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BookingBroom.release.xcconfig"; path = "Target Support Files/Pods-BookingBroom/Pods-BookingBroom.release.xcconfig"; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* BookingBroom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BookingBroom.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = BookingBroom/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = BookingBroom/Info.plist; sourceTree = "<group>"; };
-		35FC347BB5593A799CFAAA12 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = BookingBroom/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		371982B73AD5E21CE3F6A895 /* Pods-BookingBroom.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BookingBroom.release.xcconfig"; path = "Target Support Files/Pods-BookingBroom/Pods-BookingBroom.release.xcconfig"; sourceTree = "<group>"; };
-		725CD9A03FD5CA1BA0F59D41 /* libPods-BookingBroom.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BookingBroom.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		32F8DA35010F8F27944471C5 /* Pods-BookingBroom.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BookingBroom.debug.xcconfig"; path = "Target Support Files/Pods-BookingBroom/Pods-BookingBroom.debug.xcconfig"; sourceTree = "<group>"; };
+		51EBF7864BEA68D702BBD41A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = BookingBroom/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = BookingBroom/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		D7567D31D80492DE12705C77 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-BookingBroom/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		E3BC0059A45F3DB7C761C9A9 /* Pods-BookingBroom.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BookingBroom.debug.xcconfig"; path = "Target Support Files/Pods-BookingBroom/Pods-BookingBroom.debug.xcconfig"; sourceTree = "<group>"; };
+		DA06A6DA32E4707AEA8432F1 /* libPods-BookingBroom.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BookingBroom.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DE602A39616362CAC945FB4A /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-BookingBroom/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = BookingBroom/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* BookingBroom-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "BookingBroom-Bridging-Header.h"; path = "BookingBroom/BookingBroom-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -37,30 +37,13 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9C1231E8C29BE7900C4B1B17 /* libPods-BookingBroom.a in Frameworks */,
+				817CA8B91A7F9F9A1D00F9D7 /* libPods-BookingBroom.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		06541B474ADED3C3EF3C19EE /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				E3BC0059A45F3DB7C761C9A9 /* Pods-BookingBroom.debug.xcconfig */,
-				371982B73AD5E21CE3F6A895 /* Pods-BookingBroom.release.xcconfig */,
-			);
-			path = Pods;
-			sourceTree = "<group>";
-		};
-		09F8741E7DF4A02CEFC4E3F8 /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				2DCB7DC1D53E60AAFF54ED59 /* BookingBroom */,
-			);
-			name = ExpoModulesProviders;
-			sourceTree = "<group>";
-		};
 		13B07FAE1A68108700A75B9A /* BookingBroom */ = {
 			isa = PBXGroup;
 			children = (
@@ -70,7 +53,7 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				35FC347BB5593A799CFAAA12 /* PrivacyInfo.xcprivacy */,
+				51EBF7864BEA68D702BBD41A /* PrivacyInfo.xcprivacy */,
 			);
 			name = BookingBroom;
 			sourceTree = "<group>";
@@ -79,17 +62,34 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				725CD9A03FD5CA1BA0F59D41 /* libPods-BookingBroom.a */,
+				DA06A6DA32E4707AEA8432F1 /* libPods-BookingBroom.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		2DCB7DC1D53E60AAFF54ED59 /* BookingBroom */ = {
+		34F38687ED98D4952454E4CC /* ExpoModulesProviders */ = {
 			isa = PBXGroup;
 			children = (
-				D7567D31D80492DE12705C77 /* ExpoModulesProvider.swift */,
+				41224437AB0A58505DB19A2E /* BookingBroom */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
+		41224437AB0A58505DB19A2E /* BookingBroom */ = {
+			isa = PBXGroup;
+			children = (
+				DE602A39616362CAC945FB4A /* ExpoModulesProvider.swift */,
 			);
 			name = BookingBroom;
+			sourceTree = "<group>";
+		};
+		5F4AB11819727C98D4E1C465 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				32F8DA35010F8F27944471C5 /* Pods-BookingBroom.debug.xcconfig */,
+				0FD8BD2146C62305D031CFCD /* Pods-BookingBroom.release.xcconfig */,
+			);
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -106,8 +106,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				06541B474ADED3C3EF3C19EE /* Pods */,
-				09F8741E7DF4A02CEFC4E3F8 /* ExpoModulesProviders */,
+				5F4AB11819727C98D4E1C465 /* Pods */,
+				34F38687ED98D4952454E4CC /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -139,13 +139,13 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "BookingBroom" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				CA93E6F4BA4DED81ECD33F13 /* [Expo] Configure project */,
+				E51DDED9D0B502D6F6C0E03C /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				2E0673BE58E7AFD1D6FE4CC3 /* [CP] Embed Pods Frameworks */,
+				480FD047BBF2F13A99296C3C /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -195,7 +195,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				8E1515158D8ABFC695FCD392 /* PrivacyInfo.xcprivacy in Resources */,
+				F8F09D33C49C54C300B4FEC7 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -241,7 +241,7 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		2E0673BE58E7AFD1D6FE4CC3 /* [CP] Embed Pods Frameworks */ = {
+		480FD047BBF2F13A99296C3C /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -313,7 +313,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-BookingBroom/Pods-BookingBroom-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		CA93E6F4BA4DED81ECD33F13 /* [Expo] Configure project */ = {
+		E51DDED9D0B502D6F6C0E03C /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -345,7 +345,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				C9F6C54B41B1ADB89573C1B8 /* ExpoModulesProvider.swift in Sources */,
+				745AE7477E6379CAC46AA406 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,7 +354,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = E3BC0059A45F3DB7C761C9A9 /* Pods-BookingBroom.debug.xcconfig */;
+			baseConfigurationReference = 32F8DA35010F8F27944471C5 /* Pods-BookingBroom.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -392,7 +392,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 371982B73AD5E21CE3F6A895 /* Pods-BookingBroom.release.xcconfig */;
+			baseConfigurationReference = 0FD8BD2146C62305D031CFCD /* Pods-BookingBroom.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;

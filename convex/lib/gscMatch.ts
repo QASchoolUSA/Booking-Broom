@@ -1,3 +1,8 @@
+import {
+  gscCalendarDayOffset,
+  gscDateMinusMonths,
+} from "./gscDates";
+
 /** Normalize a domain or GSC property URL to a bare hostname for matching. */
 export function normalizeHost(input: string): string {
   let s = input.trim().toLowerCase();
@@ -75,7 +80,34 @@ function utcDay(offsetDays: number): Date {
   return d;
 }
 
-function rollingRange(
+function rollingRangePt(
+  periodDays: GscPeriodDaysStored,
+  lagDays: number,
+  now?: Date
+): { startDate: string; endDate: string } {
+  const endDate = gscCalendarDayOffset(-lagDays, now);
+
+  if (periodDays === 1) {
+    return { startDate: endDate, endDate };
+  }
+
+  if (periodDays === 2) {
+    const startDate = gscCalendarDayOffset(-lagDays - 1, now);
+    return { startDate, endDate: startDate };
+  }
+
+  if (periodDays === 90) {
+    return {
+      startDate: gscDateMinusMonths(endDate, 3),
+      endDate,
+    };
+  }
+
+  const startDate = gscCalendarDayOffset(-lagDays - (periodDays - 1), now);
+  return { startDate, endDate };
+}
+
+function rollingRangeUtc(
   periodDays: GscPeriodDaysStored,
   lagDays: number
 ): { startDate: string; endDate: string } {
@@ -110,27 +142,31 @@ function rollingRange(
 }
 
 /**
- * GSC date ranges. 24 hours uses today+yesterday so the hourly API
- * can return the last available 24 hour buckets.
+ * GSC date ranges in Pacific Time (API requirement).
+ * 24 hours uses PT yesterday→today so the hourly API can return the last
+ * available 24 hour buckets.
  */
-export function dateRangeForPeriod(periodDays: GscPeriodDaysStored): {
+export function dateRangeForPeriod(
+  periodDays: GscPeriodDaysStored,
+  now?: Date
+): {
   startDate: string;
   endDate: string;
 } {
   if (periodDays === 1) {
     return {
-      startDate: formatDateUTC(utcDay(-1)),
-      endDate: formatDateUTC(utcDay(0)),
+      startDate: gscCalendarDayOffset(-1, now),
+      endDate: gscCalendarDayOffset(0, now),
     };
   }
-  return rollingRange(periodDays, GSC_DATA_LAG_DAYS);
+  return rollingRangePt(periodDays, GSC_DATA_LAG_DAYS, now);
 }
 
 export function dateRangeForBingPeriod(periodDays: GscPeriodDaysStored): {
   startDate: string;
   endDate: string;
 } {
-  return rollingRange(periodDays, BING_DATA_LAG_DAYS);
+  return rollingRangeUtc(periodDays, BING_DATA_LAG_DAYS);
 }
 
 /** Parse Bing `/Date(ms)` or `/Date(ms±offset)/` into YYYY-MM-DD (UTC). */

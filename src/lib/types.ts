@@ -287,6 +287,11 @@ export interface Booking {
   service_type: string;
   preferred_date: string | null;
   preferred_time: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  scheduled_start_at_ms: number | null;
+  scheduled_end_at_ms: number | null;
+  timezone: string | null;
   notes: string | null;
   internal_notes: string | null;
   property: BookingProperty | null;
@@ -297,6 +302,53 @@ export interface Booking {
   updated_at: string;
   archived_at?: string | null;
   site?: Site;
+}
+
+export type CalendarEventKind =
+  | "booking_tentative"
+  | "booking_confirmed"
+  | "reminder";
+
+export interface CalendarEvent {
+  id: string;
+  kind: CalendarEventKind;
+  title: string;
+  subtitle: string | null;
+  start_at: string;
+  end_at: string;
+  start_at_ms: number;
+  end_at_ms: number;
+  all_day: boolean;
+  booking_id: string | null;
+  reminder_id: string | null;
+  status: string;
+  preferred_date: string | null;
+  preferred_time: string | null;
+  timezone: string;
+  site: {
+    id: string;
+    slug: string;
+    name: string;
+    accent_color: string;
+  } | null;
+  color: string;
+}
+
+export type ReminderStatus = "pending" | "sent" | "cancelled";
+
+export interface Reminder {
+  id: string;
+  title: string;
+  notes: string | null;
+  due_at: string;
+  due_at_ms: number;
+  all_day: boolean;
+  booking_id: string | null;
+  offset_minutes: number | null;
+  status: ReminderStatus;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface BookingWithSite extends Booking {
