@@ -55,20 +55,23 @@ export function matchGscProperty(
   }
 
   const host = normalizeHost(domain);
-  for (const prop of properties) {
-    if (normalizeHost(prop) === host) return prop;
-  }
-  return null;
+  const matches = properties.filter((p) => normalizeHost(p) === host);
+  if (matches.length === 0) return null;
+  // Domain properties include all URL variants; prefer over URL-prefix.
+  const domainProp = matches.find((p) =>
+    p.toLowerCase().startsWith("sc-domain:")
+  );
+  return domainProp ?? matches[0]!;
 }
 
 /** Alias — same hostname matching rules work for Bing site URLs. */
 export const matchBingProperty = matchGscProperty;
 
 /**
- * Daily GSC windows end yesterday so they match the Performance UI
- * (`dataState: "all"` includes fresh rows through yesterday).
+ * Daily GSC windows include today PT with `dataState: "all"` so totals match
+ * the Performance report presets (Last 7 days, Last 28 days, etc.).
  */
-export const GSC_DATA_LAG_DAYS = 1;
+export const GSC_DATA_LAG_DAYS = 0;
 
 /** Bing traffic data is typically ~1 day behind wall-clock. */
 export const BING_DATA_LAG_DAYS = 1;
@@ -155,7 +158,7 @@ export function dateRangeForPeriod(
 } {
   if (periodDays === 1) {
     return {
-      startDate: gscCalendarDayOffset(-1, now),
+      startDate: gscCalendarDayOffset(-2, now),
       endDate: gscCalendarDayOffset(0, now),
     };
   }

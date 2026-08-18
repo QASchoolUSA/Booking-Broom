@@ -30,27 +30,27 @@ describe("gscDates", () => {
 describe("dateRangeForPeriod (GSC, PT)", () => {
   const now = new Date("2026-08-18T06:00:00.000Z");
 
-  it("24h fetch window spans PT yesterday through PT today", () => {
+  it("24h fetch window covers three PT days for rolling hourly filter", () => {
     const range = dateRangeForPeriod(1, now);
-    assert.equal(range.startDate, "2026-08-16");
+    assert.equal(range.startDate, "2026-08-15");
     assert.equal(range.endDate, "2026-08-17");
   });
 
-  it("7d window ends yesterday PT with 7 inclusive days", () => {
+  it("7d window includes today PT with 7 inclusive days", () => {
     const range = dateRangeForPeriod(7, now);
-    assert.equal(range.endDate, "2026-08-16");
-    assert.equal(range.startDate, "2026-08-10");
+    assert.equal(range.endDate, "2026-08-17");
+    assert.equal(range.startDate, "2026-08-11");
   });
 
-  it("28d window ends yesterday PT", () => {
+  it("28d window ends today PT", () => {
     const range = dateRangeForPeriod(28, now);
-    assert.equal(range.endDate, "2026-08-16");
-    assert.equal(range.startDate, "2026-07-20");
+    assert.equal(range.endDate, "2026-08-17");
+    assert.equal(range.startDate, "2026-07-21");
   });
 
-  it("3 months uses calendar months ending yesterday PT", () => {
+  it("3 months uses calendar months ending today PT", () => {
     const range = dateRangeForPeriod(90, now);
-    assert.equal(range.endDate, "2026-08-16");
-    assert.equal(range.startDate, "2026-05-16");
+    assert.equal(range.endDate, "2026-08-17");
+    assert.equal(range.startDate, "2026-05-17");
   });
 });

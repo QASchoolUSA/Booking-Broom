@@ -25,13 +25,32 @@ export type GscTopQueryRow = {
   position: number;
 };
 
+const MS_PER_HOUR = 60 * 60 * 1000;
+
 /** Parse a GSC HOUR dimension key to unix ms (keys are ISO timestamps in PT). */
 export function parseHourKeyMs(key: string): number {
   const ms = Date.parse(key);
   return Number.isNaN(ms) ? 0 : ms;
 }
 
-/** Sort hourly rows chronologically and keep the last 24 hour buckets. */
+/**
+ * Keep hour buckets whose start time falls in the rolling last 24 hours ending
+ * at `now` — matches the GSC Performance “24 hours” preset (last available 24h).
+ */
+export function filterRowsInLast24Hours(
+  rows: GscAnalyticsRow[],
+  hourKeyIndex: number,
+  now = new Date()
+): GscAnalyticsRow[] {
+  const endMs = now.getTime();
+  const startMs = endMs - 24 * MS_PER_HOUR;
+  return rows.filter((r) => {
+    const ms = parseHourKeyMs(r.keys?.[hourKeyIndex] ?? "");
+    return ms >= startMs && ms <= endMs;
+  });
+}
+
+/** @deprecated Use filterRowsInLast24Hours — kept for tests comparing approaches. */
 export function selectLast24HourRows(rows: GscAnalyticsRow[]): GscAnalyticsRow[] {
   const sorted = [...rows].sort(
     (a, b) =>
@@ -40,23 +59,10 @@ export function selectLast24HourRows(rows: GscAnalyticsRow[]): GscAnalyticsRow[]
   return sorted.slice(-24);
 }
 
-/** Collect the last 24 distinct hour keys from rows (hour at `hourKeyIndex`). */
-export function last24HourKeySet(
+function sumMetrics(
   rows: GscAnalyticsRow[],
-  hourKeyIndex: number
-): Set<string> {
-  const keys = [
-    ...new Set(
-      rows
-        .map((r) => r.keys?.[hourKeyIndex] ?? "")
-        .filter((k) => k.length > 0)
-    ),
-  ];
-  keys.sort((a, b) => parseHourKeyMs(a) - parseHourKeyMs(b));
-  return new Set(keys.slice(-24));
-}
-
-function sumMetrics(rows: GscAnalyticsRow[]): GscAggregatedMetrics {
+  hourKeyIndex = 0
+): GscAggregatedMetrics {
   let clicks = 0;
   let impressions = 0;
   let posWeight = 0;
@@ -66,7 +72,7 @@ function sumMetrics(rows: GscAnalyticsRow[]): GscAggregatedMetrics {
     clicks += row.clicks ?? 0;
     impressions += row.impressions ?? 0;
     posWeight += (row.position ?? 0) * (row.impressions ?? 0);
-    const hourKey = row.keys?.[0];
+    const hourKey = row.keys?.[hourKeyIndex];
     if (hourKey) {
       const ms = parseHourKeyMs(hourKey);
       if (ms > 0) hourMs.push(ms);
@@ -92,18 +98,19 @@ function sumMetrics(rows: GscAnalyticsRow[]): GscAggregatedMetrics {
 
 /** Aggregate HOUR-dimension rows into GSC “last 24 hours” totals. */
 export function aggregateHourlyMetrics(
-  rows: GscAnalyticsRow[]
+  rows: GscAnalyticsRow[],
+  now = new Date()
 ): GscAggregatedMetrics {
-  return sumMetrics(selectLast24HourRows(rows));
+  return sumMetrics(filterRowsInLast24Hours(rows, 0, now), 0);
 }
 
 /** Aggregate query+HOUR rows over the same last-24-hour window; return top N by clicks. */
 export function aggregateQueryHourlyRows(
   rows: GscAnalyticsRow[],
-  limit = 5
+  limit = 5,
+  now = new Date()
 ): GscTopQueryRow[] {
-  const allowedHours = last24HourKeySet(rows, 1);
-  const filtered = rows.filter((r) => allowedHours.has(r.keys?.[1] ?? ""));
+  const filtered = filterRowsInLast24Hours(rows, 1, now);
 
   const byQuery = new Map<
     string,

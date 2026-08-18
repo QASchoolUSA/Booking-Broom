@@ -287,7 +287,8 @@ async function querySearchAnalytics(
   siteUrl: string,
   startDate: string,
   endDate: string,
-  hourly = false
+  hourly = false,
+  now = new Date()
 ): Promise<{
   clicks: number;
   impressions: number;
@@ -301,6 +302,8 @@ async function querySearchAnalytics(
     ? {
         startDate,
         endDate,
+        type: "web",
+        aggregationType: "byProperty",
         dimensions: ["HOUR"],
         rowLimit: 25000,
         dataState: "hourly_all",
@@ -308,6 +311,8 @@ async function querySearchAnalytics(
     : {
         startDate,
         endDate,
+        type: "web",
+        aggregationType: "byProperty",
         dataState: "all",
       };
 
@@ -355,7 +360,7 @@ async function querySearchAnalytics(
     };
   }
 
-  const aggregated = aggregateHourlyMetrics(rows);
+  const aggregated = aggregateHourlyMetrics(rows, now);
   return {
     clicks: aggregated.clicks,
     impressions: aggregated.impressions,
@@ -379,7 +384,8 @@ async function queryTopQueries(
   siteUrl: string,
   startDate: string,
   endDate: string,
-  hourly = false
+  hourly = false,
+  now = new Date()
 ): Promise<TopQueryRow[]> {
   const encoded = encodeURIComponent(siteUrl);
   const res = await fetch(
@@ -395,6 +401,8 @@ async function queryTopQueries(
           ? {
               startDate,
               endDate,
+              type: "web",
+              aggregationType: "byProperty",
               dimensions: ["query", "HOUR"],
               rowLimit: 25000,
               dataState: "hourly_all",
@@ -402,6 +410,8 @@ async function queryTopQueries(
           : {
               startDate,
               endDate,
+              type: "web",
+              aggregationType: "byProperty",
               dimensions: ["query"],
               rowLimit: 5,
               dataState: "all",
@@ -421,7 +431,7 @@ async function queryTopQueries(
   const rows = data.rows ?? [];
 
   if (hourly) {
-    return aggregateQueryHourlyRows(rows, 5);
+    return aggregateQueryHourlyRows(rows, 5, now);
   }
 
   return rows
@@ -459,6 +469,7 @@ export const syncAllInternal = internalAction({
       const properties = await listGscSites(accessToken);
       await ctx.runMutation(internal.gsc.stripGscPropertyOverrides, {});
       const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+      const syncNow = new Date();
 
       for (const site of sites) {
         const property = matchGscProperty(site.domain, properties);
@@ -481,14 +492,15 @@ export const syncAllInternal = internalAction({
         });
 
         for (const periodDays of PERIODS) {
-          const { startDate, endDate } = dateRangeForPeriod(periodDays);
+          const { startDate, endDate } = dateRangeForPeriod(periodDays, syncNow);
           const hourly = periodDays === 1;
           const stats = await querySearchAnalytics(
             accessToken,
             property,
             startDate,
             endDate,
-            hourly
+            hourly,
+            syncNow
           );
           await ctx.runMutation(internal.gsc.upsertMetric, {
             siteId: site._id as Id<"sites">,
@@ -507,7 +519,8 @@ export const syncAllInternal = internalAction({
             property,
             startDate,
             endDate,
-            hourly
+            hourly,
+            syncNow
           );
           await ctx.runMutation(internal.gsc.upsertQueries, {
             siteId: site._id as Id<"sites">,
