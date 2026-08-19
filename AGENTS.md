@@ -27,10 +27,17 @@ Gotcha: any `convex run` / `convex env` / `convex deploy` command also needs `CO
 ### Verifying the app
 - All routes except `/login` and `/api/bookings` require auth; unauthenticated requests 307-redirect to `/login`. Create a manager account at `/login` via "First time? Create manager account".
 - Simulate an inbound booking without the UI: `POST http://localhost:3000/api/bookings` with a seeded site (e.g. `{"site_slug":"sanford","api_key":"bb_sanford_dev_key","customer_name":"Jane Doe","service_type":"Deep Clean"}`). Bookings appear on the dashboard in real time.
-- Booking confirmation emails send from each site’s connected SpaceMail mailbox (Email → Connect). Set `EMAIL_CREDENTIALS_KEY` in Convex env (32-byte secret). Optional fallback when a site isn’t connected: also set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` (and optionally `SMTP_PORT` / `SMTP_FROM`) in Convex env.
-- Web push for new bookings: managers opt in on **Settings**. Set Convex env `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (e.g. `mailto:you@example.com`). Generate keys with `npx web-push generate-vapid-keys`. Serwist (and thus push) is **disabled in `next dev`** — test with a production build / deployed PWA. iOS requires Add to Home Screen.
+- Booking confirmation emails send from each site’s connected SpaceMail mailbox (Email → Connect). Set `EMAIL_CREDENTIALS_KEY` in Convex env (32-byte secret). Optional fallback when a site isn’t connected: also set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` (and optionally `SMTP_PORT` / `SMTP_FROM`) in Convex env. Do **not** set SMTP on Cloudflare Workers.
+- Web push for new bookings: managers opt in on **Settings**. Set Convex env `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (e.g. `mailto:you@example.com`). Generate keys with `npx web-push generate-vapid-keys`. Serwist (and thus push) is **disabled in `next dev`** — test with `pnpm preview` / the deployed PWA. iOS requires Add to Home Screen.
 - PageSpeed Insights lives at `/performance` (nav label **Speed**). Set `PAGESPEED_API_KEY` in Convex env, then use **Sync now** to audit each site.
 - SEO lives at `/seo` with a Google / Bing toggle. Google uses OAuth (`GOOGLE_CLIENT_*`); Bing uses `BING_WEBMASTER_API_KEY`. Page scans run from the SEO site cards.
+
+### Production (Cloudflare Workers)
+Deployed via `@opennextjs/cloudflare`. `pnpm run build` is OpenNext; `pnpm run build:next` is a plain Next.js webpack build (required for Serwist).
+
+Cloudflare Workers Builds should run `pnpm exec convex deploy --cmd 'pnpm run build'`, then `npx wrangler deploy` / `pnpm exec wrangler deploy` with committed `wrangler.jsonc`. Set `CONVEX_DEPLOY_KEY` as a **build secret**. Public `NEXT_PUBLIC_CONVEX_*` / `NEXT_PUBLIC_APP_URL` are in `wrangler.jsonc` `vars` and must also be present at build time.
+
+Keep `src/middleware.ts` named `middleware.ts` (OpenNext does not support Next 16 `proxy.ts` yet). Do not re-run `scripts/setup-convex-auth.mjs` against production unless `SITE_URL` changes.
 
 ### Lint
 `pnpm lint` runs but currently reports pre-existing errors (mostly `react-hooks` purity/set-state rules); these are not caused by environment setup.

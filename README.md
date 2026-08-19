@@ -4,7 +4,7 @@ Manager dashboard PWA for multi-site cleaning businesses. Receive bookings in re
 
 ## Stack
 
-- **Next.js 16** (App Router) on Vercel
+- **Next.js 16** (App Router) on **Cloudflare Workers** via OpenNext
 - **Convex** (database + auth + realtime) — free tier, **no inactivity pause**
 - **Tailwind CSS v4** + **shadcn/ui**
 - **Serwist** PWA (installable on iPhone, iPad, Android)
@@ -37,10 +37,10 @@ pnpm dev
 node scripts/setup-convex-auth.mjs http://localhost:3000
 ```
 
-For production, use your Vercel URL instead:
+For production, use the live app URL (already set — do **not** re-run this unless `SITE_URL` changes; it rotates JWT keys):
 
 ```bash
-node scripts/setup-convex-auth.mjs https://your-app.vercel.app
+node scripts/setup-convex-auth.mjs https://bookings.kedrik.com
 ```
 
 6. Seed your cleaning sites (run once):
@@ -58,34 +58,59 @@ pnpm exec convex run internal.seed.syncSeedSites
 This inserts any entries from `convex/lib/apiKeys.ts` that are not yet in the database,
 and backfills `contactEmail` (and other seed fields) on existing sites.
 
-### 2. Deploy to Vercel
+### 2. Deploy to Cloudflare Workers
 
-1. Push to GitHub and import in Vercel
-2. Add these **Environment Variables** in Vercel (Settings → Environment Variables):
+Production URL: **`https://bookings.kedrik.com`**. Convex stays on deployment [dynamic-gnu-491](https://dashboard.convex.dev/t/nick-kudrow/bookingbroom/dynamic-gnu-491) — only the Next.js app runs on Cloudflare.
 
-| Variable | Value |
-|----------|-------|
-| `NEXT_PUBLIC_CONVEX_URL` | `https://dynamic-gnu-491.convex.cloud` |
-| `NEXT_PUBLIC_CONVEX_SITE_URL` | `https://dynamic-gnu-491.convex.site` |
-| `CONVEX_DEPLOY_KEY` | Your deploy key from [Convex dashboard](https://dashboard.convex.dev/t/nick-kudrow/bookingbroom/dynamic-gnu-491) (Settings → Deploy Key) |
-| `ALLOWED_ORIGINS` | `http://localhost:3000,https://sanfordcleaning.com,...` |
-| `SMTP_HOST` | `mail.spacemail.com` (optional — omit to disable booking emails) |
+Local / CLI:
+
+```bash
+pnpm build          # OpenNext → .open-next/
+pnpm exec wrangler deploy --keep-vars
+# or
+pnpm deploy
+```
+
+**Cloudflare Workers Builds** (GitHub connected):
+
+| Setting | Value |
+|---------|-------|
+| Build command | `pnpm exec convex deploy --cmd 'pnpm run build'` |
+| Deploy command | `npx wrangler deploy` |
+| Install command | `pnpm install` |
+
+Set these as **Workers Builds** variables (needed at build time, especially `NEXT_PUBLIC_*`) **and** as Worker runtime vars (`wrangler.jsonc` already includes the public ones). `--keep-vars` on deploy preserves dashboard overrides.
+
+| Variable | Value | Where |
+|----------|-------|-------|
+| `NEXT_PUBLIC_CONVEX_URL` | `https://dynamic-gnu-491.convex.cloud` | Worker `vars` + build env |
+| `NEXT_PUBLIC_CONVEX_SITE_URL` | `https://dynamic-gnu-491.convex.site` | Worker `vars` + build env |
+| `NEXT_PUBLIC_APP_URL` | `https://bookings.kedrik.com` | Worker `vars` + build env |
+| `ALLOWED_ORIGINS` | Optional. Code already defaults to localhost + all live cleaning domains. Copy from Vercel only if you overrode that list. | Worker runtime |
+| `CONVEX_DEPLOY_KEY` | Convex dashboard → Settings → Deploy Key | **Build secret only** — not a Worker `vars` entry |
+
+Do **not** put `SMTP_*` on Cloudflare. Booking emails run in Convex Node actions. Confirm SMTP is set on the Convex deployment (copy from Vercel if it only lived there):
+
+| Convex var | Example |
+|------------|---------|
+| `SMTP_HOST` | `mail.spacemail.com` |
 | `SMTP_PORT` | `465` |
 | `SMTP_USER` | Your SpaceMail mailbox address (SMTP auth only) |
 | `SMTP_PASS` | Your SpaceMail mailbox password |
 | `SMTP_FROM` | Fallback From address for unknown site slugs only |
 
-3. Build is configured in `vercel.json` to run `pnpm exec convex deploy --cmd 'pnpm run build'` automatically.
+**Manual cutover checklist**
 
-4. After first deploy, run auth setup with your **live Vercel URL** (if not done already):
+1. Export production env from Vercel (Settings → Environment Variables). Confirm `CONVEX_DEPLOY_KEY` and any `ALLOWED_ORIGINS` / `SMTP_*` overrides.
+2. Confirm Convex env (especially `SMTP_*` and `SITE_URL=https://bookings.kedrik.com`). Do **not** re-run `setup-convex-auth.mjs` — it rotates JWT keys and signs everyone out.
+3. Create Worker `booking-broom` (or connect this GitHub repo under Workers Builds) with the build/deploy commands above.
+4. Compressed Worker measured **~1.5 MiB gzip** on dry-run (under the 3 MiB free limit). Use the same Cloudflare account as the other OpenNext sites.
+5. Preview first (`pnpm preview` or `*.workers.dev`): login, `POST /api/bookings`, `GET /api/pricing`, `/sw.js` must be JavaScript (not a login HTML redirect).
+6. Add custom domain `bookings.kedrik.com` on the Worker. If the hostname currently CNAMEs to Vercel, replace that record **after** a successful preview.
+7. Google OAuth redirect `https://bookings.kedrik.com/gsc/oauth/callback` stays the same. Only add a `*.workers.dev` callback if you test GSC connect on a preview hostname.
+8. After DNS + a successful production booking, pause or delete the Vercel project. `vercel.json` is left in place until then (it builds with `pnpm run build:next` so Vercel does not run OpenNext).
 
-```bash
-node scripts/setup-convex-auth.mjs https://your-app.vercel.app
-```
-
-5. Open `/login` → **Create manager account**, then sign in.
-
-**Convex dashboard:** [dynamic-gnu-491](https://dashboard.convex.dev/t/nick-kudrow/bookingbroom/dynamic-gnu-491)
+Open `/login` → **Create manager account** (first-time only), then sign in.
 
 ### 3. Install as PWA
 
@@ -118,7 +143,7 @@ Site-specific production keys and env setup: see `docs/*-site.md` (including `do
 When you add booking forms to your cleaning sites, POST to:
 
 ```
-POST https://your-app.vercel.app/api/bookings
+POST https://bookings.kedrik.com/api/bookings
 Content-Type: application/json
 ```
 
@@ -137,11 +162,11 @@ Content-Type: application/json
 }
 ```
 
-### Example form integration (any Vercel site)
+### Example form integration
 
 ```javascript
 async function submitBooking(formData) {
-  const res = await fetch("https://your-app.vercel.app/api/bookings", {
+  const res = await fetch("https://bookings.kedrik.com/api/bookings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -158,7 +183,7 @@ async function submitBooking(formData) {
 ## Adding a New Site
 
 1. Add the site to `convex/lib/apiKeys.ts` in `SEED_SITES` (generate hash with the command below).
-2. Add the domain to default `ALLOWED_ORIGINS` in `src/app/api/bookings/route.ts` (and Vercel env if overridden).
+2. Add the domain to default `ALLOWED_ORIGINS` in `src/lib/cors.ts` (and the Cloudflare Worker env if you overrode that list).
 3. Deploy Booking Broom, then sync to Convex:
 
 ```bash
@@ -184,7 +209,7 @@ Generate the hash:
 node -e "console.log(require('crypto').createHash('sha256').update('your-secret-key').digest('hex'))"
 ```
 
-Add the domain to `ALLOWED_ORIGINS` in Vercel env vars.
+Add the domain to `ALLOWED_ORIGINS` in Cloudflare Worker env vars if you override the default list.
 
 ## Email notifications
 
@@ -208,7 +233,7 @@ When a booking is submitted via the public API, Booking Broom can send:
 | Cleaning Boca Raton | `hello@cleaningbocaraton.com` |
 | Cleaning Sanford | `info@cleaningsanford.com` |
 
-Configure SpaceMail SMTP in Vercel (or `.env.local` for local dev):
+Configure SpaceMail SMTP on the **Convex** deployment (or `.env.local` for anonymous local Convex). Do not set these on Cloudflare Workers:
 
 | Variable | Example |
 |----------|---------|
@@ -248,7 +273,7 @@ pnpm exec convex env set VAPID_SUBJECT "mailto:you@example.com"
 
 Notes:
 
-- The service worker is built by Serwist and is **disabled in `next dev`**. Use a production build (`pnpm build && pnpm start`) or the deployed app to test push.
+- The service worker is built by Serwist and is **disabled in `next dev`**. Use `pnpm preview` (OpenNext/Workers) or `pnpm build:next && pnpm start` to test push.
 - **iPhone / iPad:** install via Safari → Share → Add to Home Screen, open the home-screen app, then enable push in Settings (iOS 16.4+).
 - Push is best-effort: bookings still save if VAPID is unset or delivery fails.
 
@@ -279,7 +304,7 @@ pnpm exec convex env set APP_URL "https://bookings.kedrik.com"
 # pnpm exec convex env set GOOGLE_REDIRECT_URI "https://bookings.kedrik.com/gsc/oauth/callback"
 ```
 
-Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Vercel if not already.
+Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Cloudflare Worker / Workers Builds env if not already (committed in `wrangler.jsonc` `vars`).
 
 6. Ensure each cleaning site property exists in the Google account you connect (Domain or URL-prefix property). Domains are matched automatically to `sites.domain`.
 
@@ -410,7 +435,7 @@ pnpm dev
 
 | Service | Tier | Monthly | Inactivity pause |
 |---------|------|---------|------------------|
-| Vercel | Hobby | $0 | No |
+| Cloudflare Workers | Paid (same account as other OpenNext sites) | see Cloudflare plan | No |
 | Convex | Free | $0 | **No** |
 
 ## Future
@@ -439,11 +464,11 @@ After a successful booking, Booking Broom sends:
 1. **Customer confirmation** — to the email address on the booking (if provided), branded as that cleaning site
 2. **Admin notification** — to the site-specific inbox (e.g. `info@sanfordcleaning.com` for Sanford)
 
-Emails are sent from this app (Vercel/Node) via SMTP. Cleaning sites on Cloudflare Workers do not send email directly.
+Emails are sent from **Convex Node actions** via SMTP (connected SpaceMail mailboxes, or shared `SMTP_*` fallback). Cleaning sites do not send email directly.
 
 ### SMTP setup (SpaceMail)
 
-Add these env vars in **Vercel** (Booking Broom project):
+Add these env vars on the **Convex** deployment (not Cloudflare):
 
 | Variable | Example |
 |----------|---------|
