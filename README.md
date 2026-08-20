@@ -136,13 +136,13 @@ Open `/login` → **Create manager account** (first-time only), then sign in.
 
 Use the **Test booking** button in development to simulate incoming bookings.
 
-To verify every live marketing site can forward a booking into Booking Broom:
+To verify every live marketing site can forward a **quote** and a **booking** into Booking Broom:
 
 ```
 pnpm test:bookings-all
 ```
 
-Optional: `BOOKING_TEST_EMAIL=you@example.com` (default `booking-test@kedrik.com`) and `--site=haines-city` to run one origin. The probe posts through each site’s public booking API using phone `3212360618` (no customer SMS). Each pass still creates a real dashboard row and may send confirmation emails.
+Optional: `BOOKING_TEST_EMAIL=you@example.com` (default `booking-test@kedrik.com`), `--site=haines-city` to run one origin, and `--type=quote` or `--type=book` (default both). The probe posts through each site’s public APIs using phone `3212360618` (no customer SMS). Each pass still creates a real dashboard row and may send confirmation emails.
 
 Site-specific production keys and env setup: see `docs/*-site.md` (including `docs/apopka-site.md`, `docs/kissimmee-site.md`, `docs/windermere-site.md`, `docs/boca-raton-site.md`, `docs/sanford-nc-site.md`).
 

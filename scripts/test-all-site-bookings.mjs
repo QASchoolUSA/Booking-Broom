@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 /**
- * Probe every live cleaning site's booking API (the public proxy), not Booking
- * Broom directly. A pass means that Worker has credentials and forwarded a row.
+ * Probe every live cleaning site's public quote and booking APIs (not Booking
+ * Broom directly). A pass means that Worker has credentials and forwarded a row.
  *
  * Uses phone 3212360618 so Booking Broom skips customer SMS.
- * Each pass still creates a real dashboard booking and may send emails.
+ * Each pass still creates a real dashboard row and may send emails.
  *
  * Usage:
  *   pnpm test:bookings-all
  *   BOOKING_TEST_EMAIL=you@example.com pnpm test:bookings-all
  *   pnpm test:bookings-all -- --site=haines-city
+ *   pnpm test:bookings-all -- --type=quote
+ *   pnpm test:bookings-all -- --type=book --site=apopka
  */
 
 /** Owner test DID — Booking Broom skips customer confirmation SMS for this number. */
@@ -61,15 +63,16 @@ function isoDatePlusDays(days) {
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const preferredDate = isoDatePlusDays(3);
 
-function notes(slug) {
+function notes(slug, type) {
   return [
     "AUTOMATION TEST BOOKING — please ignore",
     `Site: ${slug}`,
+    `Type: ${type}`,
     `Run id: ${stamp}`,
   ].join("\n");
 }
 
-function simpleBody(slug) {
+function simpleBody(slug, type) {
   return {
     customer_name: CUSTOMER_NAME,
     email: TEST_EMAIL,
@@ -78,14 +81,14 @@ function simpleBody(slug) {
     service_type: "Standard Clean",
     preferred_date: preferredDate,
     preferred_time: "morning",
-    notes: notes(slug),
-    intent: "quote",
+    notes: notes(slug, type),
+    intent: type,
   };
 }
 
-function calculatorBody(slug) {
+function calculatorBookBody(slug) {
   return {
-    bookingId: `probe-${slug}-${stamp}`,
+    bookingId: `probe-${slug}-book-${stamp}`,
     bookingData: {
       firstName: "BB",
       lastName: "Probe Test",
@@ -96,14 +99,24 @@ function calculatorBody(slug) {
       service: "Standard Clean",
       bedrooms: 2,
       bathrooms: 2,
-      customerNote: notes(slug),
+      customerNote: notes(slug, "book"),
       scheduledDate: preferredDate,
       scheduledTime: "morning",
     },
   };
 }
 
-function weeklyBody(slug) {
+function calculatorQuoteBody(slug) {
+  return {
+    name: CUSTOMER_NAME,
+    email: TEST_EMAIL,
+    phone: SKIP_SMS_PHONE,
+    service: "Standard Clean",
+    message: notes(slug, "quote"),
+  };
+}
+
+function weeklyBookBody(slug) {
   return {
     serviceSlug: "home-cleaning",
     pricingDetails: {
@@ -119,11 +132,22 @@ function weeklyBody(slug) {
     phone: SKIP_SMS_PHONE,
     streetAddress: "123 Probe St",
     city: "Orlando",
-    notes: notes(slug),
+    notes: notes(slug, "book"),
   };
 }
 
-function davenportBody(slug) {
+function weeklyQuoteBody(slug) {
+  return {
+    name: CUSTOMER_NAME,
+    email: TEST_EMAIL,
+    phone: SKIP_SMS_PHONE,
+    service: "home",
+    city: "Orlando",
+    message: notes(slug, "quote"),
+  };
+}
+
+function davenportBody(slug, type) {
   return {
     name: CUSTOMER_NAME,
     email: TEST_EMAIL,
@@ -136,10 +160,10 @@ function davenportBody(slug) {
     bathrooms: 2,
     frequency: "one-time",
     addons: [],
-    intent: "quote",
+    intent: type,
     preferredDate,
     timeWindow: "morning",
-    notes: notes(slug),
+    notes: notes(slug, type),
     source: "booking-broom-probe",
   };
 }
@@ -151,7 +175,7 @@ function davenportBody(slug) {
  */
 const WINDERMERE_ESTIMATE_CENTS = 31900;
 
-function windermereBody(slug) {
+function windermereBody(slug, type) {
   return {
     quote: {
       service: "house-cleaning",
@@ -178,7 +202,8 @@ function windermereBody(slug) {
       state: "FL",
       zip: "34786",
     },
-    notes: notes(slug),
+    notes: notes(slug, type),
+    intent: type,
   };
 }
 
@@ -186,96 +211,124 @@ const SITES = [
   {
     slug: "sanford",
     origin: "https://sanfordcleaning.com",
-    path: "/api/emails/confirm-booking",
     kind: "calculator",
+    bookPath: "/api/emails/confirm-booking",
+    quotePath: "/api/emails/quote-request",
   },
   {
     slug: "deltona",
     origin: "https://deltonacleaning.com",
-    path: "/api/book",
     kind: "simple",
+    bookPath: "/api/book",
+    quotePath: "/api/book",
   },
   {
     slug: "haines-city",
     origin: "https://hainescitycleaning.com",
-    path: "/api/book",
     kind: "simple",
+    bookPath: "/api/book",
+    quotePath: "/api/book",
   },
   {
     slug: "celebration",
     origin: "https://celebrationcleaning.com",
-    path: "/api/bookings",
     kind: "simple",
+    bookPath: "/api/bookings",
+    quotePath: "/api/bookings",
   },
   {
     slug: "winter-haven",
     origin: "https://cleaningwinterhaven.com",
-    path: "/api/book",
     kind: "simple",
+    bookPath: "/api/book",
+    quotePath: "/api/book",
   },
   {
     slug: "cleaning-weekly",
     origin: "https://cleaningweekly.com",
-    path: "/api/book",
     kind: "weekly",
+    bookPath: "/api/book",
+    quotePath: "/api/quote",
   },
   {
     slug: "davenport",
     origin: "https://cleaningdavenport.com",
-    path: "/api/bookings",
     kind: "davenport",
+    bookPath: "/api/bookings",
+    quotePath: "/api/bookings",
   },
   {
     slug: "apopka",
     origin: "https://apopkacleaning.com",
-    path: "/api/bookings",
     kind: "simple",
+    bookPath: "/api/bookings",
+    quotePath: "/api/bookings",
   },
   {
     slug: "kissimmee",
     origin: "https://cleaningkissimmee.com",
-    path: "/api/bookings",
     kind: "simple",
+    bookPath: "/api/bookings",
+    quotePath: "/api/bookings",
   },
   {
     slug: "windermere",
     origin: "https://windermerecleaning.com",
-    path: "/api/bookings",
     kind: "windermere",
+    bookPath: "/api/bookings",
+    quotePath: "/api/bookings",
   },
   {
     slug: "boca-raton",
     origin: "https://cleaningbocaraton.com",
-    path: "/api/emails/confirm-booking",
     kind: "calculator",
+    bookPath: "/api/emails/confirm-booking",
+    quotePath: "/api/emails/quote-request",
   },
   {
     slug: "sanford-nc",
     origin: "https://cleaningsanford.com",
-    path: "/api/book",
     kind: "simple",
+    bookPath: "/api/book",
+    quotePath: "/api/book",
   },
 ];
 
-function payloadFor(site) {
+function pathFor(site, type) {
+  return type === "quote" ? site.quotePath : site.bookPath;
+}
+
+function payloadFor(site, type) {
   switch (site.kind) {
     case "calculator":
-      return calculatorBody(site.slug);
+      return type === "quote"
+        ? calculatorQuoteBody(site.slug)
+        : calculatorBookBody(site.slug);
     case "weekly":
-      return weeklyBody(site.slug);
+      return type === "quote"
+        ? weeklyQuoteBody(site.slug)
+        : weeklyBookBody(site.slug);
     case "davenport":
-      return davenportBody(site.slug);
+      return davenportBody(site.slug, type);
     case "windermere":
-      return windermereBody(site.slug);
+      return windermereBody(site.slug, type);
     default:
-      return simpleBody(site.slug);
+      return simpleBody(site.slug, type);
   }
 }
 
-function passed(site, status, data) {
+function passed(site, type, status, data) {
   if (status < 200 || status >= 300) return false;
   if (!data || typeof data !== "object") return false;
-  if (site.kind === "weekly") return data.bookingBroom === true;
+  if (site.kind === "weekly" && type === "book") {
+    return data.bookingBroom === true;
+  }
+  if (site.kind === "weekly" && type === "quote") {
+    return data.ok === true && Boolean(data.id);
+  }
+  if (site.kind === "calculator" && type === "quote") {
+    return data.ok === true && Boolean(data.id);
+  }
   if (site.kind === "calculator") {
     return data.bookingBroom === true || Boolean(data.id);
   }
@@ -287,9 +340,9 @@ function bookingId(data) {
   return data.id || data.bookingId || "";
 }
 
-async function probe(site) {
-  const url = `${site.origin}${site.path}`;
-  const body = payloadFor(site);
+async function probe(site, type) {
+  const url = `${site.origin}${pathFor(site, type)}`;
+  const body = payloadFor(site, type);
   assertSkipSmsPhone(body, site.slug);
   const started = Date.now();
   try {
@@ -306,9 +359,10 @@ async function probe(site) {
     } catch {
       data = { raw: text.slice(0, 300) };
     }
-    const ok = passed(site, res.status, data);
+    const ok = passed(site, type, res.status, data);
     return {
       slug: site.slug,
+      type,
       url,
       status: res.status,
       ok,
@@ -321,6 +375,7 @@ async function probe(site) {
   } catch (err) {
     return {
       slug: site.slug,
+      type,
       url,
       status: 0,
       ok: false,
@@ -338,6 +393,7 @@ function pad(value, width) {
 
 async function main() {
   const filter = argValue("--site");
+  const typeArg = argValue("--type") ?? "all";
   const sites = filter ? SITES.filter((s) => s.slug === filter) : SITES;
 
   if (filter && sites.length === 0) {
@@ -347,26 +403,39 @@ async function main() {
     process.exit(1);
   }
 
+  if (typeArg !== "quote" && typeArg !== "book" && typeArg !== "all") {
+    console.error(`Unknown --type=${typeArg}. Use quote, book, or all.`);
+    process.exit(1);
+  }
+
+  const types = typeArg === "all" ? ["quote", "book"] : [typeArg];
+
   console.log(`Customer email: ${TEST_EMAIL}`);
   console.log(`Phone (SMS skipped): ${SKIP_SMS_PHONE}`);
   console.log(`Preferred date: ${preferredDate}`);
-  console.log(`Probing ${sites.length} site(s)…\n`);
+  console.log(
+    `Probing ${sites.length} site(s) × ${types.join("+")} (${sites.length * types.length} requests)…\n`,
+  );
 
   const results = [];
   for (const site of sites) {
-    process.stdout.write(`  ${site.slug}… `);
-    const result = await probe(site);
-    results.push(result);
-    console.log(result.ok ? `PASS ${result.id || ""}`.trim() : `FAIL ${result.error}`);
+    for (const type of types) {
+      process.stdout.write(`  ${site.slug} ${type}… `);
+      const result = await probe(site, type);
+      results.push(result);
+      console.log(
+        result.ok ? `PASS ${result.id || ""}`.trim() : `FAIL ${result.error}`,
+      );
+    }
   }
 
   console.log("");
   console.log(
-    `${pad("SITE", 18)}${pad("STATUS", 8)}${pad("RESULT", 8)}${pad("ID", 28)}ERROR`,
+    `${pad("SITE", 18)}${pad("TYPE", 8)}${pad("STATUS", 8)}${pad("RESULT", 8)}${pad("ID", 28)}ERROR`,
   );
   for (const row of results) {
     console.log(
-      `${pad(row.slug, 18)}${pad(row.status || "err", 8)}${pad(row.ok ? "PASS" : "FAIL", 8)}${pad(row.id, 28)}${row.error}`,
+      `${pad(row.slug, 18)}${pad(row.type, 8)}${pad(row.status || "err", 8)}${pad(row.ok ? "PASS" : "FAIL", 8)}${pad(row.id, 28)}${row.error}`,
     );
   }
 
