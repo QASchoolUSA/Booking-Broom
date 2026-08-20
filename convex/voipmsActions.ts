@@ -2,7 +2,11 @@ import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { normalizeUsDigits, smsPartyDigits } from "./lib/phone";
+import {
+  normalizeUsDigits,
+  shouldSkipCustomerBookingSms,
+  smsPartyDigits,
+} from "./lib/phone";
 import { buildCustomerBookingSms, BOOKING_SMS_MAX } from "./lib/bookingSmsTemplates";
 import {
   buildWebhookUrl,
@@ -331,6 +335,10 @@ async function sendBookingSmsHandler(
     bookingId?: Id<"bookings">;
   }
 ): Promise<SendBookingSmsResult> {
+  if (shouldSkipCustomerBookingSms(args.phone)) {
+    return { sent: false, skipped: "sms_skip_phone" };
+  }
+
   if (args.bookingId) {
     const claim = await ctx.runMutation(
       internal.bookings.claimSmsNotifyInternal,

@@ -21,7 +21,9 @@
     "mobile:ios": "pnpm --filter @booking-broom/mobile ios",
     "mobile:android": "pnpm --filter @booking-broom/mobile android",
     "mobile:typecheck": "pnpm --filter @booking-broom/mobile typecheck",
-    "test:gsc": "node --import tsx --test convex/lib/gscDates.test.ts convex/lib/gscAggregate.test.ts"
+    "test:gsc": "node --import tsx --test convex/lib/gscDates.test.ts convex/lib/gscAggregate.test.ts",
+    "test:phone": "node --import tsx --test convex/lib/phone.test.ts",
+    "test:bookings-all": "node scripts/test-all-site-bookings.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

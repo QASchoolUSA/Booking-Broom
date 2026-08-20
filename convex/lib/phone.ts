@@ -14,6 +14,18 @@ export function normalizeUsDigits(raw: string): string | null {
 }
 
 /**
+ * Customer confirmation SMS is skipped for these 10-digit US numbers
+ * (owner test phones). Admin email / push are unchanged.
+ */
+export const SMS_SKIP_CUSTOMER_PHONES = new Set(["3212360618"]);
+
+export function shouldSkipCustomerBookingSms(raw?: string): boolean {
+  if (!raw?.trim()) return false;
+  const digits = normalizeUsDigits(raw);
+  return digits != null && SMS_SKIP_CUSTOMER_PHONES.has(digits);
+}
+
+/**
  * Digits-only SMS party key for storage/lookup.
  * Allows short codes and other non-NANP contacts Voip.ms may return
  * (e.g. "122000") while still normalizing 11-digit US numbers.
