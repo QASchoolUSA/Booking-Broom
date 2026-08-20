@@ -2,7 +2,6 @@ import type {
   BandLookupRangeConfig,
   BedroomBandConfig,
   CanonicalService,
-  HeadlineOnlyConfig,
   InlineWizardConfig,
   PerServiceBranchConfig,
   PricingConfig,
@@ -659,39 +658,13 @@ const sanford: InlineWizardConfig = {
   ],
 };
 
-const celebration: HeadlineOnlyConfig = {
-  kind: "headline-only",
-  services: [
-    {
-      key: "standard-cleaning",
-      label: "Standard Cleaning",
-      canonicalKey: "standard",
-      enabled: true,
-    },
-    {
-      key: "deep-cleaning",
-      label: "Deep Cleaning",
-      canonicalKey: "deep",
-      enabled: true,
-    },
-    {
-      key: "move-out-turnover",
-      label: "Move-Out / Turnover",
-      canonicalKey: "move-in-out",
-      enabled: true,
-    },
-  ],
-  headlines: [
-    { key: "standard-cleaning", label: "Standard Cleaning", fromPrice: 120 },
-    {
-      key: "deep-cleaning",
-      label: "Deep Cleaning",
-      fromPrice: 250,
-      popular: true,
-    },
-    { key: "move-out-turnover", label: "Move-Out / Turnover", fromPrice: 300 },
-  ],
-};
+const celebration = bedroomBandDefaults([
+  {
+    key: "airbnb-cleaning",
+    label: "Airbnb / Turnover Cleaning",
+    canonicalKey: "airbnb-turnover",
+  },
+]);
 
 export type SeedPricing = {
   slug: string;
@@ -787,7 +760,7 @@ export const SEED_PRICING: SeedPricing[] = [
   },
   {
     slug: "celebration",
-    engine: "headline-only",
+    engine: "bedroom-band",
     currency: "USD",
     config: celebration,
   },

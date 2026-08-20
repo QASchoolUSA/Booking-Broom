@@ -22,6 +22,8 @@ BOOKING_BROOM_URL=https://bookings.kedrik.com
 
 For production, generate a stronger key, update `apiKeyHash` in Convex (or `SEED_SITES` + re-sync), and set the new value in Celebration Cleaning's env.
 
+Pricing uses the bedroom-band engine (same as Haines City). After deploying Booking Broom, run `pnpm exec convex run internal.seed.syncSeedPricing` so the live dashboard config upgrades from headline-only.
+
 ## Celebration Cleaning env vars
 
 **Runtime secrets:**
@@ -40,4 +42,4 @@ When Booking Broom SMTP is configured, Celebration bookings use:
 - **From / Reply-To** — `Celebration Cleaning <info@celebrationcleaning.com>`
 - **Admin notification** — `info@celebrationcleaning.com`
 
-Configure SMTP on the **Booking Broom** Vercel project (see main README).
+Configure SMTP on the **Booking Broom** Convex deployment (see main README).

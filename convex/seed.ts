@@ -127,6 +127,7 @@ export const syncSeedPricing = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
     let added = 0;
+    let updated = 0;
     let skipped = 0;
     const missingSites: string[] = [];
 
@@ -147,7 +148,19 @@ export const syncSeedPricing = internalMutation({
         .unique();
 
       if (existing) {
-        skipped += 1;
+        // Upgrade a site when the seed engine changes (e.g. headline-only → bedroom-band).
+        if (existing.engine !== seed.engine) {
+          await ctx.db.patch(existing._id, {
+            engine: seed.engine,
+            currency: seed.currency,
+            config: seed.config,
+            version: existing.version + 1,
+            updatedAt: now,
+          });
+          updated += 1;
+        } else {
+          skipped += 1;
+        }
         continue;
       }
 
@@ -162,6 +175,6 @@ export const syncSeedPricing = internalMutation({
       added += 1;
     }
 
-    return { added, skipped, missingSites, total: SEED_PRICING.length };
+    return { added, updated, skipped, missingSites, total: SEED_PRICING.length };
   },
 });
