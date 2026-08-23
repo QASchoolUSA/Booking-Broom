@@ -1,3 +1,6 @@
+"use node";
+
+import dns from "node:dns/promises";
 import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -25,30 +28,51 @@ function siteUrl(domain: string): string {
   return `https://${siteHostname(domain)}`;
 }
 
-/** Resolve IPv4 via Cloudflare DNS-over-HTTPS (JSON). Returns null on failure. */
-async function resolveIpv4(hostname: string): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DOH_TIMEOUT_MS);
-  try {
-    const url = new URL("https://cloudflare-dns.com/dns-query");
-    url.searchParams.set("name", hostname);
-    url.searchParams.set("type", "A");
-    const res = await fetch(url.toString(), {
-      signal: controller.signal,
-      headers: { Accept: "application/dns-json" },
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      Answer?: Array<{ type: number; data: string }>;
-    };
-    const answer = data.Answer?.find((a) => a.type === 1);
-    const ip = answer?.data?.trim();
-    return ip && ip.length > 0 ? ip : null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
+async function resolveIpv4ViaDoh(hostname: string): Promise<string | null> {
+  const endpoints = [
+    `https://dns.google/resolve?name=${encodeURIComponent(hostname)}&type=A`,
+    (() => {
+      const url = new URL("https://cloudflare-dns.com/dns-query");
+      url.searchParams.set("name", hostname);
+      url.searchParams.set("type", "A");
+      return url.toString();
+    })(),
+  ];
+
+  for (const endpoint of endpoints) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DOH_TIMEOUT_MS);
+    try {
+      const res = await fetch(endpoint, {
+        signal: controller.signal,
+        headers: { Accept: "application/dns-json" },
+      });
+      if (!res.ok) continue;
+      const data = (await res.json()) as {
+        Answer?: Array<{ type: number; data: string }>;
+      };
+      const answer = data.Answer?.find((a) => a.type === 1);
+      const ip = answer?.data?.trim();
+      if (ip) return ip;
+    } catch {
+      // try next resolver
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return null;
+}
+
+/** Resolve IPv4 via Node DNS, then DoH fallbacks. */
+async function resolveIpv4(hostname: string): Promise<string | null> {
+  try {
+    const addresses = await dns.resolve4(hostname);
+    const ip = addresses[0]?.trim();
+    if (ip) return ip;
+  } catch {
+    // fall through to DoH
+  }
+  return await resolveIpv4ViaDoh(hostname);
 }
 
 async function checkSiteHealth(

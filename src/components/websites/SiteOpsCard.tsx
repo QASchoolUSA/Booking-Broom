@@ -9,6 +9,7 @@ import { formatDistanceToNow } from "date-fns";
 import {
   ArrowsClockwise,
   ArrowSquareOut,
+  Globe,
   Phone,
   WifiHigh,
   WifiSlash,
@@ -55,6 +56,7 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
   );
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [fallbackIp, setFallbackIp] = useState<string | null>(null);
 
   useEffect(() => {
     setProvider(site.hosting_provider);
@@ -67,6 +69,38 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
     site.id,
   ]);
 
+  useEffect(() => {
+    if (health?.ip_address) {
+      setFallbackIp(null);
+      return;
+    }
+    const hostname = site.domain
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/$/, "")
+      .split("/")[0];
+    if (!hostname) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    fetch(
+      `https://dns.google/resolve?name=${encodeURIComponent(hostname)}&type=A`,
+      { signal: controller.signal }
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { Answer?: Array<{ type: number; data: string }> } | null) => {
+        const ip = data?.Answer?.find((a) => a.type === 1)?.data?.trim();
+        if (!cancelled && ip) setFallbackIp(ip);
+      })
+      .catch(() => {
+        /* ignore — health check will populate later */
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [site.domain, health?.ip_address]);
+
   const dirty =
     provider !== site.hosting_provider ||
     hostingEmail.trim() !== (site.hosting_account_email ?? "") ||
@@ -78,6 +112,7 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
     phoneDigits.length === 10 ? `tel:+1${phoneDigits}` : site.phone_number
       ? `tel:${site.phone_number}`
       : null;
+  const displayIp = health?.ip_address ?? fallbackIp;
 
   const handleSave = async () => {
     setSaving(true);
@@ -102,9 +137,14 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
       const result = await checkSite({ siteId: site.id as Id<"sites"> });
       if (result.status === "online") {
         toast.success(
-          result.phone_number
-            ? `${site.name} is online · ${result.phone_number}`
-            : `${site.name} is online`
+          [
+            result.phone_number
+              ? `${site.name} is online · ${result.phone_number}`
+              : `${site.name} is online`,
+            result.ip_address ? `IP ${result.ip_address}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
         );
       } else {
         toast.warning(`${site.name} looks offline`, {
@@ -161,11 +201,6 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
               />
             </CardTitle>
             <p className="pl-5 text-xs text-muted-foreground">{site.domain}</p>
-            {health?.ip_address && (
-              <p className="pl-5 font-mono text-[11px] text-muted-foreground">
-                {health.ip_address}
-              </p>
-            )}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span
@@ -272,6 +307,19 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
             )}
           </div>
           <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Globe size={12} />
+              IP address
+            </p>
+            {displayIp ? (
+              <p className="mt-0.5 font-mono text-sm tabular-nums">{displayIp}</p>
+            ) : (
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Not resolved yet — run Recheck
+              </p>
+            )}
+          </div>
+          <div className="rounded-lg border bg-muted/30 px-3 py-2.5 sm:col-span-2">
             <p className="text-xs font-medium text-muted-foreground">
               Booking inbox
             </p>

@@ -135,6 +135,11 @@ export const upsertStatus = internalMutation({
       .withIndex("by_site", (q) => q.eq("siteId", args.siteId))
       .unique();
 
+    const resolvedIp =
+      typeof args.ipAddress === "string" && args.ipAddress.length > 0
+        ? args.ipAddress
+        : existing?.ipAddress;
+
     const doc = {
       siteId: args.siteId,
       status: args.status,
@@ -144,9 +149,7 @@ export const upsertStatus = internalMutation({
       ...(typeof args.error === "string" && args.error.length > 0
         ? { error: args.error }
         : {}),
-      ...(typeof args.ipAddress === "string" && args.ipAddress.length > 0
-        ? { ipAddress: args.ipAddress }
-        : {}),
+      ...(resolvedIp ? { ipAddress: resolvedIp } : {}),
     };
 
     if (existing) {

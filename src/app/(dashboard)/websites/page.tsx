@@ -39,8 +39,8 @@ export default function WebsitesPage() {
         <div className="hidden md:block">
           <h2 className="text-2xl font-bold tracking-tight">Sites</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Hosting, contact details, email setup, and uptime for every cleaning
-            website
+            Hosting, IP addresses, contact details, email setup, and uptime for
+            every cleaning website
           </p>
         </div>
 

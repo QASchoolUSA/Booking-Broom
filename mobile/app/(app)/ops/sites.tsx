@@ -84,12 +84,10 @@ export default function SitesOpsScreen() {
                 </View>
                 <AppText muted size={13} style={{ marginTop: 4 }}>
                   {row.site.domain}
+                  {row.health?.ip_address
+                    ? ` · ${row.health.ip_address}`
+                    : ""}
                 </AppText>
-                {row.health?.ip_address ? (
-                  <AppText muted size={12} style={{ marginTop: 2 }}>
-                    {row.health.ip_address}
-                  </AppText>
-                ) : null}
                 <AppText muted size={12} style={{ marginTop: 8 }}>
                   Hosting: {row.site.hosting_provider ?? "—"} · Email:{" "}
                   {row.site.email_configured ? "ready" : "pending"}
