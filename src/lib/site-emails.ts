@@ -16,7 +16,7 @@ const SITE_EMAILS: Record<
   },
   "haines-city": {
     name: "Haines City Cleaning",
-    email: "info@hainescitycleaning.com",
+    email: "contact@hainescitycleaning.com",
   },
   celebration: {
     name: "Celebration Cleaning",

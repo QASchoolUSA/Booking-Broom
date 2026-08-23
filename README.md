@@ -230,7 +230,7 @@ When a booking is submitted via the public API, Booking Broom can send:
 |------|--------------------|
 | Sanford Cleaning | `info@sanfordcleaning.com` |
 | Deltona Cleaning | `info@deltonacleaning.com` |
-| Haines City Cleaning | `info@hainescitycleaning.com` |
+| Haines City Cleaning | `contact@hainescitycleaning.com` |
 | Celebration Cleaning | `info@celebrationcleaning.com` |
 | Cleaning Winter Haven | `info@cleaningwinterhaven.com` |
 | Cleaning Weekly | `info@cleaningweekly.com` |

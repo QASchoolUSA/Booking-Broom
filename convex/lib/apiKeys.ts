@@ -26,7 +26,7 @@ export const SEED_SITES = [
     name: "Haines City Cleaning",
     domain: "hainescitycleaning.com",
     accentColor: "#059669",
-    contactEmail: "info@hainescitycleaning.com",
+    contactEmail: "contact@hainescitycleaning.com",
     apiKeyHash:
       "8b6f8375ab3fa64f6fc9d54814fdf4c2fa356c888b804d6be35427b184654df6",
   },

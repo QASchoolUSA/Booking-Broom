@@ -7,7 +7,7 @@
 | **site_slug** | `haines-city` |
 | **Name** | Haines City Cleaning |
 | **Domain** | `hainescitycleaning.com` |
-| **Contact email** | `info@hainescitycleaning.com` |
+| **Contact email** | `contact@hainescitycleaning.com` |
 
 ## API key
 
@@ -38,7 +38,7 @@ Add them to Vercel `ALLOWED_ORIGINS` if you override the default list.
 ## Email notifications
 
 When Booking Broom SMTP is configured, Haines City bookings use:
-- **From / Reply-To** — `Haines City Cleaning <info@hainescitycleaning.com>`
-- **Admin notification** — `info@hainescitycleaning.com`
+- **From / Reply-To** — `Haines City Cleaning <contact@hainescitycleaning.com>`
+- **Admin notification** — `contact@hainescitycleaning.com`
 
 Configure SMTP on the **Booking Broom** Vercel project (see main README).
