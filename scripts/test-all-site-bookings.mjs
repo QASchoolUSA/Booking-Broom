@@ -6,19 +6,36 @@
  * Uses phone 3212360618 so Booking Broom skips customer SMS.
  * Each pass still creates a real dashboard row and may send emails.
  *
+ * After probes, deletes only rows tagged with this run's automation marker
+ * (see convex/bookings.cleanupAutomationProbeBookings). Real bookings are
+ * never matched. Pass --keep to leave probe rows in the dashboard.
+ *
  * Usage:
  *   pnpm test:bookings-all
  *   BOOKING_TEST_EMAIL=you@example.com pnpm test:bookings-all
  *   pnpm test:bookings-all -- --site=haines-city
  *   pnpm test:bookings-all -- --type=quote
  *   pnpm test:bookings-all -- --type=book --site=apopka
- */
+ *   pnpm test:bookings-all -- --keep
+ *   pnpm test:bookings-all -- --cleanup-only --run-id=<stamp>
+ *   pnpm test:bookings-all -- --cleanup-only --dry-run
+  */
+
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 /** Owner test DID — Booking Broom skips customer confirmation SMS for this number. */
 const SKIP_SMS_PHONE = "3212360618";
 const TEST_EMAIL =
   process.env.BOOKING_TEST_EMAIL?.trim() || "booking-test@kedrik.com";
 const CUSTOMER_NAME = "BB Probe Test";
+/** Must stay in sync with convex/bookings.AUTOMATION_PROBE_NOTES_MARKER. */
+const AUTOMATION_PROBE_NOTES_MARKER = "AUTOMATION TEST BOOKING";
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 
 function digitsOnly(value) {
   if (typeof value !== "string") return "";
@@ -63,9 +80,13 @@ function isoDatePlusDays(days) {
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const preferredDate = isoDatePlusDays(3);
 
+function probeIdempotencyKey(slug, type) {
+  return `probe-${stamp}-${slug}-${type}`;
+}
+
 function notes(slug, type) {
   return [
-    "AUTOMATION TEST BOOKING — please ignore",
+    AUTOMATION_PROBE_NOTES_MARKER + " — please ignore",
     `Site: ${slug}`,
     `Type: ${type}`,
     `Run id: ${stamp}`,
@@ -83,12 +104,13 @@ function simpleBody(slug, type) {
     preferred_time: "morning",
     notes: notes(slug, type),
     intent: type,
+    idempotency_key: probeIdempotencyKey(slug, type),
   };
 }
 
 function calculatorBookBody(slug) {
   return {
-    bookingId: `probe-${slug}-book-${stamp}`,
+    bookingId: probeIdempotencyKey(slug, "book"),
     bookingData: {
       firstName: "BB",
       lastName: "Probe Test",
@@ -113,6 +135,7 @@ function calculatorQuoteBody(slug) {
     phone: SKIP_SMS_PHONE,
     service: "Standard Clean",
     message: notes(slug, "quote"),
+    idempotency_key: probeIdempotencyKey(slug, "quote"),
   };
 }
 
@@ -133,6 +156,7 @@ function weeklyBookBody(slug) {
     streetAddress: "123 Probe St",
     city: "Orlando",
     notes: notes(slug, "book"),
+    idempotency_key: probeIdempotencyKey(slug, "book"),
   };
 }
 
@@ -144,6 +168,7 @@ function weeklyQuoteBody(slug) {
     service: "home",
     city: "Orlando",
     message: notes(slug, "quote"),
+    idempotency_key: probeIdempotencyKey(slug, "quote"),
   };
 }
 
@@ -165,6 +190,7 @@ function davenportBody(slug, type) {
     timeWindow: "morning",
     notes: notes(slug, type),
     source: "booking-broom-probe",
+    idempotency_key: probeIdempotencyKey(slug, type),
   };
 }
 
@@ -204,6 +230,7 @@ function windermereBody(slug, type) {
     },
     notes: notes(slug, type),
     intent: type,
+    idempotency_key: probeIdempotencyKey(slug, type),
   };
 }
 
@@ -360,6 +387,18 @@ async function probe(site, type) {
       data = { raw: text.slice(0, 300) };
     }
     const ok = passed(site, type, res.status, data);
+    const errorText = ok
+      ? ""
+      : (() => {
+          const raw = data.error ?? data.message ?? data.raw;
+          if (raw == null) return `HTTP ${res.status}`;
+          if (typeof raw === "string") return raw;
+          try {
+            return JSON.stringify(raw);
+          } catch {
+            return String(raw);
+          }
+        })();
     return {
       slug: site.slug,
       type,
@@ -367,9 +406,7 @@ async function probe(site, type) {
       status: res.status,
       ok,
       id: bookingId(data),
-      error: ok
-        ? ""
-        : data.error || data.message || data.raw || `HTTP ${res.status}`,
+      error: errorText,
       ms: Date.now() - started,
     };
   } catch (err) {
@@ -391,9 +428,88 @@ function pad(value, width) {
   return text.length >= width ? text : text + " ".repeat(width - text.length);
 }
 
+function hasFlag(flag) {
+  return process.argv.includes(flag);
+}
+
+function runConvexCleanup({ runId, dryRun }) {
+  const argsPayload = {
+    ...(runId ? { runId } : {}),
+    ...(dryRun ? { dryRun: true } : {}),
+  };
+  const result = spawnSync(
+    "pnpm",
+    [
+      "exec",
+      "convex",
+      "run",
+      "internal.bookings.cleanupAutomationProbeBookings",
+      JSON.stringify(argsPayload),
+    ],
+    {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        // Prefer an existing deployment from .env.local; only force anonymous when unset.
+        ...(process.env.CONVEX_AGENT_MODE || process.env.CONVEX_DEPLOYMENT
+          ? {}
+          : { CONVEX_AGENT_MODE: "anonymous" }),
+      },
+    },
+  );
+
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      error: (result.stderr || result.stdout || "convex run failed").trim(),
+    };
+  }
+
+  const stdout = result.stdout || "";
+  const jsonStart = stdout.indexOf("{");
+  if (jsonStart === -1) {
+    return { ok: false, error: stdout.trim() || "no JSON from convex run" };
+  }
+  try {
+    return { ok: true, data: JSON.parse(stdout.slice(jsonStart)) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: `parse failed: ${error instanceof Error ? error.message : error}`,
+    };
+  }
+}
+
 async function main() {
   const filter = argValue("--site");
   const typeArg = argValue("--type") ?? "all";
+  const keep = hasFlag("--keep");
+  const cleanupOnly = hasFlag("--cleanup-only");
+  const dryRun = hasFlag("--dry-run");
+  const runIdArg = argValue("--run-id");
+
+  if (cleanupOnly) {
+    const runId = runIdArg?.trim() || undefined;
+    console.log(
+      runId
+        ? `Cleaning probe bookings for run id ${runId}${dryRun ? " (dry-run)" : ""}…`
+        : `Cleaning all recent probe bookings (marker only)${dryRun ? " (dry-run)" : ""}…`,
+    );
+    const cleanup = runConvexCleanup({ runId, dryRun });
+    if (!cleanup.ok) {
+      console.error("Cleanup failed:", cleanup.error);
+      process.exit(1);
+    }
+    console.log(
+      `Cleanup: matched=${cleanup.data.matched} deleted=${cleanup.data.deleted}`,
+    );
+    if (Array.isArray(cleanup.data.ids) && cleanup.data.ids.length > 0) {
+      for (const id of cleanup.data.ids) console.log(`  ${id}`);
+    }
+    return;
+  }
+
   const sites = filter ? SITES.filter((s) => s.slug === filter) : SITES;
 
   if (filter && sites.length === 0) {
@@ -413,6 +529,7 @@ async function main() {
   console.log(`Customer email: ${TEST_EMAIL}`);
   console.log(`Phone (SMS skipped): ${SKIP_SMS_PHONE}`);
   console.log(`Preferred date: ${preferredDate}`);
+  console.log(`Run id: ${stamp}`);
   console.log(
     `Probing ${sites.length} site(s) × ${types.join("+")} (${sites.length * types.length} requests)…\n`,
   );
@@ -442,6 +559,24 @@ async function main() {
   const failed = results.filter((r) => !r.ok);
   const passedCount = results.length - failed.length;
   console.log(`\n${passedCount}/${results.length} passed`);
+
+  if (!keep) {
+    console.log(`\nCleaning probe bookings for this run (${stamp})…`);
+    const cleanup = runConvexCleanup({ runId: stamp, dryRun: false });
+    if (!cleanup.ok) {
+      console.error("Cleanup failed:", cleanup.error);
+      console.error(
+        `Retry: pnpm test:bookings-all -- --cleanup-only --run-id=${stamp}`,
+      );
+      process.exit(failed.length > 0 ? 1 : 1);
+    }
+    console.log(
+      `Cleanup: matched=${cleanup.data.matched} deleted=${cleanup.data.deleted}`,
+    );
+  } else {
+    console.log(`\nKept probe bookings (--keep). Run id: ${stamp}`);
+  }
+
   if (failed.length > 0) {
     process.exit(1);
   }

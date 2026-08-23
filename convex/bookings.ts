@@ -560,3 +560,63 @@ export const claimEmailNotifyInternal = internalMutation({
     return await claimNotifyField(ctx, args.bookingId, "emailNotifiedAt");
   },
 });
+
+/** Marker written into notes by `scripts/test-all-site-bookings.mjs`. */
+export const AUTOMATION_PROBE_NOTES_MARKER = "AUTOMATION TEST BOOKING";
+
+/**
+ * Delete rows created by `pnpm test:bookings-all` only.
+ * Matches notes marker and/or probe idempotency keys (`probe-<runId>-…`).
+ * Ordinary bookings never use that key prefix or marker.
+ */
+export const cleanupAutomationProbeBookings = internalMutation({
+  args: {
+    runId: v.optional(v.string()),
+    /** Only consider bookings newer than now - maxAgeMs (default 48h). */
+    maxAgeMs: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const maxAgeMs = args.maxAgeMs ?? 48 * 60 * 60 * 1000;
+    const cutoff = Date.now() - maxAgeMs;
+    const runId = args.runId?.trim() || undefined;
+    const dryRun = args.dryRun === true;
+    const idemPrefix = runId ? `probe-${runId}-` : "probe-";
+
+    const recent = await ctx.db
+      .query("bookings")
+      .withIndex("by_created", (q) => q.gte("createdAt", cutoff))
+      .collect();
+
+    const matched = recent.filter((booking) => {
+      const notes = booking.notes ?? "";
+      const key = booking.idempotencyKey ?? "";
+      const notesHit =
+        notes.includes(AUTOMATION_PROBE_NOTES_MARKER) &&
+        (!runId || notes.includes(`Run id: ${runId}`));
+      const keyHit = key.startsWith(idemPrefix);
+      return notesHit || keyHit;
+    });
+
+    const deletedIds: Id<"bookings">[] = [];
+    if (!dryRun) {
+      for (const booking of matched) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.reminders.cancelForBookingInternal,
+          { bookingId: booking._id },
+        );
+        await ctx.db.delete(booking._id);
+        deletedIds.push(booking._id);
+      }
+    }
+
+    return {
+      dryRun,
+      runId: runId ?? null,
+      matched: matched.length,
+      deleted: dryRun ? 0 : deletedIds.length,
+      ids: (dryRun ? matched.map((b) => b._id) : deletedIds) as string[],
+    };
+  },
+});
