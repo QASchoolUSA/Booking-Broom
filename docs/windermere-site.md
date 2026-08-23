@@ -21,7 +21,7 @@ BOOKING_BROOM_SITE_SLUG=windermere
 
 ```
 BOOKING_BROOM_MODE=live
-BOOKING_BROOM_BASE_URL=https://bookings.kedrik.com
+# BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 BOOKING_BROOM_BOOKINGS_PATH=/api/bookings
 BOOKING_BROOM_API_KEY=bb_windermere_dev_key
 BOOKING_BROOM_SITE_SLUG=windermere
@@ -54,7 +54,7 @@ Booking emails are sent by **Booking Broom** after each successful booking:
 ## Example POST
 
 ```bash
-curl -X POST https://bookings.kedrik.com/api/bookings \
+curl -X POST https://app.bookingbroom.com/api/bookings \
   -H "Content-Type: application/json" \
   -d '{
     "site_slug": "windermere",

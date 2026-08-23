@@ -22,7 +22,7 @@ The seeded Convex `apiKeyHash` is SHA-256 of `bb_boca-raton_dev_key`.
 ## Production env (Cleaning Boca Raton host)
 
 ```
-BOOKING_BROOM_URL=https://bookings.kedrik.com
+# BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 BOOKING_BROOM_API_KEY=bb_boca-raton_dev_key
 BOOKING_BROOM_SITE_SLUG=boca-raton
 ```
@@ -58,7 +58,7 @@ Connect the Boca SpaceMail mailbox in Booking Broom (**Email → Connect**), or 
 ## Example POST
 
 ```bash
-curl -X POST https://bookings.kedrik.com/api/bookings \
+curl -X POST https://app.bookingbroom.com/api/bookings \
   -H "Content-Type: application/json" \
   -d '{
     "site_slug": "boca-raton",

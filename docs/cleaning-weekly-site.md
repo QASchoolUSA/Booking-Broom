@@ -17,7 +17,7 @@ BOOKING_BROOM_API_KEY=bb_cleaning-weekly_6BzsDxq4zUfwELd72RDdm4l8X3XTTDh1
 ```
 
 ```
-BOOKING_BROOM_URL=https://bookings.kedrik.com
+# BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 ```
 
 ## Dev / local testing key
@@ -32,7 +32,7 @@ BOOKING_BROOM_API_KEY=bb_cleaning-weekly_dev_key
 ## Cleaning Weekly env vars
 
 **Runtime secrets:**
-- `BOOKING_BROOM_URL=https://bookings.kedrik.com`
+- `BOOKING_BROOM_URL` — optional; defaults to `https://app.bookingbroom.com` (set only for local BB)
 - `BOOKING_BROOM_API_KEY=bb_cleaning-weekly_6BzsDxq4zUfwELd72RDdm4l8X3XTTDh1`
 
 ## Sync site to Convex (if missing)

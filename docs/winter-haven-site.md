@@ -17,7 +17,7 @@ BOOKING_BROOM_API_KEY=bb_winter-haven_n_iC6KZ_ssqVtiXtoaUZkFB_Spg-Ckmf
 ```
 
 ```
-BOOKING_BROOM_URL=https://bookings.kedrik.com
+# BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 ```
 
 ## Dev / local testing key
@@ -32,7 +32,7 @@ BOOKING_BROOM_API_KEY=bb_winter-haven_dev_key
 - `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_PHONE`, `NEXT_PUBLIC_EMAIL`
 
 **Runtime secrets:**
-- `BOOKING_BROOM_URL=https://bookings.kedrik.com`
+- `BOOKING_BROOM_URL` — optional; defaults to `https://app.bookingbroom.com` (set only for local BB)
 - `BOOKING_BROOM_API_KEY=bb_winter-haven_n_iC6KZ_ssqVtiXtoaUZkFB_Spg-Ckmf`
 
 ## Sync site to Convex (if missing)

@@ -17,7 +17,7 @@ BOOKING_BROOM_API_KEY=<generate-production-secret>
 ```
 
 ```
-BOOKING_BROOM_URL=https://bookings.kedrik.com
+# BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 ```
 
 Generate a production key, hash it, and set `apiKeyHash` on the Convex `sites` row (or rotate via dashboard). Seed ships with the dev key hash only.
@@ -37,7 +37,7 @@ BOOKING_BROOM_URL=http://localhost:3000
 ## Env vars (Cleaning Davenport)
 
 **Runtime secrets:**
-- `BOOKING_BROOM_URL=https://bookings.kedrik.com`
+- `BOOKING_BROOM_URL` — optional; defaults to `https://app.bookingbroom.com` (set only for local BB)
 - `BOOKING_BROOM_API_KEY=<production-or-dev-key>`
 - `BOOKING_BROOM_SITE_SLUG=davenport` (optional; defaults to `davenport`)
 

@@ -19,7 +19,7 @@ BOOKING_BROOM_SITE_SLUG=kissimmee
 ## Production env (Cleaning Kissimmee host)
 
 ```
-BOOKING_BROOM_URL=https://bookings.kedrik.com
+# BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 BOOKING_BROOM_API_KEY=bb_kissimmee_dev_key
 BOOKING_BROOM_SITE_SLUG=kissimmee
 ```
@@ -49,7 +49,7 @@ Booking emails are sent by **Booking Broom** after each successful booking:
 ## Example POST
 
 ```bash
-curl -X POST https://bookings.kedrik.com/api/bookings \
+curl -X POST https://app.bookingbroom.com/api/bookings \
   -H "Content-Type: application/json" \
   -d '{
     "site_slug": "kissimmee",

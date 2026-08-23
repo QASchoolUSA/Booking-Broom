@@ -18,7 +18,7 @@ BOOKING_BROOM_API_KEY=bb_haines-city_dev_key
 ```
 
 ```
-BOOKING_BROOM_URL=https://bookings.kedrik.com
+# BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 ```
 
 For production, generate a stronger key, update `apiKeyHash` in Convex (or `SEED_SITES` + re-sync), and set the new value in Haines City Cleaning's env.
@@ -26,7 +26,7 @@ For production, generate a stronger key, update `apiKeyHash` in Convex (or `SEED
 ## Haines City Cleaning env vars
 
 **Runtime secrets:**
-- `BOOKING_BROOM_URL=https://bookings.kedrik.com`
+- `BOOKING_BROOM_URL` — optional; defaults to `https://app.bookingbroom.com` (set only for local BB)
 - `BOOKING_BROOM_API_KEY=bb_haines-city_dev_key`
 - `BOOKING_BROOM_SITE_SLUG=haines-city` (optional; defaults to `haines-city`)
 
