@@ -6,6 +6,7 @@ import { extractPhoneFromHtml } from "./lib/phone";
 
 const BODY_CAP = 512_000;
 const FETCH_TIMEOUT_MS = 15_000;
+const DOH_TIMEOUT_MS = 5_000;
 
 type HealthCheckResult = {
   status: "online" | "offline";
@@ -13,17 +14,51 @@ type HealthCheckResult = {
   httpStatus?: number;
   error?: string;
   phoneNumber?: string | null;
+  ipAddress?: string | null;
 };
 
+function siteHostname(domain: string): string {
+  return domain.replace(/^https?:\/\//i, "").replace(/\/$/, "").split("/")[0]!;
+}
+
 function siteUrl(domain: string): string {
-  return `https://${domain.replace(/^https?:\/\//i, "").replace(/\/$/, "")}`;
+  return `https://${siteHostname(domain)}`;
+}
+
+/** Resolve IPv4 via Cloudflare DNS-over-HTTPS (JSON). Returns null on failure. */
+async function resolveIpv4(hostname: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DOH_TIMEOUT_MS);
+  try {
+    const url = new URL("https://cloudflare-dns.com/dns-query");
+    url.searchParams.set("name", hostname);
+    url.searchParams.set("type", "A");
+    const res = await fetch(url.toString(), {
+      signal: controller.signal,
+      headers: { Accept: "application/dns-json" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      Answer?: Array<{ type: number; data: string }>;
+    };
+    const answer = data.Answer?.find((a) => a.type === 1);
+    const ip = answer?.data?.trim();
+    return ip && ip.length > 0 ? ip : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function checkSiteHealth(
   domain: string,
   siteName: string
 ): Promise<HealthCheckResult> {
+  const hostname = siteHostname(domain);
   const checkedUrl = siteUrl(domain);
+  const ipAddress = await resolveIpv4(hostname);
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -50,6 +85,7 @@ async function checkSiteHealth(
         checkedUrl,
         httpStatus,
         phoneNumber: phoneNumber ?? null,
+        ipAddress,
       };
     }
 
@@ -65,6 +101,7 @@ async function checkSiteHealth(
       httpStatus,
       error: reasons.join("; "),
       phoneNumber: phoneNumber ?? null,
+      ipAddress,
     };
   } catch (e) {
     const message =
@@ -78,6 +115,7 @@ async function checkSiteHealth(
       checkedUrl,
       error: message,
       phoneNumber: null,
+      ipAddress,
     };
   } finally {
     clearTimeout(timer);
@@ -109,6 +147,7 @@ export const checkAllInternal = internalAction({
           checkedUrl: result.checkedUrl,
           httpStatus: result.httpStatus,
           error: result.error ?? null,
+          ipAddress: result.ipAddress ?? null,
         });
         if (result.phoneNumber) {
           await ctx.runMutation(internal.sites.setPhoneNumber, {
@@ -127,6 +166,7 @@ export const checkAllInternal = internalAction({
           status: "offline",
           checkedUrl: siteUrl(site.domain),
           error: message,
+          ipAddress: null,
         });
       }
     }
@@ -171,6 +211,7 @@ export const checkSite = action({
     status: "online" | "offline";
     error: string | null;
     phone_number: string | null;
+    ip_address: string | null;
   }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
@@ -187,6 +228,7 @@ export const checkSite = action({
       checkedUrl: result.checkedUrl,
       httpStatus: result.httpStatus,
       error: result.error ?? null,
+      ipAddress: result.ipAddress ?? null,
     });
     if (result.phoneNumber) {
       await ctx.runMutation(internal.sites.setPhoneNumber, {
@@ -200,6 +242,7 @@ export const checkSite = action({
       status: result.status,
       error: result.error ?? null,
       phone_number: result.phoneNumber ?? null,
+      ip_address: result.ipAddress ?? null,
     };
   },
 });

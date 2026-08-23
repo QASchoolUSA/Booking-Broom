@@ -418,6 +418,7 @@ export const createPublic = mutation({
     quote: v.optional(bookingQuote),
     attribution: v.optional(bookingAttribution),
     intent: v.optional(bookingIntent),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const site = await ctx.db
@@ -431,6 +432,19 @@ export const createPublic = mutation({
 
     if (site.apiKeyHash !== args.apiKeyHash) {
       throw new Error("Invalid API key");
+    }
+
+    const idempotencyKey = args.idempotencyKey?.trim() || undefined;
+    if (idempotencyKey) {
+      const existing = await ctx.db
+        .query("bookings")
+        .withIndex("by_site_idempotency", (q) =>
+          q.eq("siteId", site._id).eq("idempotencyKey", idempotencyKey),
+        )
+        .unique();
+      if (existing) {
+        return { id: existing._id };
+      }
     }
 
     const now = Date.now();
@@ -449,6 +463,7 @@ export const createPublic = mutation({
       quote: args.quote,
       attribution: args.attribution,
       intent: args.intent,
+      idempotencyKey,
       createdAt: now,
       updatedAt: now,
     });

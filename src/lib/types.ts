@@ -45,6 +45,7 @@ export interface SiteHealthStatus {
   checked_url: string;
   http_status: number | null;
   error: string | null;
+  ip_address: string | null;
   checked_at: string;
 }
 
@@ -405,6 +406,8 @@ export interface CreateBookingPayload {
   quote?: CreateBookingQuotePayload;
   attribution?: CreateBookingAttributionPayload;
   intent?: string;
+  /** Same site + key returns the existing booking (retries / outbox). */
+  idempotency_key?: string;
 }
 
 export interface SmsDid {

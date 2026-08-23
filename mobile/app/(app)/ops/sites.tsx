@@ -61,6 +61,7 @@ export default function SitesOpsScreen() {
               health: {
                 status: "online" | "offline";
                 http_status: number | null;
+                ip_address: string | null;
               } | null;
             }) => (
               <Card key={row.site.slug}>
@@ -84,6 +85,11 @@ export default function SitesOpsScreen() {
                 <AppText muted size={13} style={{ marginTop: 4 }}>
                   {row.site.domain}
                 </AppText>
+                {row.health?.ip_address ? (
+                  <AppText muted size={12} style={{ marginTop: 2 }}>
+                    {row.health.ip_address}
+                  </AppText>
+                ) : null}
                 <AppText muted size={12} style={{ marginTop: 8 }}>
                   Hosting: {row.site.hosting_provider ?? "—"} · Email:{" "}
                   {row.site.email_configured ? "ready" : "pending"}

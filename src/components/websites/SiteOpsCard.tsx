@@ -161,6 +161,11 @@ export function SiteOpsCard({ row }: SiteOpsCardProps) {
               />
             </CardTitle>
             <p className="pl-5 text-xs text-muted-foreground">{site.domain}</p>
+            {health?.ip_address && (
+              <p className="pl-5 font-mono text-[11px] text-muted-foreground">
+                {health.ip_address}
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span

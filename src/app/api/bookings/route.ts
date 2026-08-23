@@ -39,6 +39,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const idempotencyKey =
+      (typeof body.idempotency_key === "string" && body.idempotency_key.trim()) ||
+      request.headers.get("idempotency-key")?.trim() ||
+      undefined;
+
     const client = new ConvexHttpClient(convexUrl);
     const result = await client.mutation(api.bookings.createPublic, {
       siteSlug: body.site_slug,
@@ -55,6 +60,7 @@ export async function POST(request: Request) {
       quote: normalizeQuote(body.quote),
       attribution: normalizeAttribution(body.attribution),
       intent: normalizeIntent(body.intent),
+      idempotencyKey,
     });
 
     // Email, SMS, and push are scheduled inside bookings.createPublic so the

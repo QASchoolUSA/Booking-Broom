@@ -132,6 +132,8 @@ export default defineSchema({
     attribution: v.optional(bookingAttribution),
     /** Quote request vs booking request; absent when the site has one flow. */
     intent: v.optional(bookingIntent),
+    /** Client/site retry key; same siteId+key returns the existing booking. */
+    idempotencyKey: v.optional(v.string()),
     /** Set when Expo/web push for this booking was claimed (idempotent notify). */
     pushNotifiedAt: v.optional(v.number()),
     /** Set when booking confirmation SMS was claimed (idempotent send). */
@@ -146,7 +148,8 @@ export default defineSchema({
     .index("by_site", ["siteId"])
     .index("by_created", ["createdAt"])
     .index("by_scheduled_start", ["scheduledStartAt"])
-    .index("by_preferred_date", ["preferredDate"]),
+    .index("by_preferred_date", ["preferredDate"])
+    .index("by_site_idempotency", ["siteId", "idempotencyKey"]),
 
   /**
    * Manager reminders — standalone or linked to a booking (fire before a job).
@@ -448,6 +451,8 @@ export default defineSchema({
     checkedUrl: v.string(),
     httpStatus: v.optional(v.number()),
     error: v.optional(v.string()),
+    /** Resolved IPv4 (A record) from the last health check. */
+    ipAddress: v.optional(v.string()),
     checkedAt: v.number(),
   }).index("by_site", ["siteId"]),
 

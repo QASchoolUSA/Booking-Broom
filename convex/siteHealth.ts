@@ -31,6 +31,7 @@ function mapHealth(doc: Doc<"siteHealthStatus">) {
     checked_url: doc.checkedUrl,
     http_status: doc.httpStatus ?? null,
     error: doc.error ?? null,
+    ip_address: doc.ipAddress ?? null,
     checked_at: new Date(doc.checkedAt).toISOString(),
   };
 }
@@ -126,6 +127,7 @@ export const upsertStatus = internalMutation({
     checkedUrl: v.string(),
     httpStatus: v.optional(v.number()),
     error: v.optional(v.union(v.string(), v.null())),
+    ipAddress: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -141,6 +143,9 @@ export const upsertStatus = internalMutation({
       ...(args.httpStatus != null && { httpStatus: args.httpStatus }),
       ...(typeof args.error === "string" && args.error.length > 0
         ? { error: args.error }
+        : {}),
+      ...(typeof args.ipAddress === "string" && args.ipAddress.length > 0
+        ? { ipAddress: args.ipAddress }
         : {}),
     };
 
