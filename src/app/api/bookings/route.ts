@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       idempotencyKey,
     });
 
-    // Email, SMS, and push are scheduled inside bookings.createPublic so the
+    // Email, SMS, push, and Telegram are scheduled inside bookings.createPublic so the
     // site UI can show confirmation immediately after the booking is stored.
 
     return NextResponse.json(

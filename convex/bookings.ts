@@ -511,6 +511,28 @@ export const createPublic = mutation({
       }
     );
 
+    // Telegram is best-effort and async — never on the marketing-site HTTP path.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.telegramActions.notifyNewBookingInternal,
+      {
+        siteSlug: args.siteSlug,
+        customerName: args.customerName,
+        email: args.email,
+        phone: args.phone,
+        address: args.address,
+        serviceType: args.serviceType,
+        preferredDate: args.preferredDate,
+        preferredTime: args.preferredTime,
+        notes: args.notes,
+        intent: args.intent,
+        quoteEstimate: args.quote?.estimate,
+        quoteCurrency: args.quote?.currency,
+        quoteFrequency: args.quote?.frequency,
+        bookingId: id,
+      }
+    );
+
     return { id };
   },
 });
@@ -522,7 +544,11 @@ type ClaimResult =
 async function claimNotifyField(
   ctx: MutationCtx,
   bookingId: Id<"bookings">,
-  field: "pushNotifiedAt" | "smsNotifiedAt" | "emailNotifiedAt"
+  field:
+    | "pushNotifiedAt"
+    | "smsNotifiedAt"
+    | "emailNotifiedAt"
+    | "telegramNotifiedAt"
 ): Promise<ClaimResult> {
   const booking = await ctx.db.get(bookingId);
   if (!booking) return { claimed: false, reason: "missing" };
@@ -558,6 +584,14 @@ export const claimEmailNotifyInternal = internalMutation({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
     return await claimNotifyField(ctx, args.bookingId, "emailNotifiedAt");
+  },
+});
+
+/** Claim Telegram manager alert once; retries / dual callers no-op. */
+export const claimTelegramNotifyInternal = internalMutation({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    return await claimNotifyField(ctx, args.bookingId, "telegramNotifiedAt");
   },
 });
 

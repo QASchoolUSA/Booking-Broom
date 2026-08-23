@@ -140,6 +140,8 @@ export default defineSchema({
     smsNotifiedAt: v.optional(v.number()),
     /** Set when booking confirmation emails were claimed (idempotent send). */
     emailNotifiedAt: v.optional(v.number()),
+    /** Set when Telegram manager alert was claimed (idempotent send). */
+    telegramNotifiedAt: v.optional(v.number()),
     /** Soft-archive timestamp; active lists exclude docs where this is set. */
     archivedAt: v.optional(v.number()),
     createdAt: v.number(),

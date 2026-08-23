@@ -50,6 +50,7 @@ import type * as siteHealthActions from "../siteHealthActions.js";
 import type * as sites from "../sites.js";
 import type * as sms from "../sms.js";
 import type * as smsRewrite from "../smsRewrite.js";
+import type * as telegramActions from "../telegramActions.js";
 import type * as voipmsActions from "../voipmsActions.js";
 
 import type {
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   sites: typeof sites;
   sms: typeof sms;
   smsRewrite: typeof smsRewrite;
+  telegramActions: typeof telegramActions;
   voipmsActions: typeof voipmsActions;
 }>;
 
