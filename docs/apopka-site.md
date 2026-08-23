@@ -13,7 +13,7 @@
 ```
 BOOKING_BROOM_API_KEY=bb_apopka_dev_key
 BOOKING_BROOM_URL=http://localhost:3000
-BOOKING_BROOM_SITE_SLUG=apopka
+# BOOKING_BROOM_SITE_SLUG not required — hardcoded in the marketing site
 ```
 
 ## Production env (Apopka Cleaning host)
@@ -21,7 +21,7 @@ BOOKING_BROOM_SITE_SLUG=apopka
 ```
 # BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 BOOKING_BROOM_API_KEY=bb_apopka_dev_key
-BOOKING_BROOM_SITE_SLUG=apopka
+# BOOKING_BROOM_SITE_SLUG not required — hardcoded in the marketing site
 ```
 
 Rotate to a stronger production secret when ready: generate a key, SHA-256 hash it, update Convex `sites.apiKeyHash` (or re-seed), then update the site env.

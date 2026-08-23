@@ -14,7 +14,7 @@
 ```
 BOOKING_BROOM_API_KEY=bb_boca-raton_dev_key
 BOOKING_BROOM_URL=http://localhost:3000
-BOOKING_BROOM_SITE_SLUG=boca-raton
+# BOOKING_BROOM_SITE_SLUG not required — hardcoded in the marketing site
 ```
 
 The seeded Convex `apiKeyHash` is SHA-256 of `bb_boca-raton_dev_key`.
@@ -24,7 +24,7 @@ The seeded Convex `apiKeyHash` is SHA-256 of `bb_boca-raton_dev_key`.
 ```
 # BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 BOOKING_BROOM_API_KEY=bb_boca-raton_dev_key
-BOOKING_BROOM_SITE_SLUG=boca-raton
+# BOOKING_BROOM_SITE_SLUG not required — hardcoded in the marketing site
 ```
 
 Rotate to a stronger production secret when ready: generate a key, SHA-256 hash it, update Convex `sites.apiKeyHash` (or `SEED_SITES` + re-sync), then update the site env.

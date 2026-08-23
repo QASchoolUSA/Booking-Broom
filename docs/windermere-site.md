@@ -14,7 +14,7 @@
 BOOKING_BROOM_MODE=live
 BOOKING_BROOM_API_KEY=bb_windermere_dev_key
 BOOKING_BROOM_BASE_URL=http://localhost:3000
-BOOKING_BROOM_SITE_SLUG=windermere
+# BOOKING_BROOM_SITE_SLUG not required — hardcoded in the marketing site
 ```
 
 ## Production env (Windermere Cleaning host)
@@ -24,7 +24,7 @@ BOOKING_BROOM_MODE=live
 # BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 BOOKING_BROOM_BOOKINGS_PATH=/api/bookings
 BOOKING_BROOM_API_KEY=bb_windermere_dev_key
-BOOKING_BROOM_SITE_SLUG=windermere
+# BOOKING_BROOM_SITE_SLUG not required — hardcoded in the marketing site
 ```
 
 The site’s server route maps quote/booking form fields into Booking Broom’s public API body (`site_slug`, `api_key`, `customer_name`, etc.).

@@ -31,7 +31,7 @@ CONVEX_AGENT_MODE=anonymous pnpm exec convex run internal.seed.syncSeedPricing
 ```
 # BOOKING_BROOM_URL optional; defaults to https://app.bookingbroom.com
 BOOKING_BROOM_API_KEY=bb_sanford-nc_dev_key
-BOOKING_BROOM_SITE_SLUG=sanford-nc
+# BOOKING_BROOM_SITE_SLUG not required — hardcoded in the marketing site
 NEXT_PUBLIC_SITE_URL=https://cleaningsanford.com
 ```
 
