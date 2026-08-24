@@ -11,14 +11,6 @@ type NotifyResult =
 const TELEGRAM_TIMEOUT_MS = 8_000;
 const TELEGRAM_MAX_TEXT = 3900;
 
-function appBaseUrl(): string {
-  return (
-    process.env.APP_URL?.trim() ||
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    "https://app.bookingbroom.com"
-  ).replace(/\/$/, "");
-}
-
 /** Telegram HTML parse_mode requires these entities escaped in text nodes. */
 function escapeHtml(value: string): string {
   return value
@@ -26,11 +18,6 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function dash(value: string | undefined): string {
-  const trimmed = value?.trim();
-  return trimmed ? escapeHtml(trimmed) : "—";
 }
 
 function formatMoney(estimate: number | undefined, currency: string | undefined) {
@@ -47,9 +34,38 @@ function formatMoney(estimate: number | undefined, currency: string | undefined)
   }
 }
 
+/** `2026-08-24` → `Mon, Aug 24`; leave non-ISO strings as-is. */
+function humanizeDate(date?: string): string | undefined {
+  const raw = date?.trim();
+  if (!raw) return undefined;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!iso) return raw;
+  const parsed = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
+/** `flexible` / `one-time` → `Flexible` / `One-time`. */
+function titleCaseWords(value?: string): string | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  return raw
+    .split(/(\s+|[-·|/]+)/)
+    .map((part) => {
+      if (/^\s+$/.test(part) || /^[-·|/]+$/.test(part)) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join("");
+}
+
 function formatPreferred(date?: string, time?: string): string {
-  const d = date?.trim();
-  const t = time?.trim();
+  const d = humanizeDate(date);
+  const t = titleCaseWords(time);
   if (d && t) return `${escapeHtml(d)} · ${escapeHtml(t)}`;
   if (d) return escapeHtml(d);
   if (t) return escapeHtml(t);
@@ -81,7 +97,7 @@ function contactLine(email?: string, phone?: string): string {
         : escapeHtml(phoneTrim),
     );
   }
-  return parts.length > 0 ? parts.join("  ·  ") : "—";
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
 function section(title: string, body: string): string {
@@ -90,12 +106,11 @@ function section(title: string, body: string): string {
 
 /**
  * Professional HTML card for Telegram (parse_mode: HTML).
- * Keeps scanning easy in a busy chat: intent header, site, then labeled blocks.
+ * Tight hierarchy: intent + site, then labeled blocks.
  */
 function buildTelegramHtml(args: {
   isQuote: boolean;
   siteName: string;
-  siteSlug: string;
   customerName: string;
   email?: string;
   phone?: string;
@@ -104,28 +119,39 @@ function buildTelegramHtml(args: {
   preferredDate?: string;
   preferredTime?: string;
   notes?: string;
-  quoteLine?: string;
+  money?: string;
+  frequency?: string;
 }): string {
   const intentTitle = args.isQuote ? "Quote request" : "New booking";
   const service =
     (args.serviceType ?? "Cleaning").trim() || "Cleaning";
+  const customer = args.customerName.trim() || "—";
+  const address = args.address?.trim();
 
-  const blocks: string[] = [
+  const header = [
     `<b>${escapeHtml(intentTitle)}</b>`,
     `<i>${escapeHtml(args.siteName)}</i>`,
-    `<code>${escapeHtml(args.siteSlug)}</code>`,
-    "",
-    section("Customer", dash(args.customerName)),
-    section("Contact", contactLine(args.email, args.phone)),
-    section("Address", dash(args.address)),
+  ].join("\n");
+
+  const blocks: string[] = [
+    header,
     section(
-      "Service",
-      `${escapeHtml(service)}\nPreferred: ${formatPreferred(args.preferredDate, args.preferredTime)}`,
+      "Customer",
+      `${escapeHtml(customer)}\n${contactLine(args.email, args.phone)}`,
+    ),
+    section("Property", address ? escapeHtml(address) : "—"),
+    section(
+      "Job",
+      `${escapeHtml(service)}\n${formatPreferred(args.preferredDate, args.preferredTime)}`,
     ),
   ];
 
-  if (args.quoteLine) {
-    blocks.push(section("Estimate", escapeHtml(args.quoteLine)));
+  if (args.money) {
+    const freq = titleCaseWords(args.frequency);
+    const estimateBody = freq
+      ? `<b>${escapeHtml(args.money)}</b> · ${escapeHtml(freq)}`
+      : `<b>${escapeHtml(args.money)}</b>`;
+    blocks.push(section("Estimate", estimateBody));
   }
 
   const notes = args.notes?.trim();
@@ -193,17 +219,10 @@ async function notifyNewBookingHandler(
   const siteName = site?.name ?? args.siteSlug;
   const isQuote = args.intent === "quote";
   const money = formatMoney(args.quoteEstimate, args.quoteCurrency);
-  const quoteLine = [money, args.quoteFrequency?.trim()]
-    .filter(Boolean)
-    .join(" · ");
-  const bookingUrl = args.bookingId
-    ? `${appBaseUrl()}/calendar?bookingId=${args.bookingId}`
-    : `${appBaseUrl()}/`;
 
   const text = buildTelegramHtml({
     isQuote,
     siteName,
-    siteSlug: args.siteSlug,
     customerName: args.customerName,
     email: args.email,
     phone: args.phone,
@@ -212,7 +231,8 @@ async function notifyNewBookingHandler(
     preferredDate: args.preferredDate,
     preferredTime: args.preferredTime,
     notes: args.notes,
-    quoteLine: quoteLine || undefined,
+    money,
+    frequency: args.quoteFrequency,
   });
 
   const controller = new AbortController();
@@ -230,16 +250,6 @@ async function notifyNewBookingHandler(
           text,
           parse_mode: "HTML",
           disable_web_page_preview: true,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: "Open in Booking Broom",
-                  url: bookingUrl,
-                },
-              ],
-            ],
-          },
         }),
       },
     );
