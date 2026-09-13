@@ -124,6 +124,20 @@ async function cfGet<T>(
     const message =
       body?.errors?.map((e) => e.message).filter(Boolean).join("; ") ||
       `Cloudflare API error (${res.status})`;
+    const lower = message.toLowerCase();
+    if (
+      lower.includes("invalid token") ||
+      lower.includes("authentication") ||
+      res.status === 401 ||
+      res.status === 403
+    ) {
+      return {
+        ok: false,
+        error:
+          `${message}. Token must be a user API token with access to this Cloudflare account ` +
+          `(invite the same CF user to every site account, then create the token with those accounts selected).`,
+      };
+    }
     return { ok: false, error: message };
   }
 
@@ -546,14 +560,15 @@ export const syncNow = action({
     const result: { ok: boolean; error: string | null; workers: number } =
       await ctx.runAction(internal.deploymentsActions.syncAllInternal, {});
 
-    if (!result.ok && result.error) {
-      const fatal =
-        result.error.includes("CLOUDFLARE_API_TOKEN") ||
-        result.error.toLowerCase().includes("invalid token") ||
-        result.error.toLowerCase().includes("authentication");
-      if (fatal) {
-        throw new Error(result.error);
-      }
+    // Only hard-fail when the shared token/env is missing entirely.
+    // Per-site Cloudflare auth/token errors are returned so the UI can still
+    // show cards that succeeded.
+    if (
+      !result.ok &&
+      result.error &&
+      result.error.includes("Missing CLOUDFLARE_API_TOKEN")
+    ) {
+      throw new Error(result.error);
     }
     return result;
   },
