@@ -1,7 +1,7 @@
 "use node";
 
 import http2 from "node:http2";
-import { importPKCS8, SignJWT } from "jose";
+import { importPKCS8, SignJWT, type KeyLike } from "jose";
 
 export type ApnsEnvironment = "development" | "production";
 
@@ -17,7 +17,7 @@ type ApnsConfig = {
 };
 
 let cachedJwt: { token: string; expiresAtMs: number } | null = null;
-let cachedKey: CryptoKey | null = null;
+let cachedKey: KeyLike | null = null;
 let cachedKeyFingerprint: string | null = null;
 
 export function readApnsConfig(): ApnsConfig | null {
