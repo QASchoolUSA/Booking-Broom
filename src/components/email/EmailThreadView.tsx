@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useConvex, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import { format } from "date-fns";
@@ -81,12 +81,49 @@ function AttachmentLink({
 }
 
 function MessageBody({ message }: { message: EmailMessage }) {
+  const convex = useConvex();
   const [preferPlain, setPreferPlain] = useState(false);
   const [sanitized, setSanitized] = useState<string | null>(null);
+  const [textBody, setTextBody] = useState<string | null>(message.text_body);
+  const [htmlBody, setHtmlBody] = useState<string | null>(message.html_body);
+  const [bodyLoading, setBodyLoading] = useState(false);
+
+  useEffect(() => {
+    setTextBody(message.text_body);
+    setHtmlBody(message.html_body);
+  }, [message.id, message.text_body, message.html_body]);
+
+  useEffect(() => {
+    // List summaries omit bodies; one-shot fetch (not useQuery) so IMAP sync
+    // does not re-read HTML for every open message.
+    if (message.text_body != null || message.html_body != null) return;
+    if (textBody != null || htmlBody != null) return;
+
+    let cancelled = false;
+    setBodyLoading(true);
+    void convex
+      .query(api.email.getMessage, {
+        messageId: message.id as Id<"emailMessages">,
+      })
+      .then((full) => {
+        if (cancelled || !full) return;
+        setTextBody(full.text_body);
+        setHtmlBody(full.html_body);
+      })
+      .finally(() => {
+        if (!cancelled) setBodyLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // One-shot per message id — do not re-subscribe on sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convex, message.id]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!message.html_body) {
+    if (!htmlBody) {
       setSanitized(null);
       return;
     }
@@ -94,7 +131,7 @@ function MessageBody({ message }: { message: EmailMessage }) {
       if (cancelled) return;
       const DOMPurify = mod.default;
       setSanitized(
-        DOMPurify.sanitize(message.html_body!, {
+        DOMPurify.sanitize(htmlBody, {
           USE_PROFILES: { html: true },
           FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
           FORBID_ATTR: ["onerror", "onload", "onclick"],
@@ -104,13 +141,17 @@ function MessageBody({ message }: { message: EmailMessage }) {
     return () => {
       cancelled = true;
     };
-  }, [message.html_body]);
+  }, [htmlBody]);
 
   const showHtml = Boolean(sanitized) && !preferPlain;
 
+  if (bodyLoading && !textBody && !htmlBody) {
+    return <Skeleton className="h-24 w-full rounded-md" />;
+  }
+
   return (
     <div className="space-y-2">
-      {message.html_body && message.text_body && (
+      {htmlBody && textBody && (
         <button
           type="button"
           className="text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline"
@@ -124,11 +165,11 @@ function MessageBody({ message }: { message: EmailMessage }) {
           className="email-html prose prose-sm max-w-none break-words text-sm text-foreground [&_a]:text-primary [&_img]:max-w-full"
           dangerouslySetInnerHTML={{ __html: sanitized! }}
         />
-      ) : message.html_body && !preferPlain && !message.text_body ? (
+      ) : htmlBody && !preferPlain && !textBody ? (
         <Skeleton className="h-24 w-full rounded-md" />
       ) : (
         <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
-          {message.text_body || (message.html_body ? "" : "(empty message)")}
+          {textBody || (htmlBody ? "" : "(empty message)")}
         </pre>
       )}
       {message.attachments.length > 0 && (

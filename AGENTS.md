@@ -32,6 +32,7 @@ Gotcha: any `convex run` / `convex env` / `convex deploy` command also needs `CO
 - Telegram alerts for every public quote/book: set Convex env `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Scheduled asynchronously from `bookings.createPublic` (same pattern as email/SMS/push) — marketing sites do not wait on Telegram. Missing env or send failures are logged and ignored.
 - Telegram alerts for every public quote/book: set Convex env `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Scheduled asynchronously from `bookings.createPublic` (same pattern as email/SMS/push) — marketing sites do not wait on Telegram. Missing env or send failures are logged and ignored.
 - PageSpeed Insights lives at `/performance` (nav label **Speed**). Set `PAGESPEED_API_KEY` in Convex env, then use **Sync now** to audit each site.
+- Deployments live at `/deployments` (nav label **Deploys**). Each cleaning site has its own Cloudflare account: set a **user-scoped** `CLOUDFLARE_API_TOKEN` (Builds Read, Workers Scripts Read, Account Analytics Read) that can access every account, set `CLOUDFLARE_ACCOUNT_ID` for Booking Broom, and paste each site’s Account ID on its Deploys card. Sync shows latest build + free request usage (100k/day).
 - SEO lives at `/seo` with a Google / Bing toggle. Google uses OAuth (`GOOGLE_CLIENT_*`); Bing uses `BING_WEBMASTER_API_KEY`. Page scans run from the SEO site cards.
 
 ### Production (Cloudflare Workers)

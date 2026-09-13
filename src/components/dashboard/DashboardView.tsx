@@ -1,9 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MagnifyingGlass, ArrowsClockwise } from "@phosphor-icons/react";
+import { MagnifyingGlass, ArrowsClockwise, Broom } from "@phosphor-icons/react";
 import { useBookings } from "@/lib/hooks/useBookings";
-import type { BookingStatus, BookingWithSite } from "@/lib/types";
+import { usePartialLeads } from "@/lib/hooks/usePartialLeads";
+import type {
+  BookingStatus,
+  BookingWithSite,
+  PartialLeadWithSite,
+} from "@/lib/types";
 import { resolveBookingDetails } from "@/lib/booking-details";
 import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteFilter } from "@/components/layout/SiteFilter";
@@ -11,9 +16,12 @@ import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { StatsCards } from "@/components/dashboard/StatsCards";
 import { BookingList } from "@/components/bookings/BookingList";
 import { BookingDetailSheet } from "@/components/bookings/BookingDetailSheet";
+import { PartialLeadCard } from "@/components/leads/PartialLeadCard";
+import { PartialLeadDetailSheet } from "@/components/leads/PartialLeadDetailSheet";
 import { DevSeedTool } from "@/components/bookings/DevSeedTool";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 interface DashboardViewProps {
@@ -32,13 +40,17 @@ const STATUS_FILTERS: { value: BookingStatus | "all"; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
+type ListMode = "active" | "archived" | "abandoned";
+
 export function DashboardView({
   siteSlug,
   title = "All Bookings",
   emptyTitle,
   emptyDescription,
 }: DashboardViewProps) {
-  const [listMode, setListMode] = useState<"active" | "archived">("active");
+  const [listMode, setListMode] = useState<ListMode>("active");
+  const isAbandoned = listMode === "abandoned";
+
   const {
     bookings,
     allBookings,
@@ -54,10 +66,21 @@ export function DashboardView({
     unarchiveBooking,
   } = useBookings(siteSlug, { includeArchived: listMode === "archived" });
 
+  const {
+    leads,
+    loading: leadsLoading,
+    connectionState: leadsConnection,
+    refresh: refreshLeads,
+  } = usePartialLeads(siteSlug);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">("all");
   const [selected, setSelected] = useState<BookingWithSite | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<PartialLeadWithSite | null>(
+    null
+  );
+  const [leadSheetOpen, setLeadSheetOpen] = useState(false);
 
   const filtered = useMemo(() => {
     let result = bookings;
@@ -85,26 +108,45 @@ export function DashboardView({
     return result;
   }, [bookings, search, statusFilter]);
 
+  const filteredLeads = useMemo(() => {
+    if (!search.trim()) return leads;
+    const q = search.toLowerCase();
+    return leads.filter(
+      (lead) =>
+        lead.customer_name?.toLowerCase().includes(q) ||
+        lead.phone?.toLowerCase().includes(q) ||
+        lead.email?.toLowerCase().includes(q) ||
+        lead.service_type?.toLowerCase().includes(q) ||
+        lead.address?.toLowerCase().includes(q) ||
+        lead.quote?.estimate?.toString().includes(q)
+    );
+  }, [leads, search]);
+
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
-    allBookings.forEach((b) => {
-      const slug = b.site?.slug;
+    const source = isAbandoned ? leads : allBookings;
+    source.forEach((row) => {
+      const slug = row.site?.slug;
       if (slug) map[slug] = (map[slug] ?? 0) + 1;
     });
     return map;
-  }, [allBookings]);
+  }, [allBookings, leads, isAbandoned]);
 
   const newCount = bookings.filter((b) => b.status === "new").length;
+  const activeConnection = isAbandoned ? leadsConnection : connectionState;
+  const activeRefresh = isAbandoned ? refreshLeads : refresh;
+  const activeLoading = isAbandoned ? leadsLoading : loading;
+  const totalCount = isAbandoned ? leads.length : allBookings.length;
 
   useShellPage({
-    connectionState,
-    onRefresh: refresh,
-    pageTitle: title,
+    connectionState: activeConnection,
+    onRefresh: activeRefresh,
+    pageTitle: isAbandoned ? "Abandoned leads" : title,
     sidebar: (
       <SiteSidebar
         sites={sites}
         counts={counts}
-        totalCount={allBookings.length}
+        totalCount={totalCount}
       />
     ),
   });
@@ -112,14 +154,19 @@ export function DashboardView({
   return (
     <>
       <div className="space-y-5 md:space-y-6">
-        {/* Page header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="hidden min-w-0 md:block">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">{title}</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+              {isAbandoned ? "Abandoned leads" : title}
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {newCount > 0
-                ? `${newCount} new booking${newCount === 1 ? "" : "s"} need attention`
-                : "All caught up — no new bookings"}
+              {isAbandoned
+                ? leads.length > 0
+                  ? `${leads.length} incomplete quote${leads.length === 1 ? "" : "s"} with contact info`
+                  : "No abandoned leads yet — they appear when someone enters email or phone and leaves"
+                : newCount > 0
+                  ? `${newCount} new booking${newCount === 1 ? "" : "s"} need attention`
+                  : "All caught up — no new bookings"}
             </p>
           </div>
           <div className="flex items-center gap-2 sm:shrink-0">
@@ -127,19 +174,21 @@ export function DashboardView({
               variant="outline"
               size="sm"
               className="hidden h-9 gap-2 sm:inline-flex"
-              onClick={refresh}
+              onClick={activeRefresh}
             >
               <ArrowsClockwise size={16} />
               Refresh
             </Button>
-            <DevSeedTool sites={sites} onCreated={refresh} />
+            {!isAbandoned && (
+              <DevSeedTool sites={sites} onCreated={refresh} />
+            )}
           </div>
         </div>
 
-        <StatsCards bookings={bookings} />
+        {!isAbandoned && <StatsCards bookings={bookings} />}
 
-        <div className="flex gap-2">
-          {(["active", "archived"] as const).map((mode) => (
+        <div className="flex flex-wrap gap-2">
+          {(["active", "archived", "abandoned"] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -152,16 +201,23 @@ export function DashboardView({
               )}
             >
               {mode}
+              {mode === "abandoned" && leads.length > 0 && (
+                <span className="ml-1.5 tabular-nums opacity-80">
+                  {leads.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* Mobile site filter */}
         <div className="md:hidden">
-          <SiteFilter sites={sites} counts={counts} totalCount={allBookings.length} />
+          <SiteFilter
+            sites={sites}
+            counts={counts}
+            totalCount={totalCount}
+          />
         </div>
 
-        {/* Toolbar: search + status filters */}
         <div className="space-y-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4">
           <div className="relative">
             <MagnifyingGlass
@@ -176,41 +232,45 @@ export function DashboardView({
             />
           </div>
 
-          <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
-            {STATUS_FILTERS.map(({ value, label }) => {
-              const count =
-                value === "all"
-                  ? bookings.length
-                  : bookings.filter((b) => b.status === value).length;
+          {!isAbandoned && (
+            <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
+              {STATUS_FILTERS.map(({ value, label }) => {
+                const count =
+                  value === "all"
+                    ? bookings.length
+                    : bookings.filter((b) => b.status === value).length;
 
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setStatusFilter(value)}
-                  className={cn(
-                    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors",
-                    statusFilter === value
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  {label}
-                  <span
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setStatusFilter(value)}
                     className={cn(
-                      "rounded px-1 py-px text-[10px] font-bold tabular-nums",
-                      statusFilter === value ? "text-primary-foreground/80" : "text-muted-foreground"
+                      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors",
+                      statusFilter === value
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    {label}
+                    <span
+                      className={cn(
+                        "rounded px-1 py-px text-[10px] font-bold tabular-nums",
+                        statusFilter === value
+                          ? "text-primary-foreground/80"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {error && (
+        {error && !isAbandoned && (
           <div
             role="alert"
             className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200"
@@ -220,7 +280,7 @@ export function DashboardView({
           </div>
         )}
 
-        {connectionState === "offline" && (
+        {activeConnection === "offline" && (
           <div
             role="status"
             className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
@@ -232,24 +292,61 @@ export function DashboardView({
           </div>
         )}
 
-        <BookingList
-          bookings={filtered}
-          loading={loading}
-          emptyTitle={
-            search || statusFilter !== "all"
-              ? "No matching bookings"
-              : emptyTitle
-          }
-          emptyDescription={
-            search || statusFilter !== "all"
-              ? "Try adjusting your search or filters."
-              : emptyDescription
-          }
-          onSelect={(booking) => {
-            setSelected(booking);
-            setSheetOpen(true);
-          }}
-        />
+        {isAbandoned ? (
+          activeLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-[148px] w-full rounded-xl" />
+              ))}
+            </div>
+          ) : filteredLeads.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-card px-6 py-16 text-center shadow-sm">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Broom size={28} weight="duotone" />
+              </div>
+              <h3 className="text-base font-semibold">
+                {search ? "No matching abandoned leads" : "No abandoned leads"}
+              </h3>
+              <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                {search
+                  ? "Try adjusting your search."
+                  : "When someone enters an email or phone in a quote/booking form and leaves, their snapshot shows up here."}
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredLeads.map((lead) => (
+                <PartialLeadCard
+                  key={lead.id}
+                  lead={lead}
+                  onSelect={(row) => {
+                    setSelectedLead(row);
+                    setLeadSheetOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          <BookingList
+            bookings={filtered}
+            loading={loading}
+            emptyTitle={
+              search || statusFilter !== "all"
+                ? "No matching bookings"
+                : emptyTitle
+            }
+            emptyDescription={
+              search || statusFilter !== "all"
+                ? "Try adjusting your search or filters."
+                : emptyDescription
+            }
+            onSelect={(booking) => {
+              setSelected(booking);
+              setSheetOpen(true);
+            }}
+          />
+        )}
       </div>
 
       <BookingDetailSheet
@@ -264,6 +361,15 @@ export function DashboardView({
         onArchive={archiveBooking}
         onUnarchive={unarchiveBooking}
         onDelete={deleteBooking}
+      />
+
+      <PartialLeadDetailSheet
+        lead={selectedLead}
+        open={leadSheetOpen}
+        onOpenChange={(open) => {
+          setLeadSheetOpen(open);
+          if (!open) setSelectedLead(null);
+        }}
       />
     </>
   );

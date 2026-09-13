@@ -19,7 +19,11 @@
  *   pnpm test:bookings-all -- --keep
  *   pnpm test:bookings-all -- --cleanup-only --run-id=<stamp>
  *   pnpm test:bookings-all -- --cleanup-only --dry-run
-  */
+ *
+ * Cleanup uses `convex run` against the deployment in `.env.local`.
+ * Requires a logged-in Convex CLI (`pnpm exec convex login`) or
+ * `CONVEX_DEPLOY_KEY` / `CONVEX_DEPLOYMENT_TOKEN` in the environment.
+ */
 
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -432,11 +436,55 @@ function hasFlag(flag) {
   return process.argv.includes(flag);
 }
 
+/** Strip Node/Convex CLI noise so the real failure is readable. */
+function cleanConvexCliOutput(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .filter((line) => {
+      const t = line.trim();
+      if (!t) return false;
+      if (t.includes("ExperimentalWarning: localStorage")) return false;
+      if (t.startsWith("(Use `node --trace-warnings")) return false;
+      return true;
+    })
+    .join("\n")
+    .trim();
+}
+
+function formatCleanupAuthHint(errorText) {
+  const lower = errorText.toLowerCase();
+  if (
+    !lower.includes("don't have access") &&
+    !lower.includes("not logged in") &&
+    !lower.includes("unauthorized") &&
+    !lower.includes("login")
+  ) {
+    return null;
+  }
+  return [
+    "Convex CLI cannot reach the deployment in .env.local.",
+    "Fix: pnpm exec convex login",
+    "  then: pnpm exec convex dev --once",
+    "Or set CONVEX_DEPLOY_KEY (dashboard → Settings → Deploy Key) and retry.",
+  ].join("\n");
+}
+
 function runConvexCleanup({ runId, dryRun }) {
   const argsPayload = {
     ...(runId ? { runId } : {}),
     ...(dryRun ? { dryRun: true } : {}),
   };
+
+  // Node 22+/26 webstorage is opt-in; without a file Convex CLI spams warnings
+  // and may fail to persist auth helpers. Keep a stable path under the repo.
+  const localStorageFile =
+    process.env.CONVEX_LOCALSTORAGE_FILE ||
+    path.join(REPO_ROOT, ".convex", "cli-localstorage.json");
+  const existingNodeOptions = process.env.NODE_OPTIONS || "";
+  const nodeOptions = existingNodeOptions.includes("--localstorage-file")
+    ? existingNodeOptions
+    : `${existingNodeOptions} --localstorage-file=${localStorageFile}`.trim();
+
   const result = spawnSync(
     "pnpm",
     [
@@ -451,6 +499,7 @@ function runConvexCleanup({ runId, dryRun }) {
       encoding: "utf8",
       env: {
         ...process.env,
+        NODE_OPTIONS: nodeOptions,
         // Prefer an existing deployment from .env.local; only force anonymous when unset.
         ...(process.env.CONVEX_AGENT_MODE || process.env.CONVEX_DEPLOYMENT
           ? {}
@@ -460,16 +509,20 @@ function runConvexCleanup({ runId, dryRun }) {
   );
 
   if (result.status !== 0) {
+    const raw = cleanConvexCliOutput(
+      result.stderr || result.stdout || "convex run failed",
+    );
+    const hint = formatCleanupAuthHint(raw);
     return {
       ok: false,
-      error: (result.stderr || result.stdout || "convex run failed").trim(),
+      error: hint ? `${raw}\n\n${hint}` : raw,
     };
   }
 
-  const stdout = result.stdout || "";
+  const stdout = cleanConvexCliOutput(result.stdout || "");
   const jsonStart = stdout.indexOf("{");
   if (jsonStart === -1) {
-    return { ok: false, error: stdout.trim() || "no JSON from convex run" };
+    return { ok: false, error: stdout || "no JSON from convex run" };
   }
   try {
     return { ok: true, data: JSON.parse(stdout.slice(jsonStart)) };

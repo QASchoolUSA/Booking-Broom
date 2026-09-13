@@ -363,6 +363,50 @@ Without a key, the API allows a very low anonymous quota and will often fail und
 
 Domains are audited as `https://{domain}`; set a URL override on a site card if you need `www` or a specific path.
 
+## Cloudflare Workers Builds (Deployments page)
+
+The **Deploys** page (`/deployments`) shows the latest [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) status **and free-tier usage** for Booking Broom and each cleaning site. Each marketing site uses its **own Cloudflare account**.
+
+### What you’ll see
+
+- Latest production-oriented build (status, branch, commit, time)
+- **Free Workers requests today** vs 100,000/day (remaining + progress bar; resets midnight UTC)
+- **Builds minutes**: OK vs free monthly limit reached (Cloudflare only exposes a boolean, not exact minutes left)
+
+### One-time Cloudflare setup
+
+1. **Invite the same Cloudflare user** as a member of every site account (required so one API token can read all of them).
+2. Create a **user-scoped** API token at [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens) with access to **all** those accounts:
+   - **Account → Workers Builds Configuration → Read**
+   - **Account → Workers Scripts → Read**
+   - **Account → Account Analytics → Read** (for request usage)
+   
+   Account-owned tokens are **not** supported by the Builds API.
+3. Set Convex env (token is shared; Booking Broom Account ID is env-only):
+
+```bash
+pnpm exec convex env set CLOUDFLARE_API_TOKEN "your-user-api-token"
+pnpm exec convex env set CLOUDFLARE_ACCOUNT_ID "booking-broom-account-id"
+# Anonymous local:
+# CONVEX_AGENT_MODE=anonymous pnpm exec convex env set CLOUDFLARE_API_TOKEN "…"
+# CONVEX_AGENT_MODE=anonymous pnpm exec convex env set CLOUDFLARE_ACCOUNT_ID "…"
+```
+
+4. Backfill Worker names (safe to re-run):
+
+```bash
+pnpm exec convex run internal.seed.syncSeedSites
+```
+
+5. **Add each site’s Account ID** (do this whenever you create a new site account):
+   - Cloudflare dashboard → select that site’s account → Workers → any Worker → copy **Account ID**
+   - In Booking Broom → **Deploys** → open the site card → paste into **Cloudflare Account ID** → **Save**
+   - Or later you can put IDs in seed (`cloudflareAccountId` on `SEED_SITES`) and re-run `syncSeedSites` once we add that field to seed — for now the card Save path is the supported manual flow.
+
+6. Open **Deploys** → **Sync deployments**. Sync also runs every 3 hours.
+
+Sites without a Worker name (e.g. Celebration if still on Vercel) show as **Not on Cloudflare**. Cards missing an Account ID show a clear error until you paste one.
+
 ## Voip.ms SMS / MMS (Messages page)
 
 The **Messages** page (`/messages`) shows SMS/MMS for your Voip.ms DIDs (including each number’s **description** label and **sub-account**), lets you filter by line, and send text replies. Inbound MMS media is displayed; outbound is text-only.

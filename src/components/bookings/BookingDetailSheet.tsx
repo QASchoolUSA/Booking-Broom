@@ -10,7 +10,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import type { BookingWithSite, BookingStatus } from "@/lib/types";
-import { resolveBookingDetails } from "@/lib/booking-details";
+import { resolveBookingDetails, zillowSearchUrl } from "@/lib/booking-details";
 import {
   BookingAttributionSection,
   BookingPropertySection,
@@ -175,6 +175,7 @@ export function BookingDetailSheet({
   };
 
   const details = resolveBookingDetails(booking);
+  const zillowUrl = zillowSearchUrl(booking.address);
 
   const hasContact =
     Boolean(booking.email) ||
@@ -236,7 +237,19 @@ export function BookingDetailSheet({
                 )}
                 {booking.address && (
                   <DetailRow icon={MapPin} label="Address">
-                    <span className="break-words">{booking.address}</span>
+                    <div className="space-y-1.5">
+                      <span className="break-words">{booking.address}</span>
+                      {zillowUrl && (
+                        <a
+                          href={zillowUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex text-sm font-medium text-primary hover:underline"
+                        >
+                          Open on Zillow
+                        </a>
+                      )}
+                    </div>
                   </DetailRow>
                 )}
                 {booking.preferred_date && (

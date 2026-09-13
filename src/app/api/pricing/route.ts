@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     const etag = `"${slug}-v${pricing.version}"`;
     const cacheHeaders = {
       ...cors,
-      "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+      "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
       ETag: etag,
       Vary: "Origin, X-Site-Slug",
     };

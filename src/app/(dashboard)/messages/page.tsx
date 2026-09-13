@@ -9,6 +9,7 @@ import {
   useChatVisualViewport,
   useIsMobileMd,
 } from "@/lib/hooks/useVisualViewportHeight";
+import { usePageVisible } from "@/lib/hooks/usePageVisible";
 import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { DidSidebar } from "@/components/messages/DidSidebar";
 import { DidFilterChips } from "@/components/messages/DidFilterChips";
@@ -24,6 +25,8 @@ import { Button } from "@/components/ui/button";
 export default function MessagesPage() {
   const connectionState = useConnectionState();
   const { isAuthenticated } = useConvexAuth();
+  const pageVisible = usePageVisible();
+  const live = isAuthenticated && pageVisible;
   const [selectedDid, setSelectedDid] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -31,15 +34,15 @@ export default function MessagesPage() {
 
   const syncState = useQuery(
     api.sms.getSyncState,
-    isAuthenticated ? {} : "skip"
+    live ? {} : "skip"
   ) as SmsSyncState | null | undefined;
 
-  const didsRaw = useQuery(api.sms.listDids, isAuthenticated ? {} : "skip");
+  const didsRaw = useQuery(api.sms.listDids, live ? {} : "skip");
   const dids = (didsRaw ?? []) as SmsDid[];
 
   const threadsRaw = useQuery(
     api.sms.listThreads,
-    isAuthenticated
+    live
       ? selectedDid
         ? { did: selectedDid }
         : {}
@@ -57,7 +60,7 @@ export default function MessagesPage() {
 
   const messagesRaw = useQuery(
     api.sms.listMessages,
-    isAuthenticated && selectedKey
+    live && selectedKey
       ? {
           did: selectedKey.split(":")[0]!,
           contact: selectedKey.split(":")[1]!,
@@ -67,7 +70,7 @@ export default function MessagesPage() {
   const messages = messagesRaw as SmsMessage[] | undefined;
 
   const showInbox = dids.length > 0 || Boolean(syncState);
-  const threadsLoading = isAuthenticated && threadsRaw === undefined;
+  const threadsLoading = live && threadsRaw === undefined;
   const mobileInThread = Boolean(selectedKey);
   const iosChatShell = isMobile && mobileInThread;
 

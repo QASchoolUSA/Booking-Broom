@@ -12,6 +12,7 @@ const isPublicPage = createRouteMatcher([
 ]);
 const isPublicApi = createRouteMatcher([
   "/api/bookings",
+  "/api/leads/partial",
   "/api/pricing",
   "/gsc/oauth/callback",
 ]);

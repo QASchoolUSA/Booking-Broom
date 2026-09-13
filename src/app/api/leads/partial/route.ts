@@ -9,7 +9,7 @@ import {
   normalizeProperty,
   normalizeQuote,
 } from "@/lib/booking-payload";
-import type { CreateBookingPayload } from "@/lib/types";
+import type { CreatePartialLeadPayload } from "@/lib/types";
 
 export async function OPTIONS(request: Request) {
   return new NextResponse(null, {
@@ -22,11 +22,25 @@ export async function POST(request: Request) {
   const origin = request.headers.get("origin");
 
   try {
-    const body = (await request.json()) as CreateBookingPayload;
+    const body = (await request.json()) as CreatePartialLeadPayload;
 
-    if (!body.site_slug || !body.api_key || !body.customer_name) {
+    if (!body.site_slug || !body.api_key || !body.session_key) {
       return NextResponse.json(
-        { error: "site_slug, api_key, and customer_name are required" },
+        { error: "site_slug, api_key, and session_key are required" },
+        { status: 400, headers: corsHeaders(origin) }
+      );
+    }
+
+    const hasEmail =
+      typeof body.email === "string" &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim());
+    const hasPhone =
+      typeof body.phone === "string" &&
+      body.phone.replace(/\D/g, "").length >= 10;
+
+    if (!hasEmail && !hasPhone) {
+      return NextResponse.json(
+        { error: "A valid email or phone is required" },
         { status: 400, headers: corsHeaders(origin) }
       );
     }
@@ -39,19 +53,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const idempotencyKey =
-      (typeof body.idempotency_key === "string" && body.idempotency_key.trim()) ||
-      request.headers.get("idempotency-key")?.trim() ||
-      undefined;
-
-    const sessionKey =
-      (typeof body.session_key === "string" && body.session_key.trim()) ||
-      undefined;
-
     const client = new ConvexHttpClient(convexUrl);
-    const result = await client.mutation(api.bookings.createPublic, {
+    const result = await client.mutation(api.partialLeads.upsertPublic, {
       siteSlug: body.site_slug,
       apiKeyHash: hashApiKey(body.api_key),
+      sessionKey: body.session_key,
       customerName: body.customer_name,
       email: body.email,
       phone: body.phone,
@@ -64,16 +70,12 @@ export async function POST(request: Request) {
       quote: normalizeQuote(body.quote),
       attribution: normalizeAttribution(body.attribution),
       intent: normalizeIntent(body.intent),
-      idempotencyKey,
-      sessionKey,
+      lastStep: body.last_step,
     });
 
-    // Email, SMS, push, and Telegram are scheduled inside bookings.createPublic so the
-    // site UI can show confirmation immediately after the booking is stored.
-
     return NextResponse.json(
-      { id: result.id, message: "Booking created" },
-      { status: 201, headers: corsHeaders(origin) }
+      { id: result.id, converted: result.converted },
+      { status: 200, headers: corsHeaders(origin) }
     );
   } catch (error) {
     const message =

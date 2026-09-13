@@ -157,3 +157,11 @@ export function hasAttributionContent(
   if (!attribution) return false;
   return Object.values(attribution).some((value) => Boolean(value));
 }
+
+/** Google search that surfaces the Zillow /homedetails listing (no API/ZPID). */
+export function zillowSearchUrl(address: string | null | undefined): string | null {
+  const trimmed = address?.trim() ?? "";
+  if (!trimmed) return null;
+  const q = `${trimmed} site:zillow.com/homedetails`;
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}

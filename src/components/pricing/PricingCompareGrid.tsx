@@ -2,7 +2,6 @@
 
 import { CANONICAL_SERVICES } from "convex/lib/pricingConfigs";
 import type { CanonicalService } from "convex/lib/pricingConfigs";
-import { REFERENCE_BASKET_LABEL } from "convex/lib/pricingEngines";
 import { Warning } from "@phosphor-icons/react";
 import { formatMoney } from "@/lib/booking-details";
 import type { SitePricingRow } from "@/lib/types";
@@ -10,6 +9,8 @@ import { cn } from "@/lib/utils";
 
 interface PricingCompareGridProps {
   rows: SitePricingRow[];
+  /** Human-readable scenario currently driving the matrix. */
+  scenarioLabelText: string;
   /** Jump to Edit for this site (e.g. from a column header click). */
   onEditSite?: (siteId: string) => void;
 }
@@ -21,6 +22,7 @@ interface PricingCompareGridProps {
  */
 export function PricingCompareGrid({
   rows,
+  scenarioLabelText,
   onEditSite,
 }: PricingCompareGridProps) {
   const priced = rows.filter((row) => row.basket !== null);
@@ -96,9 +98,9 @@ export function PricingCompareGrid({
 
       <div className="space-y-2 text-xs text-muted-foreground">
         <p>
-          All columns use the same reference home:{" "}
+          All columns use the same home:{" "}
           <span className="font-medium text-foreground">
-            {REFERENCE_BASKET_LABEL}
+            {scenarioLabelText}
           </span>
           . Click a site name to edit its numbers.
         </p>
@@ -181,7 +183,7 @@ function ServiceRow({
           <td key={row.site.id} className="px-3 py-2.5 text-right">
             <span
               className={cn(
-                "text-sm font-semibold tabular-nums",
+                "text-sm font-semibold tabular-nums motion-safe:transition-colors motion-safe:duration-200",
                 isMin && "text-emerald-700 dark:text-emerald-400",
                 isMax && !isMin && "text-amber-700 dark:text-amber-400"
               )}

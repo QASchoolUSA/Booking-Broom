@@ -9,7 +9,13 @@ import {
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import {
+  useAction,
+  useConvex,
+  useConvexAuth,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Trash2 } from "lucide-react-native";
 import { EmailMessageCard } from "@/components/email/EmailMessageCard";
@@ -25,6 +31,8 @@ type Msg = {
   subject: string;
   text_body: string | null;
   html_body: string | null;
+  has_text_body?: boolean;
+  has_html_body?: boolean;
   sent_at: string;
   direction: "in" | "out";
   attachments?: Array<{
@@ -52,6 +60,7 @@ export function EmailThreadConversation({
   const { colors, isTablet } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const convex = useConvex();
   const { isAuthenticated } = useConvexAuth();
   const threadListRef = useRef<FlatList<Msg>>(null);
   const sendReply = useAction(api.emailActions.sendReply);
@@ -59,11 +68,14 @@ export function EmailThreadConversation({
   const markLocal = useMutation(api.email.markThreadReadLocal);
   const deleteThread = useAction(api.emailActions.deleteThread);
 
-  const messages = useQuery(
+  const summaries = useQuery(
     api.email.listMessages,
     isAuthenticated ? { threadId } : "skip"
   );
 
+  const [bodiesById, setBodiesById] = useState<
+    Record<string, { text_body: string | null; html_body: string | null }>
+  >({});
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [deletingThread, setDeletingThread] = useState(false);
@@ -72,6 +84,60 @@ export function EmailThreadConversation({
     void markLocal({ threadId });
     void markSeen({ threadId }).catch(() => undefined);
   }, [threadId, markLocal, markSeen]);
+
+  useEffect(() => {
+    setBodiesById({});
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!summaries) return;
+    let cancelled = false;
+    const missing = summaries.filter(
+      (m) =>
+        !bodiesById[m.id] && m.text_body == null && m.html_body == null
+    );
+    if (missing.length === 0) return;
+
+    void (async () => {
+      const entries = await Promise.all(
+        missing.map(async (m) => {
+          const full = await convex.query(api.email.getMessage, {
+            messageId: m.id as Id<"emailMessages">,
+          });
+          return [
+            m.id,
+            {
+              text_body: full?.text_body ?? null,
+              html_body: full?.html_body ?? null,
+            },
+          ] as const;
+        })
+      );
+      if (cancelled) return;
+      setBodiesById((prev) => {
+        const next = { ...prev };
+        for (const [id, body] of entries) next[id] = body;
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // One-shot body load per missing summary id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convex, summaries]);
+
+  const messages: Msg[] | undefined = summaries
+    ? summaries.map((m) => {
+        const body = bodiesById[m.id];
+        return {
+          ...m,
+          text_body: body?.text_body ?? m.text_body,
+          html_body: body?.html_body ?? m.html_body,
+        };
+      })
+    : undefined;
 
   const onSend = async () => {
     if (!draft.trim()) return;
@@ -180,7 +246,7 @@ export function EmailThreadConversation({
           <VirtualList
             ref={threadListRef}
             style={{ flex: 1 }}
-            data={(messages ?? []) as Msg[]}
+            data={messages}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
             keyboardShouldPersistTaps="handled"

@@ -10,6 +10,7 @@ import {
   useChatVisualViewport,
   useIsMobileMd,
 } from "@/lib/hooks/useVisualViewportHeight";
+import { usePageVisible } from "@/lib/hooks/usePageVisible";
 import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { MailboxSidebar } from "@/components/email/MailboxSidebar";
 import { MailboxFilterChips } from "@/components/email/MailboxFilterChips";
@@ -73,6 +74,8 @@ function pickDefaultMailbox(mailboxes: EmailMailbox[]): string | null {
 export default function EmailPage() {
   const connectionState = useConnectionState();
   const { isAuthenticated } = useConvexAuth();
+  const pageVisible = usePageVisible();
+  const live = isAuthenticated && pageVisible;
   const [selectedMailboxId, setSelectedMailboxId] = useState<string | null>(
     null
   );
@@ -83,12 +86,12 @@ export default function EmailPage() {
 
   const syncState = useQuery(
     api.email.getSyncState,
-    isAuthenticated ? {} : "skip"
+    live ? {} : "skip"
   ) as EmailSyncState | null | undefined;
 
   const mailboxesRaw = useQuery(
     api.email.listMailboxes,
-    isAuthenticated ? {} : "skip"
+    live ? {} : "skip"
   );
   const mailboxes = (mailboxesRaw ?? []) as EmailMailbox[];
 
@@ -121,7 +124,7 @@ export default function EmailPage() {
 
   const threadsRaw = useQuery(
     api.email.listThreads,
-    isAuthenticated && selectedMailboxId
+    live && selectedMailboxId
       ? { mailboxId: selectedMailboxId as Id<"emailMailboxes"> }
       : "skip"
   );
@@ -137,14 +140,14 @@ export default function EmailPage() {
 
   const messagesRaw = useQuery(
     api.email.listMessages,
-    isAuthenticated && selectedThreadId
+    live && selectedThreadId
       ? { threadId: selectedThreadId as Id<"emailThreads"> }
       : "skip"
   );
   const messages = messagesRaw as EmailMessage[] | undefined;
 
   const showInbox = mailboxes.length > 0;
-  const threadsLoading = isAuthenticated && selectedMailboxId
+  const threadsLoading = live && selectedMailboxId
     ? threadsRaw === undefined
     : false;
   const mobileInThread = Boolean(selectedThreadId);

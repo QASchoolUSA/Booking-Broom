@@ -11,6 +11,7 @@ import {
   CaretDoubleRight,
   ChartLine,
   ChatCircle,
+  CloudArrowUp,
   CurrencyDollar,
   EnvelopeSimple,
   Gauge,
@@ -24,6 +25,7 @@ import {
 } from "@phosphor-icons/react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import { usePageVisible } from "@/lib/hooks/usePageVisible";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -97,6 +99,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Sites",
     icon: Globe,
     match: (p) => p === "/websites" || p.startsWith("/websites/"),
+  },
+  {
+    href: "/deployments",
+    label: "Deploys",
+    icon: CloudArrowUp,
+    match: (p) => p === "/deployments" || p.startsWith("/deployments/"),
   },
   {
     href: "/seo",
@@ -384,9 +392,10 @@ export function AppShell({
   const router = useRouter();
   const { signOut } = useAuthActions();
   const { isAuthenticated } = useConvexAuth();
+  const pageVisible = usePageVisible();
   const emailUnreadRaw = useQuery(
     api.email.countUnread,
-    isAuthenticated ? {} : "skip"
+    isAuthenticated && pageVisible ? {} : "skip"
   );
   const emailUnread =
     typeof emailUnreadRaw === "number" ? emailUnreadRaw : 0;

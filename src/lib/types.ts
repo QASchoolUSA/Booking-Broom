@@ -107,6 +107,52 @@ export interface SitePerformanceRow {
   metrics: SitePerformanceMetrics | null;
 }
 
+export interface DeploymentSyncState {
+  id: string;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+}
+
+export interface DeploymentStatus {
+  id: string;
+  worker_name: string;
+  site_id: string | null;
+  display_name: string;
+  account_id: string | null;
+  status: string | null;
+  build_outcome: string | null;
+  branch: string | null;
+  commit_hash: string | null;
+  commit_message: string | null;
+  author: string | null;
+  created_on: string | null;
+  stopped_on: string | null;
+  build_uuid: string | null;
+  dashboard_url: string | null;
+  /** UTC-day Workers invocations so far. */
+  requests_today: number | null;
+  requests_limit: number;
+  requests_remaining: number | null;
+  build_minutes_limit_reached: boolean | null;
+  build_minutes_refresh_on: string | null;
+  error: string | null;
+  checked_at: string;
+}
+
+export interface DeploymentRow {
+  target: {
+    kind: "app" | "site";
+    site_id: string | null;
+    slug: string;
+    name: string;
+    domain: string | null;
+    accent_color: string;
+    worker_name: string | null;
+    cloudflare_account_id: string | null;
+  };
+  deployment: DeploymentStatus | null;
+}
+
 export interface SitePricing {
   id: string;
   site_id: string;
@@ -408,6 +454,51 @@ export interface CreateBookingPayload {
   intent?: string;
   /** Same site + key returns the existing booking (retries / outbox). */
   idempotency_key?: string;
+  /** Soft-lead session key from the marketing widget. */
+  session_key?: string;
+}
+
+export interface CreatePartialLeadPayload {
+  site_slug: string;
+  api_key: string;
+  session_key: string;
+  customer_name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  service_type?: string;
+  preferred_date?: string;
+  preferred_time?: string;
+  notes?: string;
+  property?: CreateBookingPropertyPayload;
+  quote?: CreateBookingQuotePayload;
+  attribution?: CreateBookingAttributionPayload;
+  intent?: string;
+  last_step?: string;
+}
+
+export interface PartialLeadWithSite {
+  id: string;
+  site_id: string;
+  session_key: string;
+  customer_name: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  service_type: string | null;
+  preferred_date: string | null;
+  preferred_time: string | null;
+  notes: string | null;
+  property: BookingProperty | null;
+  quote: BookingQuote | null;
+  attribution: BookingAttribution | null;
+  intent: "quote" | "book" | null;
+  last_step: string | null;
+  converted_at: string | null;
+  converted_booking_id: string | null;
+  created_at: string;
+  updated_at: string;
+  site?: Site;
 }
 
 export interface SmsDid {
@@ -519,6 +610,9 @@ export interface EmailMessage {
   subject: string;
   text_body: string | null;
   html_body: string | null;
+  /** Present on list summaries when bodies are omitted to save I/O. */
+  has_text_body?: boolean;
+  has_html_body?: boolean;
   sent_at: string;
   seen: boolean;
   answered: boolean;
