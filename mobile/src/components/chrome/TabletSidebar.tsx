@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Mail,
   Globe,
+  CloudUpload,
   ChartLine,
   Gauge,
   DollarSign,
@@ -61,6 +62,12 @@ const NAV: NavItem[] = [
     label: "Sites",
     icon: Globe,
     match: (p) => p.includes("/ops/sites") || p.endsWith("/ops"),
+  },
+  {
+    href: "/ops/deployments",
+    label: "Deploys",
+    icon: CloudUpload,
+    match: (p) => p.includes("/ops/deployments"),
   },
   {
     href: "/ops/seo",

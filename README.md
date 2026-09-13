@@ -285,6 +285,25 @@ Notes:
 - **iPhone / iPad:** install via Safari → Share → Add to Home Screen, open the home-screen app, then enable push in Settings (iOS 16.4+).
 - Push is best-effort: bookings still save if VAPID is unset or delivery fails.
 
+## Native APNs (BookingBroomSwift)
+
+Swift manager app (iPhone / iPad / Mac) registers device tokens in Convex `apnsPushTokens`. Fan-out uses Apple’s HTTP/2 API with a team-wide Auth Key (`.p8`).
+
+Set on the Convex deployment (same Key ID / Team ID / `.p8` as other apps on the team; topic is this app’s bundle id):
+
+```bash
+pnpm exec convex env set APNS_KEY_ID "YOUR_KEY_ID"
+pnpm exec convex env set APNS_TEAM_ID "YOUR_TEAM_ID"
+pnpm exec convex env set APNS_BUNDLE_ID "com.kedrik.bookingbroom"
+pnpm exec convex env set APNS_AUTH_KEY "$(cat /path/to/AuthKey_XXXX.p8)"
+```
+
+Notes:
+
+- Enable **Push Notifications** for App ID `com.kedrik.bookingbroom` in Apple Developer.
+- Debug builds use APNs sandbox (`development`); Release uses production.
+- Test on physical devices; Simulator is unreliable for remote push.
+
 ## Google Search Console (SEO page)
 
 The **SEO** page (`/seo`) syncs clicks, impressions, CTR, and average position from Google Search Console for each cleaning site.

@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import {
   Globe,
+  CloudUpload,
   ChartLine,
   Gauge,
   DollarSign,
@@ -17,6 +18,12 @@ const LINKS = [
     title: "Sites",
     subtitle: "Hosting, health, and ops checklist",
     icon: Globe,
+  },
+  {
+    href: "/ops/deployments",
+    title: "Deploys",
+    subtitle: "Workers Builds status and free-tier usage",
+    icon: CloudUpload,
   },
   {
     href: "/ops/seo",

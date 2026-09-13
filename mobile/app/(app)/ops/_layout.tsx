@@ -19,6 +19,7 @@ export default function OpsStackLayout() {
       }}
     >
       <Stack.Screen name="sites" options={{ title: "Sites" }} />
+      <Stack.Screen name="deployments" options={{ title: "Deploys" }} />
       <Stack.Screen name="seo" options={{ title: "SEO" }} />
       <Stack.Screen name="speed" options={{ title: "Speed" }} />
       <Stack.Screen name="pricing" options={{ title: "Pricing" }} />
