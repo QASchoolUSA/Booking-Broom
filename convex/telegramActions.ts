@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { bookingIntent } from "./schema";
+import { shouldSkipOwnerTestPhone } from "./lib/phone";
 
 type NotifyResult =
   | { sent: true }
@@ -193,6 +194,11 @@ async function notifyNewBookingHandler(
       "[telegram] skipped: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Convex env",
     );
     return { sent: false, skipped: "env_missing" };
+  }
+
+  if (shouldSkipOwnerTestPhone(args.phone)) {
+    console.info("[telegram] skipped: owner test phone");
+    return { sent: false, skipped: "telegram_skip_phone" };
   }
 
   if (args.bookingId) {

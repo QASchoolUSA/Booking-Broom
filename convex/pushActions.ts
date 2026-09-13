@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import webpush from "web-push";
+import { readApnsConfig, sendApnsAlert } from "./lib/apns";
 
 type SubRow = {
   _id: string;
@@ -18,12 +19,20 @@ type ExpoTokenRow = {
   token: string;
 };
 
+type ApnsTokenRow = {
+  _id: Id<"apnsPushTokens">;
+  token: string;
+  environment: "development" | "production";
+};
+
 type NotifyResult = {
   sent: number;
   removed: number;
   expoSent: number;
+  apnsSent: number;
   skipped: string | null;
   expoErrors: string[];
+  apnsErrors: string[];
 };
 
 type FanOutArgs = {
@@ -32,6 +41,7 @@ type FanOutArgs = {
   url: string;
   mobilePath?: string;
   tag: string;
+  bookingId?: string;
 };
 
 function configureVapid() {
@@ -102,7 +112,7 @@ async function sendExpoPush(
   return { sent, staleIds, errors };
 }
 
-/** Fan-out web push + Expo push to all registered manager devices. */
+/** Fan-out web push + Expo push + APNs to all registered manager devices. */
 async function fanOutPush(
   ctx: ActionCtx,
   args: FanOutArgs
@@ -110,8 +120,10 @@ async function fanOutPush(
   let sent = 0;
   let removed = 0;
   let expoSent = 0;
+  let apnsSent = 0;
   let skipped: string | null = null;
   const expoErrors: string[] = [];
+  const apnsErrors: string[] = [];
 
   const mobilePath = args.mobilePath ?? args.url;
   const vapid = configureVapid();
@@ -205,7 +217,68 @@ async function fanOutPush(
     );
   }
 
-  return { sent, removed, expoSent, skipped, expoErrors };
+  const apnsConfig = readApnsConfig();
+  if (!apnsConfig) {
+    console.info(
+      "APNs push: skipped (set APNS_KEY_ID, APNS_TEAM_ID, APNS_AUTH_KEY)"
+    );
+  } else {
+    const apnsTokensRaw = (await ctx.runQuery(
+      internal.push.listApnsTokensInternal,
+      {}
+    )) as ApnsTokenRow[];
+
+    const seenApns = new Set<string>();
+    const apnsTokens: ApnsTokenRow[] = [];
+    for (const row of apnsTokensRaw) {
+      if (seenApns.has(row.token)) continue;
+      seenApns.add(row.token);
+      apnsTokens.push(row);
+    }
+
+    if (apnsTokens.length === 0) {
+      console.info("APNs push: no registered tokens");
+    } else {
+      for (const row of apnsTokens) {
+        const result = await sendApnsAlert({
+          config: apnsConfig,
+          deviceToken: row.token,
+          environment: row.environment,
+          title: args.title,
+          body: args.body,
+          tag: args.tag,
+          url: args.url,
+          mobilePath,
+          bookingId: args.bookingId,
+        });
+        if (result.ok) {
+          apnsSent += 1;
+          continue;
+        }
+        apnsErrors.push(result.reason);
+        console.error("APNs push failed:", result.reason, result.status);
+        if (result.stale) {
+          await ctx.runMutation(internal.push.removeApnsTokenByIdInternal, {
+            id: row._id,
+          });
+          removed += 1;
+        }
+      }
+      console.info(
+        `APNs push: sent=${apnsSent} tokens=${apnsTokens.length} errors=${apnsErrors.length}`
+      );
+    }
+  }
+
+  return {
+    sent,
+    removed,
+    expoSent,
+    apnsSent,
+    skipped,
+    expoErrors,
+    apnsErrors,
+  };
 }
 
 type NotifyBookingArgs = {
@@ -227,14 +300,16 @@ async function notifyNewBookingHandler(
       );
       if (!claim.claimed) {
         console.info(
-          `Expo push: skip booking ${args.bookingId} (${claim.reason})`
+          `Push: skip booking ${args.bookingId} (${claim.reason})`
         );
         return {
           sent: 0,
           removed: 0,
           expoSent: 0,
+          apnsSent: 0,
           skipped: `push_already_${claim.reason}`,
           expoErrors: [],
+          apnsErrors: [],
         };
       }
     } catch (e) {
@@ -268,7 +343,14 @@ async function notifyNewBookingHandler(
     ? `booking-${bookingId}`
     : `booking-${args.siteSlug}-${Date.now()}`;
 
-  return await fanOutPush(ctx, { title, body, url, mobilePath, tag });
+  return await fanOutPush(ctx, {
+    title,
+    body,
+    url,
+    mobilePath,
+    tag,
+    bookingId,
+  });
 }
 
 const notifyArgs = {
@@ -280,7 +362,7 @@ const notifyArgs = {
 
 /**
  * Best-effort push to manager devices when a booking is created.
- * Sends Web Push (PWA) and Expo Push (native app). Safe without auth.
+ * Sends Web Push (PWA), Expo Push, and native APNs. Safe without auth.
  */
 export const notifyNewBooking = action({
   args: notifyArgs,
@@ -318,6 +400,7 @@ export const notifyReminderInternal = internalAction({
       url: args.url,
       mobilePath: args.mobilePath,
       tag: args.tag,
+      bookingId: args.bookingId,
     });
   },
 });

@@ -55,7 +55,7 @@ function mapThread(
   };
 }
 
-function mapMessage(doc: Doc<"emailMessages">) {
+function mapMessageSummary(doc: Doc<"emailMessages">) {
   return {
     id: doc._id,
     mailbox_id: doc.mailboxId,
@@ -69,8 +69,11 @@ function mapMessage(doc: Doc<"emailMessages">) {
     to: doc.to,
     cc: doc.cc ?? [],
     subject: doc.subject,
-    text_body: doc.textBody ?? null,
-    html_body: doc.htmlBody ?? null,
+    /** Bodies omitted from list queries — fetch via getMessage (one-shot). */
+    text_body: null as string | null,
+    html_body: null as string | null,
+    has_text_body: Boolean(doc.textBody),
+    has_html_body: Boolean(doc.htmlBody),
     sent_at: new Date(doc.sentAt).toISOString(),
     seen: doc.seen,
     answered: doc.answered ?? false,
@@ -82,6 +85,46 @@ function mapMessage(doc: Doc<"emailMessages">) {
       skipped: a.skipped ?? false,
     })),
   };
+}
+
+function mapMessage(doc: Doc<"emailMessages">) {
+  return {
+    ...mapMessageSummary(doc),
+    text_body: doc.textBody ?? null,
+    html_body: doc.htmlBody ?? null,
+  };
+}
+
+async function bumpGlobalUnreadTotal(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: { db: any },
+  delta: number
+) {
+  if (delta === 0) return;
+  const state = await ctx.db.query("emailSyncState").first();
+  if (!state) return;
+  if (typeof state.unreadTotal !== "number") {
+    await recomputeGlobalUnreadTotal(ctx);
+    return;
+  }
+  const next = Math.max(0, state.unreadTotal + delta);
+  await ctx.db.patch(state._id, { unreadTotal: next });
+}
+
+async function recomputeGlobalUnreadTotal(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: { db: any }
+) {
+  const boxes = await ctx.db.query("emailMailboxes").collect();
+  const total = boxes.reduce(
+    (sum: number, b: Doc<"emailMailboxes">) => sum + (b.unreadCount ?? 0),
+    0
+  );
+  const state = await ctx.db.query("emailSyncState").first();
+  if (state) {
+    await ctx.db.patch(state._id, { unreadTotal: total });
+  }
+  return total;
 }
 
 function mapSyncState(doc: Doc<"emailSyncState">) {
@@ -112,8 +155,10 @@ async function bumpMailboxUnread(
   if (delta === 0) return;
   const box = await ctx.db.get(mailboxId);
   if (!box) return;
-  const next = Math.max(0, (box.unreadCount ?? 0) + delta);
+  const prev = box.unreadCount ?? 0;
+  const next = Math.max(0, prev + delta);
   await ctx.db.patch(mailboxId, { unreadCount: next });
+  await bumpGlobalUnreadTotal(ctx, next - prev);
 }
 
 /** Recompute denormalized unread from threads (backfill / after clear). */
@@ -132,7 +177,10 @@ async function recomputeMailboxUnread(
     (sum: number, t: Doc<"emailThreads">) => sum + (t.unreadCount || 0),
     0
   );
+  const box = await ctx.db.get(mailboxId);
+  const prev = box?.unreadCount ?? 0;
   await ctx.db.patch(mailboxId, { unreadCount: unread });
+  await bumpGlobalUnreadTotal(ctx, unread - prev);
   return unread;
 }
 
@@ -152,6 +200,11 @@ export const countUnread = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return 0;
+    const state = await ctx.db.query("emailSyncState").first();
+    if (state && typeof state.unreadTotal === "number") {
+      return state.unreadTotal;
+    }
+    // Read-only fallback until sync/mutations write unreadTotal.
     const boxes = await ctx.db.query("emailMailboxes").collect();
     return boxes.reduce((sum, b) => sum + (b.unreadCount ?? 0), 0);
   },
@@ -244,6 +297,10 @@ export const listThreads = query({
   },
 });
 
+/**
+ * Thread message list without HTML/text bodies (keeps reactive re-reads cheap
+ * when IMAP sync patches the same docs). Load bodies via getMessage one-shot.
+ */
 export const listMessages = query({
   args: {
     threadId: v.id("emailThreads"),
@@ -258,7 +315,21 @@ export const listMessages = query({
       )
       .order("asc")
       .take(500);
-    return messages.map(mapMessage);
+    return messages.map(mapMessageSummary);
+  },
+});
+
+/** Full message including bodies — prefer one-shot client fetch, not useQuery. */
+export const getMessage = query({
+  args: {
+    messageId: v.id("emailMessages"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const doc = await ctx.db.get(args.messageId);
+    if (!doc) return null;
+    return mapMessage(doc);
   },
 });
 
@@ -752,9 +823,14 @@ export const setSyncStateInternal = internalMutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, patch);
+      if (typeof existing.unreadTotal !== "number") {
+        await recomputeGlobalUnreadTotal(ctx);
+      }
       return existing._id;
     }
-    return await ctx.db.insert("emailSyncState", patch);
+    const id = await ctx.db.insert("emailSyncState", patch);
+    await recomputeGlobalUnreadTotal(ctx);
+    return id;
   },
 });
 

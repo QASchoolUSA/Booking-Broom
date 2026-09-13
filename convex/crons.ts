@@ -41,17 +41,24 @@ crons.interval(
   internal.siteHealthActions.checkAllInternal
 );
 
+/** Latest Cloudflare Workers Builds status per Worker. */
+crons.interval(
+  "sync Cloudflare Workers Builds",
+  { hours: 3 },
+  internal.deploymentsActions.syncAllInternal
+);
+
 /** Safety net if a Voip.ms SMS webhook is missed. */
 crons.interval(
   "sync Voip.ms SMS messages",
-  { minutes: 15 },
+  { minutes: 30 },
   internal.voipmsActions.syncAllInternal
 );
 
 /** SpaceMail IMAP: one mailbox per tick (round-robin). */
 crons.interval(
   "sync SpaceMail inbox",
-  { minutes: 5 },
+  { minutes: 10 },
   internal.emailActions.syncNextMailboxInternal
 );
 

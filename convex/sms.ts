@@ -93,13 +93,13 @@ export const listThreads = query({
         .query("smsMessages")
         .withIndex("by_did_and_sentAt", (q) => q.eq("did", didFilter))
         .order("desc")
-        .take(500);
+        .take(200);
     } else {
       messages = await ctx.db
         .query("smsMessages")
         .withIndex("by_sentAt")
         .order("desc")
-        .take(800);
+        .take(200);
     }
 
     const didDocs = await ctx.db.query("smsDids").collect();

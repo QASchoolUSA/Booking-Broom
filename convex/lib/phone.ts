@@ -14,15 +14,23 @@ export function normalizeUsDigits(raw: string): string | null {
 }
 
 /**
- * Customer confirmation SMS is skipped for these 10-digit US numbers
- * (owner test phones). Admin email / push are unchanged.
+ * Owner test phones — skip customer SMS + Telegram manager alerts.
+ * Admin email / web+Expo+APNs push are unchanged.
  */
-export const SMS_SKIP_CUSTOMER_PHONES = new Set(["3212360618"]);
+export const OWNER_TEST_SKIP_PHONES = new Set(["3212360618"]);
 
-export function shouldSkipCustomerBookingSms(raw?: string): boolean {
+/** @deprecated Use OWNER_TEST_SKIP_PHONES */
+export const SMS_SKIP_CUSTOMER_PHONES = OWNER_TEST_SKIP_PHONES;
+
+export function shouldSkipOwnerTestPhone(raw?: string): boolean {
   if (!raw?.trim()) return false;
   const digits = normalizeUsDigits(raw);
-  return digits != null && SMS_SKIP_CUSTOMER_PHONES.has(digits);
+  return digits != null && OWNER_TEST_SKIP_PHONES.has(digits);
+}
+
+/** @deprecated Use shouldSkipOwnerTestPhone */
+export function shouldSkipCustomerBookingSms(raw?: string): boolean {
+  return shouldSkipOwnerTestPhone(raw);
 }
 
 /**

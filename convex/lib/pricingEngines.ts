@@ -13,15 +13,24 @@ import {
 } from "./pricingConfigs";
 
 /**
- * Every site's pricing algorithm, reimplemented here for one purpose only:
- * pricing the same reference property on all of them so the dashboard can
- * compare like with like. The sites remain the authority for what a customer is
- * actually quoted — these functions must mirror them, never lead them.
+ * Every site's pricing algorithm, reimplemented here so the dashboard can
+ * price the same property on all of them. The sites remain the authority for
+ * what a customer is actually quoted — these functions must mirror them, never
+ * lead them.
  */
 
+/** Residential services that commonly accept add-on line items. */
+const ADDON_SERVICES: CanonicalService[] = [
+  "standard",
+  "deep",
+  "move-in-out",
+  "recurring",
+  "airbnb-turnover",
+];
+
 /**
- * The property every site gets priced against. Chosen as a common mid-market
- * home rather than any site's default so no site is flattered by the basket.
+ * The property every site gets priced against by default. Chosen as a common
+ * mid-market home rather than any site's default so no site is flattered.
  */
 export const REFERENCE_BASKET = {
   bedrooms: 3,
@@ -39,6 +48,32 @@ export const REFERENCE_BASKET = {
 } as const;
 
 export const REFERENCE_BASKET_LABEL = "3 bed · 2 bath · 1,500–2,500 sq ft";
+
+export type PricingScenario = {
+  bedrooms: number;
+  bathrooms: number;
+  squareFeet: number;
+  /** Preferred band keys when an engine prices by band; derived from sqft when omitted. */
+  sqftBandKeys?: readonly string[];
+  hours: number;
+  conditionKey: string;
+  propertyTypeKey: string;
+  debrisKey: string;
+  /** Selected add-on keys; applied only when a site config defines a match. */
+  addonKeys: string[];
+};
+
+export const DEFAULT_SCENARIO: PricingScenario = {
+  bedrooms: REFERENCE_BASKET.bedrooms,
+  bathrooms: REFERENCE_BASKET.bathrooms,
+  squareFeet: REFERENCE_BASKET.squareFeet,
+  sqftBandKeys: REFERENCE_BASKET.sqftBandKeys,
+  hours: REFERENCE_BASKET.hours,
+  conditionKey: REFERENCE_BASKET.conditionKey,
+  propertyTypeKey: REFERENCE_BASKET.propertyTypeKey,
+  debrisKey: REFERENCE_BASKET.debrisKey,
+  addonKeys: [],
+};
 
 export type BasketEntry = {
   /** Dollars. Cent-based engines are converted before they get here. */
@@ -79,6 +114,54 @@ function put(
   entries[key] = { ...entry, price };
 }
 
+/**
+ * Derive preferred band keys from raw square footage so custom scenarios still
+ * hit the right multiplier on band-based engines.
+ */
+export function sqftBandKeysFor(squareFeet: number): string[] {
+  const sqft = Math.max(0, squareFeet);
+  if (sqft < 1000) return ["under-1000", "under-1500"];
+  if (sqft < 1500) return ["1000-1500", "under-1500"];
+  if (sqft < 2500) return ["1500-2500"];
+  if (sqft < 4000) return ["2500-4000", "2500-3500"];
+  return ["4000-plus", "3500-plus"];
+}
+
+export function scenarioFromInputs(partial: {
+  bedrooms: number;
+  bathrooms: number;
+  squareFeet: number;
+  hours?: number;
+  conditionKey?: string;
+  propertyTypeKey?: string;
+  debrisKey?: string;
+  addonKeys?: string[];
+}): PricingScenario {
+  return {
+    bedrooms: partial.bedrooms,
+    bathrooms: partial.bathrooms,
+    squareFeet: partial.squareFeet,
+    sqftBandKeys: sqftBandKeysFor(partial.squareFeet),
+    hours: partial.hours ?? DEFAULT_SCENARIO.hours,
+    conditionKey: partial.conditionKey ?? DEFAULT_SCENARIO.conditionKey,
+    propertyTypeKey:
+      partial.propertyTypeKey ?? DEFAULT_SCENARIO.propertyTypeKey,
+    debrisKey: partial.debrisKey ?? DEFAULT_SCENARIO.debrisKey,
+    addonKeys: partial.addonKeys ?? [],
+  };
+}
+
+export function scenarioLabel(scenario: PricingScenario): string {
+  const beds = `${scenario.bedrooms} bed`;
+  const baths = `${scenario.bathrooms} bath`;
+  const sqft = `${scenario.squareFeet.toLocaleString("en-US")} sq ft`;
+  const addons =
+    scenario.addonKeys.length > 0
+      ? ` · ${scenario.addonKeys.length} add-on${scenario.addonKeys.length === 1 ? "" : "s"}`
+      : "";
+  return `${beds} · ${baths} · ${sqft}${addons}`;
+}
+
 function pickBandKey(
   bands: { key: string }[],
   preferred: readonly string[]
@@ -87,6 +170,10 @@ function pickBandKey(
     if (bands.some((b) => b.key === key)) return key;
   }
   return bands[Math.floor(bands.length / 2)]?.key ?? "";
+}
+
+function bandKeysForScenario(scenario: PricingScenario): readonly string[] {
+  return scenario.sqftBandKeys ?? sqftBandKeysFor(scenario.squareFeet);
 }
 
 function multiplierFor(
@@ -120,16 +207,134 @@ function marketedFrom(services: ServiceMapping): CanonicalService[] {
 function bestRecurring(
   rows: { key: string; label: string; multiplier: number }[]
 ) {
-  const recurring = rows.filter((r) => r.key !== "one-time" && r.key !== "One-time");
+  const recurring = rows.filter(
+    (r) => r.key !== "one-time" && r.key !== "One-time"
+  );
   if (recurring.length === 0) return null;
-  return recurring.reduce((best, r) => (r.multiplier < best.multiplier ? r : best));
+  return recurring.reduce((best, r) =>
+    r.multiplier < best.multiplier ? r : best
+  );
+}
+
+function normalizeAddonToken(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Slug used when an engine only exposes a display name (inline-wizard extras). */
+export function slugifyAddonName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function addonItemMatches(
+  selectedKey: string,
+  item: { key?: string; label?: string; name?: string }
+): boolean {
+  const selected = normalizeAddonToken(selectedKey);
+  if (!selected) return false;
+  const key = normalizeAddonToken(item.key ?? "");
+  const label = normalizeAddonToken(item.label ?? item.name ?? "");
+  const slug = normalizeAddonToken(slugifyAddonName(item.name ?? item.key ?? ""));
+  if (key === selected || label === selected || slug === selected) return true;
+  // "windows" matches "windows interior" / "windows exterior" labels.
+  if (label.startsWith(selected + " ") || label.includes(" " + selected + " ")) {
+    return true;
+  }
+  if (key.startsWith(selected + " ") || slug.startsWith(selected + " ")) {
+    return true;
+  }
+  return false;
+}
+
+/** Sum of selected add-ons defined on this config, in dollars. */
+function addonDollarsForConfig(
+  config: PricingConfig,
+  addonKeys: string[]
+): number {
+  if (addonKeys.length === 0) return 0;
+  let total = 0;
+  const seen = new Set<string>();
+
+  const take = (id: string, dollars: number) => {
+    if (seen.has(id) || !Number.isFinite(dollars) || dollars <= 0) return;
+    seen.add(id);
+    total += dollars;
+  };
+
+  switch (config.kind) {
+    case "bedroom-band":
+    case "room-plus-sqft":
+    case "sqft-rate-min":
+      for (const addon of config.addOns) {
+        for (const key of addonKeys) {
+          if (addonItemMatches(key, addon)) {
+            take(addon.key, addon.price);
+            break;
+          }
+        }
+      }
+      break;
+    case "service-base-mult":
+      for (const addon of config.addonCents) {
+        for (const key of addonKeys) {
+          if (addonItemMatches(key, addon)) {
+            take(addon.key, addon.cents / 100);
+            break;
+          }
+        }
+      }
+      break;
+    case "inline-wizard":
+      for (const extra of config.extras) {
+        const id = slugifyAddonName(extra.name);
+        for (const key of addonKeys) {
+          if (addonItemMatches(key, { key: id, name: extra.name })) {
+            take(id, extra.price);
+            break;
+          }
+        }
+      }
+      break;
+    default:
+      break;
+  }
+
+  return total;
+}
+
+function applyAddons(
+  entries: SiteBasket["entries"],
+  addonDollars: number,
+  addonCount: number
+): SiteBasket["entries"] {
+  if (addonDollars <= 0 || addonCount <= 0) return entries;
+  const note = `+${addonCount} add-on${addonCount === 1 ? "" : "s"}`;
+  const next: SiteBasket["entries"] = { ...entries };
+  for (const key of ADDON_SERVICES) {
+    const entry = next[key];
+    if (!entry || entry.kind !== "computed") continue;
+    next[key] = {
+      ...entry,
+      price: entry.price + addonDollars,
+      note: entry.note ? `${entry.note}; ${note}` : note,
+    };
+  }
+  return next;
 }
 
 // --- bedroom-band: Winter Haven, Deltona, Haines City ----------------------
 
-function bedroomBandBasket(config: BedroomBandConfig): SiteBasket {
-  const { bedrooms, bathrooms } = REFERENCE_BASKET;
-  const bandKey = pickBandKey(config.sqftBands, REFERENCE_BASKET.sqftBandKeys);
+function bedroomBandBasket(
+  config: BedroomBandConfig,
+  scenario: PricingScenario
+): SiteBasket {
+  const { bedrooms, bathrooms } = scenario;
+  const bandKey = pickBandKey(config.sqftBands, bandKeysForScenario(scenario));
   const bandMultiplier = multiplierFor(config.sqftBands, bandKey);
   const extraBaths = Math.max(0, bathrooms - 1) * config.bathRate;
 
@@ -176,23 +381,27 @@ function bedroomBandBasket(config: BedroomBandConfig): SiteBasket {
     sourceKey: "post-construction",
   });
 
-  return finish(entries, config.services);
+  return finish(entries, config.services, config, scenario);
 }
 
 // --- service-base-mult: Windermere ----------------------------------------
 
-function serviceBaseMultBasket(config: ServiceBaseMultConfig): SiteBasket {
-  const { bedrooms, bathrooms } = REFERENCE_BASKET;
+function serviceBaseMultBasket(
+  config: ServiceBaseMultConfig,
+  scenario: PricingScenario
+): SiteBasket {
+  const { bedrooms, bathrooms } = scenario;
   const bandKey = pickBandKey(
     config.sqftMultipliers,
-    REFERENCE_BASKET.sqftBandKeys
+    bandKeysForScenario(scenario)
   );
   const sqftMultiplier = multiplierFor(config.sqftMultipliers, bandKey);
   const propertyMultiplier = multiplierFor(
     config.propertyMultipliers,
-    REFERENCE_BASKET.propertyTypeKey
+    scenario.propertyTypeKey
   );
-  const rooms = bedrooms * config.bedroomCents + bathrooms * config.bathroomCents;
+  const rooms =
+    bedrooms * config.bedroomCents + bathrooms * config.bathroomCents;
 
   const priceCents = (serviceKey: string, frequencyMultiplier: number) => {
     const base = valueFor(config.serviceBaseCents, serviceKey);
@@ -227,13 +436,16 @@ function serviceBaseMultBasket(config: ServiceBaseMultConfig): SiteBasket {
     });
   }
 
-  return finish(entries, config.services);
+  return finish(entries, config.services, config, scenario);
 }
 
 // --- room-plus-sqft: Apopka -----------------------------------------------
 
-function roomPlusSqftBasket(config: RoomPlusSqftConfig): SiteBasket {
-  const { bedrooms, bathrooms, squareFeet } = REFERENCE_BASKET;
+function roomPlusSqftBasket(
+  config: RoomPlusSqftConfig,
+  scenario: PricingScenario
+): SiteBasket {
+  const { bedrooms, bathrooms, squareFeet } = scenario;
 
   const subtotalFor = (key: string) => {
     const rate = config.serviceRates.find((r) => r.key === key);
@@ -287,13 +499,16 @@ function roomPlusSqftBasket(config: RoomPlusSqftConfig): SiteBasket {
     }
   }
 
-  return finish(entries, config.services);
+  return finish(entries, config.services, config, scenario);
 }
 
 // --- band-lookup-range: Kissimmee ----------------------------------------
 
-function bandLookupRangeBasket(config: BandLookupRangeConfig): SiteBasket {
-  const { bedrooms, bathrooms, squareFeet } = REFERENCE_BASKET;
+function bandLookupRangeBasket(
+  config: BandLookupRangeConfig,
+  scenario: PricingScenario
+): SiteBasket {
+  const { bedrooms, bathrooms, squareFeet } = scenario;
 
   const beds = valueFor(config.bedroomAddon, String(bedrooms), 40);
   const baths = valueFor(config.bathroomAddon, String(bathrooms), 30);
@@ -341,16 +556,19 @@ function bandLookupRangeBasket(config: BandLookupRangeConfig): SiteBasket {
     }
   }
 
-  return finish(entries, config.services);
+  return finish(entries, config.services, config, scenario);
 }
 
 // --- sqft-rate-min: Davenport --------------------------------------------
 
-function sqftRateMinBasket(config: SqftRateMinConfig): SiteBasket {
-  const { bedrooms, bathrooms } = REFERENCE_BASKET;
+function sqftRateMinBasket(
+  config: SqftRateMinConfig,
+  scenario: PricingScenario
+): SiteBasket {
+  const { bedrooms, bathrooms } = scenario;
   const sqft = Math.max(
     config.minSqft,
-    Math.min(config.maxSqft, REFERENCE_BASKET.squareFeet)
+    Math.min(config.maxSqft, scenario.squareFeet)
   );
   const rooms = bedrooms * config.bedroomRate + bathrooms * config.bathroomRate;
 
@@ -390,13 +608,16 @@ function sqftRateMinBasket(config: SqftRateMinConfig): SiteBasket {
     }
   }
 
-  return finish(entries, config.services);
+  return finish(entries, config.services, config, scenario);
 }
 
 // --- per-service-branch: Cleaning Weekly ---------------------------------
 
-function perServiceBranchBasket(config: PerServiceBranchConfig): SiteBasket {
-  const { bedrooms, bathrooms, squareFeet } = REFERENCE_BASKET;
+function perServiceBranchBasket(
+  config: PerServiceBranchConfig,
+  scenario: PricingScenario
+): SiteBasket {
+  const { bedrooms, bathrooms, squareFeet } = scenario;
   const blocks = (included: number, per: number) =>
     Math.max(0, Math.ceil((squareFeet - included) / 500)) * per;
 
@@ -412,7 +633,8 @@ function perServiceBranchBasket(config: PerServiceBranchConfig): SiteBasket {
 
   const office = config.officeCleaning;
   const officeWeeklyMultiplier =
-    office.frequencyMultipliers.find((f) => f.key === "weekly")?.multiplier ?? 1;
+    office.frequencyMultipliers.find((f) => f.key === "weekly")?.multiplier ??
+    1;
   const officeSubtotal =
     office.base +
     blocks(office.includedSqFt, office.per500SqFt) +
@@ -428,7 +650,7 @@ function perServiceBranchBasket(config: PerServiceBranchConfig): SiteBasket {
   const post = config.postConstruction;
   const postTotal =
     (post.base + blocks(post.includedSqFt, post.per500SqFt)) *
-    multiplierFor(post.debrisMultipliers, REFERENCE_BASKET.debrisKey);
+    multiplierFor(post.debrisMultipliers, scenario.debrisKey);
 
   const air = config.airbnbTurnover;
   const airTotal =
@@ -463,7 +685,7 @@ function perServiceBranchBasket(config: PerServiceBranchConfig): SiteBasket {
     price: postTotal,
     kind: "computed",
     sourceKey: "post-construction",
-    note: "light debris",
+    note: `${scenario.debrisKey} debris`,
   });
   put(entries, "airbnb-turnover", {
     price: airTotal,
@@ -471,13 +693,16 @@ function perServiceBranchBasket(config: PerServiceBranchConfig): SiteBasket {
     sourceKey: "airbnb-turnover",
   });
 
-  return finish(entries, config.services);
+  return finish(entries, config.services, config, scenario);
 }
 
 // --- inline-wizard: Sanford ----------------------------------------------
 
-function inlineWizardBasket(config: InlineWizardConfig): SiteBasket {
-  const { bedrooms, bathrooms, squareFeet, hours } = REFERENCE_BASKET;
+function inlineWizardBasket(
+  config: InlineWizardConfig,
+  scenario: PricingScenario
+): SiteBasket {
+  const { bedrooms, bathrooms, squareFeet, hours } = scenario;
   const sqftBlocks = Math.max(
     0,
     Math.ceil((squareFeet - config.includedSqFt) / 1000)
@@ -494,9 +719,8 @@ function inlineWizardBasket(config: InlineWizardConfig): SiteBasket {
     sqftBlocks * config.moveOut.per1000SqFtOver +
     Math.max(0, bedrooms - 1) * config.moveOut.perBedroomOver +
     Math.max(0, bathrooms - 1) * config.moveOut.perBathroomOver +
-    (config.conditionSurcharges.find(
-      (c) => c.key === REFERENCE_BASKET.conditionKey
-    )?.price ?? 0);
+    (config.conditionSurcharges.find((c) => c.key === scenario.conditionKey)
+      ?.price ?? 0);
 
   const cheapestMaintenance = config.maintenance.byFrequency.reduce<
     { key: string; value: number } | null
@@ -528,7 +752,7 @@ function inlineWizardBasket(config: InlineWizardConfig): SiteBasket {
         price: discounted(moveOut),
         kind: "computed",
         sourceKey: service.key,
-        note: `${REFERENCE_BASKET.conditionKey.toLowerCase()} condition`,
+        note: `${scenario.conditionKey.toLowerCase()} condition`,
       });
       continue;
     }
@@ -552,7 +776,7 @@ function inlineWizardBasket(config: InlineWizardConfig): SiteBasket {
     });
   }
 
-  return finish(entries, config.services);
+  return finish(entries, config.services, config, scenario);
 }
 
 // --- headline-only: Celebration ------------------------------------------
@@ -575,30 +799,113 @@ function headlineOnlyBasket(config: HeadlineOnlyConfig): SiteBasket {
 
 function finish(
   entries: SiteBasket["entries"],
-  services: ServiceMapping
+  services: ServiceMapping,
+  config?: PricingConfig,
+  scenario?: PricingScenario
 ): SiteBasket {
+  let next = entries;
+  if (config && scenario && scenario.addonKeys.length > 0) {
+    const dollars = addonDollarsForConfig(config, scenario.addonKeys);
+    // Count how many selected keys actually matched something on this config.
+    const matchedCount = scenario.addonKeys.filter((key) => {
+      switch (config.kind) {
+        case "bedroom-band":
+        case "room-plus-sqft":
+        case "sqft-rate-min":
+          return config.addOns.some((a) => addonItemMatches(key, a));
+        case "service-base-mult":
+          return config.addonCents.some((a) => addonItemMatches(key, a));
+        case "inline-wizard":
+          return config.extras.some((e) =>
+            addonItemMatches(key, {
+              key: slugifyAddonName(e.name),
+              name: e.name,
+            })
+          );
+        default:
+          return false;
+      }
+    }).length;
+    next = applyAddons(next, dollars, matchedCount);
+  }
+
+  // Re-round after add-ons so totals stay on the $5 grid.
+  for (const key of Object.keys(next) as CanonicalService[]) {
+    const entry = next[key];
+    if (entry) next[key] = { ...entry, price: roundMoney(entry.price) };
+  }
+
   const marketed = marketedFrom(services);
-  const gaps = marketed.filter((key) => entries[key] === undefined);
-  return { entries, marketed, gaps };
+  const gaps = marketed.filter((key) => next[key] === undefined);
+  return { entries: next, marketed, gaps };
 }
 
-export function computeReferenceBasket(config: PricingConfig): SiteBasket {
+export function computeBasket(
+  config: PricingConfig,
+  scenario: PricingScenario = DEFAULT_SCENARIO
+): SiteBasket {
+  const resolved: PricingScenario = {
+    ...scenario,
+    sqftBandKeys: scenario.sqftBandKeys ?? sqftBandKeysFor(scenario.squareFeet),
+    addonKeys: scenario.addonKeys ?? [],
+  };
+
   switch (config.kind) {
     case "bedroom-band":
-      return bedroomBandBasket(config);
+      return bedroomBandBasket(config, resolved);
     case "service-base-mult":
-      return serviceBaseMultBasket(config);
+      return serviceBaseMultBasket(config, resolved);
     case "room-plus-sqft":
-      return roomPlusSqftBasket(config);
+      return roomPlusSqftBasket(config, resolved);
     case "band-lookup-range":
-      return bandLookupRangeBasket(config);
+      return bandLookupRangeBasket(config, resolved);
     case "sqft-rate-min":
-      return sqftRateMinBasket(config);
+      return sqftRateMinBasket(config, resolved);
     case "per-service-branch":
-      return perServiceBranchBasket(config);
+      return perServiceBranchBasket(config, resolved);
     case "inline-wizard":
-      return inlineWizardBasket(config);
+      return inlineWizardBasket(config, resolved);
     case "headline-only":
       return headlineOnlyBasket(config);
   }
+}
+
+export function computeReferenceBasket(config: PricingConfig): SiteBasket {
+  return computeBasket(config, DEFAULT_SCENARIO);
+}
+
+/** Collect unique add-on options across configs for the calculator UI. */
+export function collectAddonCatalog(
+  configs: PricingConfig[]
+): { key: string; label: string }[] {
+  const byKey = new Map<string, string>();
+
+  for (const config of configs) {
+    switch (config.kind) {
+      case "bedroom-band":
+      case "room-plus-sqft":
+      case "sqft-rate-min":
+        for (const addon of config.addOns) {
+          if (!byKey.has(addon.key)) byKey.set(addon.key, addon.label);
+        }
+        break;
+      case "service-base-mult":
+        for (const addon of config.addonCents) {
+          if (!byKey.has(addon.key)) byKey.set(addon.key, addon.label);
+        }
+        break;
+      case "inline-wizard":
+        for (const extra of config.extras) {
+          const key = slugifyAddonName(extra.name);
+          if (!byKey.has(key)) byKey.set(key, extra.name);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  return [...byKey.entries()]
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 }

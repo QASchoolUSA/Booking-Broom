@@ -2,7 +2,11 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { pricingConfig } from "./lib/pricingConfigs";
-import { computeReferenceBasket } from "./lib/pricingEngines";
+import {
+  computeBasket,
+  computeReferenceBasket,
+  scenarioFromInputs,
+} from "./lib/pricingEngines";
 import { SEED_PRICING } from "./lib/pricingSeed";
 
 function mapPricing(doc: Doc<"sitePricing">) {
@@ -65,6 +69,63 @@ export const get = query({
       .unique();
 
     return pricing ? mapPricing(pricing) : null;
+  },
+});
+
+/**
+ * Same shape as `list`, but every basket is priced for a custom house scenario
+ * (beds / baths / sqft / add-ons / property details) so Compare and the Swift
+ * calculator can quote like-for-like across markets.
+ */
+export const compareScenario = query({
+  args: {
+    bedrooms: v.number(),
+    bathrooms: v.number(),
+    squareFeet: v.number(),
+    propertyTypeKey: v.optional(v.string()),
+    conditionKey: v.optional(v.string()),
+    debrisKey: v.optional(v.string()),
+    hours: v.optional(v.number()),
+    addonKeys: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const scenario = scenarioFromInputs({
+      bedrooms: args.bedrooms,
+      bathrooms: args.bathrooms,
+      squareFeet: args.squareFeet,
+      propertyTypeKey: args.propertyTypeKey,
+      conditionKey: args.conditionKey,
+      debrisKey: args.debrisKey,
+      hours: args.hours,
+      addonKeys: args.addonKeys,
+    });
+
+    const sites = await ctx.db.query("sites").collect();
+    const results = [];
+
+    for (const site of sites.sort((a, b) => a.name.localeCompare(b.name))) {
+      const pricing = await ctx.db
+        .query("sitePricing")
+        .withIndex("by_site", (q) => q.eq("siteId", site._id))
+        .unique();
+
+      results.push({
+        site: {
+          id: site._id,
+          slug: site.slug,
+          name: site.name,
+          domain: site.domain,
+          accent_color: site.accentColor,
+        },
+        pricing: pricing ? mapPricing(pricing) : null,
+        basket: pricing ? computeBasket(pricing.config, scenario) : null,
+      });
+    }
+
+    return results;
   },
 });
 

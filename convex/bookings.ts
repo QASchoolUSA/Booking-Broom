@@ -146,25 +146,32 @@ export const list = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
-    const sites = await ctx.db.query("sites").collect();
-    const siteMap = new Map<Id<"sites">, Doc<"sites">>(
-      sites.map((site) => [site._id, site])
-    );
-
+    const includeArchived = args.includeArchived === true;
+    // Read only what we return — avoid take(400) then discard half.
     const bookings = await ctx.db
       .query("bookings")
       .withIndex("by_created")
       .order("desc")
-      .take(400);
+      .take(200);
 
-    const includeArchived = args.includeArchived === true;
     const filtered = includeArchived
       ? bookings.filter((b) => b.archivedAt != null)
       : bookings.filter((b) => b.archivedAt == null);
 
-    return filtered
-      .slice(0, 200)
-      .map((booking) => mapBooking(booking, siteMap.get(booking.siteId)));
+    const siteIds = [...new Set(filtered.map((b) => b.siteId))];
+    const siteEntries = await Promise.all(
+      siteIds.map(async (id) => {
+        const site = await ctx.db.get(id);
+        return site ? ([id, site] as const) : null;
+      })
+    );
+    const siteMap = new Map(
+      siteEntries.filter((e): e is NonNullable<typeof e> => e != null)
+    );
+
+    return filtered.map((booking) =>
+      mapBooking(booking, siteMap.get(booking.siteId))
+    );
   },
 });
 
@@ -419,6 +426,8 @@ export const createPublic = mutation({
     attribution: v.optional(bookingAttribution),
     intent: v.optional(bookingIntent),
     idempotencyKey: v.optional(v.string()),
+    /** Soft-lead session key from the marketing widget; marks partial lead converted. */
+    sessionKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const site = await ctx.db
@@ -434,6 +443,8 @@ export const createPublic = mutation({
       throw new Error("Invalid API key");
     }
 
+    const sessionKey = args.sessionKey?.trim() || undefined;
+
     const idempotencyKey = args.idempotencyKey?.trim() || undefined;
     if (idempotencyKey) {
       const existing = await ctx.db
@@ -443,6 +454,17 @@ export const createPublic = mutation({
         )
         .unique();
       if (existing) {
+        if (sessionKey) {
+          await ctx.scheduler.runAfter(
+            0,
+            internal.partialLeads.markConvertedInternal,
+            {
+              siteId: site._id,
+              sessionKey,
+              bookingId: existing._id,
+            },
+          );
+        }
         return { id: existing._id };
       }
     }
@@ -532,6 +554,18 @@ export const createPublic = mutation({
         bookingId: id,
       }
     );
+
+    if (sessionKey) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.partialLeads.markConvertedInternal,
+        {
+          siteId: site._id,
+          sessionKey,
+          bookingId: id,
+        },
+      );
+    }
 
     return { id };
   },

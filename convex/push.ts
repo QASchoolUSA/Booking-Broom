@@ -216,3 +216,86 @@ export const removeExpoTokenByIdInternal = internalMutation({
     return true;
   },
 });
+
+const apnsPlatform = v.union(
+  v.literal("ios"),
+  v.literal("ipados"),
+  v.literal("macos")
+);
+const apnsEnvironment = v.union(
+  v.literal("development"),
+  v.literal("production")
+);
+
+export const saveApnsPushToken = mutation({
+  args: {
+    token: v.string(),
+    platform: apnsPlatform,
+    environment: apnsEnvironment,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const token = args.token.trim().toLowerCase();
+    if (!/^[0-9a-f]{64,}$/.test(token)) {
+      throw new Error("Invalid APNs device token");
+    }
+
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("apnsPushTokens")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        userId,
+        platform: args.platform,
+        environment: args.environment,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+
+    return await ctx.db.insert("apnsPushTokens", {
+      userId,
+      token,
+      platform: args.platform,
+      environment: args.environment,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const removeApnsPushToken = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const token = args.token.trim().toLowerCase();
+    const existing = await ctx.db
+      .query("apnsPushTokens")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .unique();
+    if (!existing) return false;
+    if (existing.userId !== userId) throw new Error("Unauthorized");
+    await ctx.db.delete(existing._id);
+    return true;
+  },
+});
+
+export const listApnsTokensInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("apnsPushTokens").collect();
+  },
+});
+
+export const removeApnsTokenByIdInternal = internalMutation({
+  args: { id: v.id("apnsPushTokens") },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.id);
+    if (!doc) return false;
+    await ctx.db.delete(args.id);
+    return true;
+  },
+});

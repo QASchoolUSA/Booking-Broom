@@ -102,6 +102,10 @@ export default defineSchema({
     bingPropertyUrl: v.optional(v.string()),
     /** Full URL override for PageSpeed Insights when https://{domain} is wrong. */
     performanceUrl: v.optional(v.string()),
+    /** Cloudflare Worker script name (wrangler `name`) for Workers Builds status. */
+    cloudflareWorkerName: v.optional(v.string()),
+    /** Cloudflare Account ID for this site’s dedicated CF account (not secret). */
+    cloudflareAccountId: v.optional(v.string()),
     apiKeyHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_slug", ["slug"]),
@@ -152,6 +156,40 @@ export default defineSchema({
     .index("by_scheduled_start", ["scheduledStartAt"])
     .index("by_preferred_date", ["preferredDate"])
     .index("by_site_idempotency", ["siteId", "idempotencyKey"]),
+
+  /**
+   * Contact-gated abandoned quote/book snapshots from marketing widgets.
+   * One doc per browser session; no notify side effects.
+   */
+  partialLeads: defineTable({
+    siteId: v.id("sites"),
+    /** Client UUID in sessionStorage — upsert key with siteId. */
+    sessionKey: v.string(),
+    customerName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    address: v.optional(v.string()),
+    serviceType: v.optional(v.string()),
+    preferredDate: v.optional(v.string()),
+    preferredTime: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    property: v.optional(bookingProperty),
+    quote: v.optional(bookingQuote),
+    attribution: v.optional(bookingAttribution),
+    intent: v.optional(bookingIntent),
+    /** Wizard step label or index when last saved. */
+    lastStep: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    /** Set when the visitor completed a real quote/book. */
+    convertedAt: v.optional(v.number()),
+    convertedBookingId: v.optional(v.id("bookings")),
+  })
+    .index("by_site_session", ["siteId", "sessionKey"])
+    .index("by_site_updated", ["siteId", "updatedAt"])
+    .index("by_updated", ["updatedAt"])
+    .index("by_email", ["email"])
+    .index("by_phone", ["phone"]),
 
   /**
    * Manager reminders — standalone or linked to a booking (fire before a job).
@@ -458,6 +496,47 @@ export default defineSchema({
     checkedAt: v.number(),
   }).index("by_site", ["siteId"]),
 
+  /** Singleton row tracking the last Cloudflare Workers Builds sync. */
+  deploymentSyncState: defineTable({
+    lastSyncAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+  }),
+
+  /**
+   * Latest Workers Builds snapshot per Worker.
+   * `siteId` is set for marketing sites; omitted for Booking Broom itself.
+   */
+  deploymentStatus: defineTable({
+    workerName: v.string(),
+    siteId: v.optional(v.id("sites")),
+    displayName: v.string(),
+    /** Cloudflare Account ID used for this sync. */
+    accountId: v.optional(v.string()),
+    /** CF build status: queued | initializing | running | stopped */
+    status: v.optional(v.string()),
+    /** CF build_outcome when stopped: success | fail | skipped | cancelled | terminated */
+    buildOutcome: v.optional(v.string()),
+    branch: v.optional(v.string()),
+    commitHash: v.optional(v.string()),
+    commitMessage: v.optional(v.string()),
+    author: v.optional(v.string()),
+    createdOn: v.optional(v.number()),
+    stoppedOn: v.optional(v.number()),
+    buildUuid: v.optional(v.string()),
+    dashboardUrl: v.optional(v.string()),
+    /** Workers free-plan daily request count (UTC day so far). */
+    requestsToday: v.optional(v.number()),
+    /** Free-plan daily request cap used for remaining calc (usually 100_000). */
+    requestsLimit: v.optional(v.number()),
+    /** Workers Builds free minutes exhausted (CF only exposes a boolean). */
+    buildMinutesLimitReached: v.optional(v.boolean()),
+    /** When free build minutes refresh (ISO stored as ms). */
+    buildMinutesRefreshOn: v.optional(v.number()),
+    error: v.optional(v.string()),
+    checkedAt: v.number(),
+  }).index("by_worker", ["workerName"])
+    .index("by_site", ["siteId"]),
+
   /** Voip.ms DID numbers (one per business line / sub-account). */
   smsDids: defineTable({
     did: v.string(),
@@ -589,6 +668,11 @@ export default defineSchema({
     lastSyncError: v.optional(v.string()),
     /** Index into sorted connected mailboxes for round-robin. */
     nextMailboxIndex: v.optional(v.number()),
+    /**
+     * Denormalized sum of mailbox unreadCounts for the nav badge.
+     * Avoids collecting every mailbox on every AppShell subscription tick.
+     */
+    unreadTotal: v.optional(v.number()),
   }),
 
   /** Web Push subscriptions for manager devices (new-booking alerts). */
@@ -608,6 +692,22 @@ export default defineSchema({
     userId: v.string(),
     token: v.string(),
     platform: v.union(v.literal("ios"), v.literal("android")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_user", ["userId"]),
+
+  /** Native APNs device tokens for BookingBroomSwift (iPhone / iPad / Mac). */
+  apnsPushTokens: defineTable({
+    userId: v.string(),
+    token: v.string(),
+    platform: v.union(
+      v.literal("ios"),
+      v.literal("ipados"),
+      v.literal("macos")
+    ),
+    environment: v.union(v.literal("development"), v.literal("production")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
