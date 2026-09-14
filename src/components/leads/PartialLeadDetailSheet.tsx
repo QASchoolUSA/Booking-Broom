@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Envelope, MapPin, Phone } from "@phosphor-icons/react";
+import { CalendarBlank, Envelope, MapPin, Phone } from "@phosphor-icons/react";
 import type { PartialLeadWithSite } from "@/lib/types";
 import {
   BookingAttributionSection,
@@ -71,108 +71,107 @@ export function PartialLeadDetailSheet({
   if (!lead) return null;
 
   const name = lead.customer_name?.trim() || "Unknown visitor";
+  const service = lead.service_type?.trim() || "Incomplete quote";
+  const hasContact =
+    Boolean(lead.email) ||
+    Boolean(lead.phone) ||
+    Boolean(lead.address) ||
+    Boolean(lead.preferred_date);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md">
-        <SheetHeader className="space-y-3 border-b pb-4 text-left">
+      <SheetContent
+        side="right"
+        className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
+      >
+        <SheetHeader className="shrink-0 border-b bg-muted/30 px-5 pb-4 pt-5 pr-12">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+            {lead.site && <SiteBadge site={lead.site} />}
+            <span className="inline-flex items-center rounded-md border border-slate-200/80 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold leading-none text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
               Abandoned
             </span>
-            {lead.intent && (
-              <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {lead.intent}
+            {lead.intent === "quote" && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                Quote only
+              </span>
+            )}
+            {lead.intent === "book" && (
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                Book
               </span>
             )}
           </div>
-          <SheetTitle className="text-xl">{name}</SheetTitle>
-          <SheetDescription className="sr-only">
-            Abandoned quote or booking details
-          </SheetDescription>
-          {lead.site && <SiteBadge site={lead.site} />}
-          <p className="text-xs text-muted-foreground">
-            Updated {format(parseISO(lead.updated_at), "MMM d, yyyy · h:mm a")}
+          <SheetTitle className="min-w-0 truncate text-left text-lg font-semibold">
+            {name}
+          </SheetTitle>
+          <SheetDescription className="text-left">
+            {service} · Updated{" "}
+            {format(parseISO(lead.updated_at), "MMM d, yyyy 'at' h:mm a")}
             {lead.last_step ? ` · Step: ${lead.last_step}` : ""}
-          </p>
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-4 space-y-5">
-          <section>
-            <h3 className={sectionHeading}>Contact</h3>
-            <div className="overflow-hidden rounded-xl border bg-card">
-              {lead.email && (
-                <DetailRow icon={Envelope} label="Email">
-                  <button
-                    type="button"
-                    className="text-left underline-offset-2 hover:underline"
-                    onClick={() => copyText("Email", lead.email!)}
-                  >
-                    {lead.email}
-                  </button>
-                </DetailRow>
-              )}
-              {lead.phone && (
-                <DetailRow icon={Phone} label="Phone">
-                  <button
-                    type="button"
-                    className="text-left underline-offset-2 hover:underline"
-                    onClick={() => copyText("Phone", lead.phone!)}
-                  >
-                    {lead.phone}
-                  </button>
-                </DetailRow>
-              )}
-              {lead.address && (
-                <DetailRow icon={MapPin} label="Address">
-                  {lead.address}
-                </DetailRow>
-              )}
-              {!lead.email && !lead.phone && !lead.address && (
-                <p className="px-3.5 py-3 text-sm text-muted-foreground">
-                  No contact details beyond what triggered the save.
-                </p>
-              )}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {lead.email && (
-                <a
-                  href={`mailto:${lead.email}`}
-                  className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted"
-                >
-                  Email
-                </a>
-              )}
-              {lead.phone && (
-                <a
-                  href={`sms:${lead.phone.replace(/\D/g, "")}`}
-                  className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted"
-                >
-                  Text
-                </a>
-              )}
-            </div>
-          </section>
-
-          {(lead.service_type ||
-            lead.preferred_date ||
-            lead.preferred_time) && (
+        <div
+          className="flex-1 space-y-6 overflow-y-auto px-5 py-5"
+          style={{
+            paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
+          }}
+        >
+          {hasContact && (
             <section>
-              <h3 className={sectionHeading}>Request</h3>
-              <div className="rounded-xl border bg-card px-3.5 py-3 text-sm">
-                {lead.service_type && (
-                  <p>
-                    <span className="text-muted-foreground">Service: </span>
-                    {lead.service_type}
-                  </p>
+              <h4 className={sectionHeading}>Contact</h4>
+              <div className="divide-y divide-border rounded-xl border bg-card">
+                {lead.email && (
+                  <DetailRow icon={Envelope} label="Email">
+                    <button
+                      type="button"
+                      className="text-left underline-offset-2 hover:underline"
+                      onClick={() => copyText("Email", lead.email!)}
+                    >
+                      {lead.email}
+                    </button>
+                  </DetailRow>
+                )}
+                {lead.phone && (
+                  <DetailRow icon={Phone} label="Phone">
+                    <button
+                      type="button"
+                      className="text-left underline-offset-2 hover:underline"
+                      onClick={() => copyText("Phone", lead.phone!)}
+                    >
+                      {lead.phone}
+                    </button>
+                  </DetailRow>
+                )}
+                {lead.address && (
+                  <DetailRow icon={MapPin} label="Address">
+                    {lead.address}
+                  </DetailRow>
                 )}
                 {(lead.preferred_date || lead.preferred_time) && (
-                  <p className="mt-1">
-                    <span className="text-muted-foreground">Preferred: </span>
+                  <DetailRow icon={CalendarBlank} label="Preferred">
                     {[lead.preferred_date, lead.preferred_time]
                       .filter(Boolean)
                       .join(" · ")}
-                  </p>
+                  </DetailRow>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {lead.email && (
+                  <a
+                    href={`mailto:${lead.email}`}
+                    className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted"
+                  >
+                    Email
+                  </a>
+                )}
+                {lead.phone && (
+                  <a
+                    href={`sms:${lead.phone.replace(/\D/g, "")}`}
+                    className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted"
+                  >
+                    Text
+                  </a>
                 )}
               </div>
             </section>
@@ -180,28 +179,28 @@ export function PartialLeadDetailSheet({
 
           {lead.property && (
             <section>
-              <h3 className={sectionHeading}>Property</h3>
+              <h4 className={sectionHeading}>Property</h4>
               <BookingPropertySection property={lead.property} />
             </section>
           )}
 
           {lead.quote && (
             <section>
-              <h3 className={sectionHeading}>Estimate</h3>
+              <h4 className={sectionHeading}>Estimate</h4>
               <BookingQuoteSection quote={lead.quote} />
             </section>
           )}
 
           {lead.attribution && (
             <section>
-              <h3 className={sectionHeading}>Attribution</h3>
+              <h4 className={sectionHeading}>Attribution</h4>
               <BookingAttributionSection attribution={lead.attribution} />
             </section>
           )}
 
           {lead.notes && (
             <section>
-              <h3 className={sectionHeading}>Notes</h3>
+              <h4 className={sectionHeading}>Notes</h4>
               <p className="rounded-xl border bg-card px-3.5 py-3 text-sm whitespace-pre-wrap">
                 {lead.notes}
               </p>
