@@ -42,6 +42,8 @@ type FanOutArgs = {
   mobilePath?: string;
   tag: string;
   bookingId?: string;
+  leadId?: string;
+  kind: "quote" | "book" | "abandoned";
 };
 
 function configureVapid() {
@@ -133,6 +135,9 @@ async function fanOutPush(
       body: args.body,
       url: args.url,
       tag: args.tag,
+      kind: args.kind,
+      bookingId: args.bookingId,
+      leadId: args.leadId,
     });
     const subs = (await ctx.runQuery(
       internal.push.listAllInternal,
@@ -198,6 +203,9 @@ async function fanOutPush(
         url: args.url,
         mobilePath,
         tag: args.tag,
+        kind: args.kind,
+        bookingId: args.bookingId,
+        leadId: args.leadId,
       },
     }));
     const expoResult = await sendExpoPush(
@@ -250,6 +258,8 @@ async function fanOutPush(
           url: args.url,
           mobilePath,
           bookingId: args.bookingId,
+          leadId: args.leadId,
+          kind: args.kind,
         });
         if (result.ok) {
           apnsSent += 1;
@@ -286,12 +296,37 @@ type NotifyBookingArgs = {
   customerName: string;
   serviceType?: string;
   bookingId?: string;
+  leadId?: string;
+  intent?: "quote" | "book";
+  kind?: "quote" | "book" | "abandoned";
 };
+
+function resolveNotifyKind(
+  args: NotifyBookingArgs
+): "quote" | "book" | "abandoned" {
+  if (args.kind === "abandoned" || args.kind === "quote" || args.kind === "book") {
+    return args.kind;
+  }
+  return args.intent === "quote" ? "quote" : "book";
+}
+
+function kindTitleLabel(kind: "quote" | "book" | "abandoned"): string {
+  switch (kind) {
+    case "quote":
+      return "Quote";
+    case "abandoned":
+      return "Abandoned";
+    default:
+      return "Booking";
+  }
+}
 
 async function notifyNewBookingHandler(
   ctx: ActionCtx,
   args: NotifyBookingArgs
 ): Promise<NotifyResult> {
+  const kind = resolveNotifyKind(args);
+
   if (args.bookingId) {
     try {
       const claim = await ctx.runMutation(
@@ -320,6 +355,32 @@ async function notifyNewBookingHandler(
     }
   }
 
+  if (args.leadId) {
+    try {
+      const claim = await ctx.runMutation(
+        internal.partialLeads.claimPushNotifyInternal,
+        { leadId: args.leadId as Id<"partialLeads"> }
+      );
+      if (!claim.claimed) {
+        console.info(`Push: skip lead ${args.leadId} (${claim.reason})`);
+        return {
+          sent: 0,
+          removed: 0,
+          expoSent: 0,
+          apnsSent: 0,
+          skipped: `push_already_${claim.reason}`,
+          expoErrors: [],
+          apnsErrors: [],
+        };
+      }
+    } catch (e) {
+      console.error(
+        "Push lead claim failed:",
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
   const site = await ctx.runQuery(internal.push.getSiteNameBySlugInternal, {
     slug: args.siteSlug,
   });
@@ -327,21 +388,41 @@ async function notifyNewBookingHandler(
   const service = (args.serviceType ?? "Cleaning").trim() || "Cleaning";
   const customer = args.customerName.trim() || "Customer";
   const bookingId = args.bookingId;
-  const url = bookingId
-    ? `/calendar?bookingId=${bookingId}`
-    : site?.slug
-      ? `/sites/${site.slug}`
-      : "/";
-  const mobilePath = bookingId
-    ? `/bookings/${bookingId}`
-    : site?.slug
-      ? `/bookings?site=${site.slug}`
-      : "/bookings";
-  const title = `New booking · ${siteName}`;
-  const body = `${customer} — ${service}`;
+  const leadId = args.leadId;
+
+  const url =
+    kind === "abandoned"
+      ? leadId
+        ? `/?view=abandoned&leadId=${leadId}`
+        : "/?view=abandoned"
+      : bookingId
+        ? `/calendar?bookingId=${bookingId}`
+        : site?.slug
+          ? `/sites/${site.slug}`
+          : "/";
+  const mobilePath =
+    kind === "abandoned"
+      ? leadId
+        ? `/leads/${leadId}`
+        : "/leads"
+      : bookingId
+        ? `/bookings/${bookingId}`
+        : site?.slug
+          ? `/bookings?site=${site.slug}`
+          : "/bookings";
+
+  const title = `${kindTitleLabel(kind)} · ${siteName}`;
+  const body =
+    kind === "abandoned"
+      ? `${customer} left before finishing — ${service}`
+      : kind === "quote"
+        ? `${customer} requested a quote — ${service}`
+        : `${customer} booked — ${service}`;
   const tag = bookingId
     ? `booking-${bookingId}`
-    : `booking-${args.siteSlug}-${Date.now()}`;
+    : leadId
+      ? `lead-${leadId}`
+      : `${kind}-${args.siteSlug}-${Date.now()}`;
 
   return await fanOutPush(ctx, {
     title,
@@ -350,6 +431,8 @@ async function notifyNewBookingHandler(
     mobilePath,
     tag,
     bookingId,
+    leadId,
+    kind,
   });
 }
 
@@ -358,10 +441,15 @@ const notifyArgs = {
   customerName: v.string(),
   serviceType: v.optional(v.string()),
   bookingId: v.optional(v.string()),
+  leadId: v.optional(v.string()),
+  intent: v.optional(v.union(v.literal("quote"), v.literal("book"))),
+  kind: v.optional(
+    v.union(v.literal("quote"), v.literal("book"), v.literal("abandoned"))
+  ),
 };
 
 /**
- * Best-effort push to manager devices when a booking is created.
+ * Best-effort push for new bookings, quotes, and abandoned leads.
  * Sends Web Push (PWA), Expo Push, and native APNs. Safe without auth.
  */
 export const notifyNewBooking = action({
@@ -371,7 +459,7 @@ export const notifyNewBooking = action({
   },
 });
 
-/** Scheduled from bookings.createPublic so push is not dependent on the Next.js API route. */
+/** Scheduled from bookings.createPublic / partialLeads.upsertPublic. */
 export const notifyNewBookingInternal = internalAction({
   args: notifyArgs,
   handler: async (ctx, args): Promise<NotifyResult> => {
@@ -401,6 +489,7 @@ export const notifyReminderInternal = internalAction({
       mobilePath: args.mobilePath,
       tag: args.tag,
       bookingId: args.bookingId,
+      kind: "book",
     });
   },
 });

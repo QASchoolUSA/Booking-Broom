@@ -70,6 +70,8 @@ export async function sendApnsAlert(args: {
   url: string;
   mobilePath: string;
   bookingId?: string;
+  leadId?: string;
+  kind?: "quote" | "book" | "abandoned";
 }): Promise<ApnsSendResult> {
   const host = apnsHost(args.environment);
   const jwt = await getApnsJwt(args.config);
@@ -87,6 +89,8 @@ export async function sendApnsAlert(args: {
     mobilePath: args.mobilePath,
     tag: args.tag,
     bookingId: args.bookingId,
+    leadId: args.leadId,
+    kind: args.kind,
   });
 
   return await new Promise<ApnsSendResult>((resolve) => {

@@ -1,5 +1,10 @@
-import { query, mutation, internalMutation } from "./_generated/server";
+import {
+  query,
+  mutation,
+  internalMutation,
+} from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import {
   bookingProperty,
   bookingQuote,
@@ -104,7 +109,7 @@ function looksLikePhone(value: string | undefined): boolean {
 
 /**
  * Public upsert from marketing sites. Contact-gated: email or phone required.
- * No scheduler / notify side effects.
+ * Schedules manager push + Telegram once on first insert (abandoned lead).
  */
 export const upsertPublic = mutation({
   args: {
@@ -191,6 +196,47 @@ export const upsertPublic = mutation({
       ...fields,
       createdAt: now,
     });
+
+    const customerName =
+      fields.customerName ||
+      fields.email ||
+      fields.phone ||
+      "Unknown visitor";
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.pushActions.notifyNewBookingInternal,
+      {
+        siteSlug: args.siteSlug,
+        customerName,
+        serviceType: fields.serviceType,
+        kind: "abandoned",
+        intent: args.intent,
+        leadId: id,
+      }
+    );
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.telegramActions.notifyNewBookingInternal,
+      {
+        siteSlug: args.siteSlug,
+        customerName,
+        email: fields.email,
+        phone: fields.phone,
+        address: fields.address,
+        serviceType: fields.serviceType,
+        preferredDate: fields.preferredDate,
+        preferredTime: fields.preferredTime,
+        notes: fields.notes,
+        intent: args.intent,
+        quoteEstimate: args.quote?.estimate,
+        quoteCurrency: args.quote?.currency,
+        quoteFrequency: args.quote?.frequency,
+        kind: "abandoned",
+        leadId: id,
+      }
+    );
 
     return { id, converted: false as const };
   },
@@ -291,5 +337,33 @@ export const get = query({
     if (!lead) return null;
     const site = await ctx.db.get(lead.siteId);
     return mapPartialLead(lead, site ?? undefined);
+  },
+});
+
+/** Claim abandoned-lead push once (idempotent). */
+export const claimPushNotifyInternal = internalMutation({
+  args: { leadId: v.id("partialLeads") },
+  handler: async (ctx, args) => {
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) return { claimed: false as const, reason: "missing" as const };
+    if (lead.pushNotifiedAt != null) {
+      return { claimed: false as const, reason: "already" as const };
+    }
+    await ctx.db.patch(args.leadId, { pushNotifiedAt: Date.now() });
+    return { claimed: true as const, reason: "ok" as const };
+  },
+});
+
+/** Claim abandoned-lead Telegram once (idempotent). */
+export const claimTelegramNotifyInternal = internalMutation({
+  args: { leadId: v.id("partialLeads") },
+  handler: async (ctx, args) => {
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) return { claimed: false as const, reason: "missing" as const };
+    if (lead.telegramNotifiedAt != null) {
+      return { claimed: false as const, reason: "already" as const };
+    }
+    await ctx.db.patch(args.leadId, { telegramNotifiedAt: Date.now() });
+    return { claimed: true as const, reason: "ok" as const };
   },
 });

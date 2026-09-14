@@ -29,6 +29,9 @@ type PushPayload = {
   body?: string;
   url?: string;
   tag?: string;
+  kind?: "quote" | "book" | "abandoned";
+  bookingId?: string;
+  leadId?: string;
 };
 
 self.addEventListener("push", (event: PushEvent) => {
@@ -47,7 +50,12 @@ self.addEventListener("push", (event: PushEvent) => {
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
     tag: data.tag || "booking-broom",
-    data: { url: data.url || "/" },
+    data: {
+      url: data.url || "/",
+      kind: data.kind,
+      bookingId: data.bookingId,
+      leadId: data.leadId,
+    },
     renotify: true,
   };
 

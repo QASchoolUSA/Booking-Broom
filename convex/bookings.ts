@@ -498,6 +498,8 @@ export const createPublic = mutation({
         customerName: args.customerName,
         serviceType: args.serviceType,
         bookingId: id,
+        intent: args.intent,
+        kind: args.intent === "quote" ? "quote" : "book",
       }
     );
 
@@ -552,6 +554,7 @@ export const createPublic = mutation({
         quoteCurrency: args.quote?.currency,
         quoteFrequency: args.quote?.frequency,
         bookingId: id,
+        kind: args.intent === "quote" ? "quote" : "book",
       }
     );
 

@@ -110,7 +110,7 @@ function section(title: string, body: string): string {
  * Tight hierarchy: intent + site, then labeled blocks.
  */
 function buildTelegramHtml(args: {
-  isQuote: boolean;
+  kind: "quote" | "book" | "abandoned";
   siteName: string;
   customerName: string;
   email?: string;
@@ -123,7 +123,12 @@ function buildTelegramHtml(args: {
   money?: string;
   frequency?: string;
 }): string {
-  const intentTitle = args.isQuote ? "Quote request" : "New booking";
+  const intentTitle =
+    args.kind === "quote"
+      ? "Quote"
+      : args.kind === "abandoned"
+        ? "Abandoned"
+        : "Booking";
   const service =
     (args.serviceType ?? "Cleaning").trim() || "Cleaning";
   const customer = args.customerName.trim() || "—";
@@ -147,6 +152,10 @@ function buildTelegramHtml(args: {
     ),
   ];
 
+  if (args.kind === "abandoned") {
+    blocks.push(section("Status", "Left before finishing the form"));
+  }
+
   if (args.money) {
     const freq = titleCaseWords(args.frequency);
     const estimateBody = freq
@@ -168,6 +177,16 @@ function buildTelegramHtml(args: {
     : text;
 }
 
+function resolveTelegramKind(args: {
+  kind?: "quote" | "book" | "abandoned";
+  intent?: "quote" | "book";
+}): "quote" | "book" | "abandoned" {
+  if (args.kind === "abandoned" || args.kind === "quote" || args.kind === "book") {
+    return args.kind;
+  }
+  return args.intent === "quote" ? "quote" : "book";
+}
+
 async function notifyNewBookingHandler(
   ctx: ActionCtx,
   args: {
@@ -185,6 +204,8 @@ async function notifyNewBookingHandler(
     quoteCurrency?: string;
     quoteFrequency?: string;
     bookingId?: string;
+    leadId?: string;
+    kind?: "quote" | "book" | "abandoned";
   },
 ): Promise<NotifyResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -219,15 +240,32 @@ async function notifyNewBookingHandler(
     }
   }
 
+  if (args.leadId) {
+    try {
+      const claim = await ctx.runMutation(
+        internal.partialLeads.claimTelegramNotifyInternal,
+        { leadId: args.leadId as Id<"partialLeads"> },
+      );
+      if (!claim.claimed) {
+        return { sent: false, skipped: `already_${claim.reason}` };
+      }
+    } catch (error) {
+      console.error(
+        "[telegram] lead claim failed:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
   const site = await ctx.runQuery(internal.push.getSiteNameBySlugInternal, {
     slug: args.siteSlug,
   });
   const siteName = site?.name ?? args.siteSlug;
-  const isQuote = args.intent === "quote";
+  const kind = resolveTelegramKind(args);
   const money = formatMoney(args.quoteEstimate, args.quoteCurrency);
 
   const text = buildTelegramHtml({
-    isQuote,
+    kind,
     siteName,
     customerName: args.customerName,
     email: args.email,
@@ -294,11 +332,15 @@ const notifyArgs = {
   quoteCurrency: v.optional(v.string()),
   quoteFrequency: v.optional(v.string()),
   bookingId: v.optional(v.string()),
+  leadId: v.optional(v.string()),
+  kind: v.optional(
+    v.union(v.literal("quote"), v.literal("book"), v.literal("abandoned")),
+  ),
 };
 
 /**
- * Best-effort Telegram alert for managers. Scheduled from createPublic so
- * marketing sites never wait on Telegram.
+ * Best-effort Telegram alert for managers (booking, quote, or abandoned lead).
+ * Scheduled from createPublic / partialLeads so marketing sites never wait.
  */
 export const notifyNewBookingInternal = internalAction({
   args: notifyArgs,

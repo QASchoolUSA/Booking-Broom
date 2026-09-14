@@ -159,7 +159,7 @@ export default defineSchema({
 
   /**
    * Contact-gated abandoned quote/book snapshots from marketing widgets.
-   * One doc per browser session; no notify side effects.
+   * One doc per browser session. Manager notify fires once on first insert.
    */
   partialLeads: defineTable({
     siteId: v.id("sites"),
@@ -184,6 +184,10 @@ export default defineSchema({
     /** Set when the visitor completed a real quote/book. */
     convertedAt: v.optional(v.number()),
     convertedBookingId: v.optional(v.id("bookings")),
+    /** Idempotent manager push claim. */
+    pushNotifiedAt: v.optional(v.number()),
+    /** Idempotent Telegram claim. */
+    telegramNotifiedAt: v.optional(v.number()),
   })
     .index("by_site_session", ["siteId", "sessionKey"])
     .index("by_site_updated", ["siteId", "updatedAt"])
