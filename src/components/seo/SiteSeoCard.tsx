@@ -135,8 +135,6 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
       ? "Not in Bing Webmaster"
       : "Not in Google Search Console";
   const bingOverride = site.bing_property_url ?? null;
-  const resolvedProperty =
-    metrics?.gsc_property_url ?? row.property_url ?? null;
 
   return (
     <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
@@ -151,11 +149,6 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
             {site.name}
           </p>
           <p className="truncate text-xs text-muted-foreground">{site.domain}</p>
-          {resolvedProperty && !notInConsole && (
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">
-              {resolvedProperty}
-            </p>
-          )}
           {notInConsole && (
             <p className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               <WarningCircle size={12} weight="fill" />
