@@ -413,7 +413,7 @@ async function queryTopQueries(
               type: "web",
               aggregationType: "byProperty",
               dimensions: ["query"],
-              rowLimit: 5,
+              rowLimit: 30,
               dataState: "all",
             }
       ),
@@ -431,7 +431,7 @@ async function queryTopQueries(
   const rows = data.rows ?? [];
 
   if (hourly) {
-    return aggregateQueryHourlyRows(rows, 5, now);
+    return aggregateQueryHourlyRows(rows, 30, now);
   }
 
   return rows
