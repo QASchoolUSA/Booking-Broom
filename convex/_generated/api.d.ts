@@ -35,6 +35,7 @@ import type * as lib_phone from "../lib/phone.js";
 import type * as lib_pricingConfigs from "../lib/pricingConfigs.js";
 import type * as lib_pricingEngines from "../lib/pricingEngines.js";
 import type * as lib_pricingSeed from "../lib/pricingSeed.js";
+import type * as lib_seoSort from "../lib/seoSort.js";
 import type * as lib_spacemail from "../lib/spacemail.js";
 import type * as lib_spacemailCrypto from "../lib/spacemailCrypto.js";
 import type * as lib_voipms from "../lib/voipms.js";
@@ -91,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   "lib/pricingConfigs": typeof lib_pricingConfigs;
   "lib/pricingEngines": typeof lib_pricingEngines;
   "lib/pricingSeed": typeof lib_pricingSeed;
+  "lib/seoSort": typeof lib_seoSort;
   "lib/spacemail": typeof lib_spacemail;
   "lib/spacemailCrypto": typeof lib_spacemailCrypto;
   "lib/voipms": typeof lib_voipms;

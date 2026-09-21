@@ -23,6 +23,12 @@ pnpm exec convex dev
 
 This logs you in, creates a deployment, writes `NEXT_PUBLIC_CONVEX_URL` to `.env.local`, and syncs your backend.
 
+**One Convex backend only (Dev).** This project uses a single cloud deployment: [dynamic-gnu-491](https://dashboard.convex.dev/t/nick-kudrow/bookingbroom/dynamic-gnu-491) (`dev:dynamic-gnu-491`). Local `.env.local` and the live Worker (`wrangler.jsonc`) both point at that URL. Convex’s dashboard still shows a **Prod** slot for every project — **ignore it**; do not point the app at it, and do not use a `prod:…` deploy key in CI.
+
+- Push functions locally: prefer `pnpm convex:dev` (or `pnpm exec convex dev --once`).
+- CI / Cloudflare build: `pnpm exec convex deploy --cmd '…'` **only** with a **Dev**-scoped `CONVEX_DEPLOY_KEY` (`dev:dynamic-gnu-491|…`).
+- Bare `npx convex deploy` / `pnpm convex:deploy` without that Dev key targets **Prod** by default — do not use it locally. For CI, use `pnpm convex:ci-deploy` (same as `convex deploy`) only when `CONVEX_DEPLOY_KEY` is Dev-scoped.
+
 3. In a **second terminal**, start Next.js:
 
 ```bash
@@ -60,7 +66,7 @@ and backfills `contactEmail` (and other seed fields) on existing sites.
 
 ### 2. Deploy to Cloudflare Workers
 
-Production URL: **`https://bookings.kedrik.com`**. Convex stays on deployment [dynamic-gnu-491](https://dashboard.convex.dev/t/nick-kudrow/bookingbroom/dynamic-gnu-491) — only the Next.js app runs on Cloudflare.
+Production URL: **`https://bookings.kedrik.com`**. Convex stays on the **Dev** deployment [dynamic-gnu-491](https://dashboard.convex.dev/t/nick-kudrow/bookingbroom/dynamic-gnu-491) — only the Next.js app runs on Cloudflare. Do not configure a separate Convex Prod backend.
 
 Local / CLI:
 
@@ -87,9 +93,21 @@ Set these as **Workers Builds** variables (needed at build time, especially `NEX
 | `NEXT_PUBLIC_CONVEX_SITE_URL` | `https://dynamic-gnu-491.convex.site` | Worker `vars` + build env |
 | `NEXT_PUBLIC_APP_URL` | `https://bookings.kedrik.com` | Worker `vars` + build env |
 | `ALLOWED_ORIGINS` | Optional. Code already defaults to localhost + all live cleaning domains. Copy from Vercel only if you overrode that list. | Worker runtime |
-| `CONVEX_DEPLOY_KEY` | Convex dashboard → Settings → Deploy Key | **Build secret only** — not a Worker `vars` entry |
+| `CONVEX_DEPLOY_KEY` | **Dev** deploy key for `dynamic-gnu-491` only (see below) | **Build secret only** — not a Worker `vars` entry |
 
-Do **not** put `SMTP_*` on Cloudflare. Booking emails run in Convex Node actions. Confirm SMTP is set on the Convex deployment (copy from Vercel if it only lived there):
+#### `CONVEX_DEPLOY_KEY` must be Dev-scoped (required once)
+
+A production (`prod:…`) deploy key would push Convex functions to the unused **Prod** deployment while the Worker still calls **Dev** — split backends. Fix:
+
+1. Convex dashboard → project **bookingbroom** → open **Dev** deployment `dynamic-gnu-491` → **Settings** → **Deploy keys**.
+2. Generate a key for **this Dev deployment** (value starts with `dev:dynamic-gnu-491|…`). Enable `deployment:deploy` for CI.
+3. Cloudflare Workers Builds → **Secrets** → set `CONVEX_DEPLOY_KEY` to that value (replace any `prod:…` key).
+
+The build command stays the same; the key decides the target:
+
+`pnpm exec convex deploy --cmd 'pnpm run build'`
+
+Do **not** put `SMTP_*` on Cloudflare. Booking emails run in Convex Node actions. Confirm SMTP is set on the **Dev** Convex deployment (copy from Vercel if it only lived there):
 
 | Convex var | Example |
 |------------|---------|
@@ -101,8 +119,8 @@ Do **not** put `SMTP_*` on Cloudflare. Booking emails run in Convex Node actions
 
 **Manual cutover checklist**
 
-1. Export production env from Vercel (Settings → Environment Variables). Confirm `CONVEX_DEPLOY_KEY` and any `ALLOWED_ORIGINS` / `SMTP_*` overrides.
-2. Confirm Convex env (especially `SMTP_*` and `SITE_URL=https://bookings.kedrik.com`). Do **not** re-run `setup-convex-auth.mjs` — it rotates JWT keys and signs everyone out.
+1. Export production env from Vercel (Settings → Environment Variables). Confirm `CONVEX_DEPLOY_KEY` is the **Dev** key for `dynamic-gnu-491` (not Prod) and copy any `ALLOWED_ORIGINS` / `SMTP_*` overrides.
+2. Confirm Convex **Dev** env (especially `SMTP_*` and `SITE_URL=https://bookings.kedrik.com`). Do **not** re-run `setup-convex-auth.mjs` — it rotates JWT keys and signs everyone out.
 3. Create Worker `booking-broom` (or connect this GitHub repo under Workers Builds) with the build/deploy commands above.
 4. Compressed Worker measured **~1.5 MiB gzip** on dry-run (under the 3 MiB free limit). Use the same Cloudflare account as the other OpenNext sites.
 5. Preview first (`pnpm preview` or `*.workers.dev`): login, `POST /api/bookings`, `GET /api/pricing`, `/sw.js` must be JavaScript (not a login HTML redirect).

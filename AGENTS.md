@@ -38,9 +38,13 @@ Gotcha: any `convex run` / `convex env` / `convex deploy` command also needs `CO
 ### Production (Cloudflare Workers)
 Deployed via `@opennextjs/cloudflare`. `pnpm run build` is OpenNext; `pnpm run build:next` is a plain Next.js webpack build (required for Serwist).
 
-Cloudflare Workers Builds should run `pnpm exec convex deploy --cmd 'pnpm run build'`, then `npx wrangler deploy` / `pnpm exec wrangler deploy` with committed `wrangler.jsonc`. Set `CONVEX_DEPLOY_KEY` as a **build secret**. Public `NEXT_PUBLIC_CONVEX_*` / `NEXT_PUBLIC_APP_URL` are in `wrangler.jsonc` `vars` and must also be present at build time.
+**Convex is Dev-only.** Local and live share `dynamic-gnu-491` (`NEXT_PUBLIC_CONVEX_*` in `wrangler.jsonc`). Ignore the Prod deployment in the Convex dashboard.
 
-Keep `src/middleware.ts` named `middleware.ts` (OpenNext does not support Next 16 `proxy.ts` yet). Do not re-run `scripts/setup-convex-auth.mjs` against production unless `SITE_URL` changes.
+Cloudflare Workers Builds should run `pnpm exec convex deploy --cmd 'pnpm run build'`, then `npx wrangler deploy` / `pnpm exec wrangler deploy` with committed `wrangler.jsonc`. Set `CONVEX_DEPLOY_KEY` as a **build secret** that is a **Dev** deploy key for `dynamic-gnu-491` (value starts with `dev:dynamic-gnu-491|…` — never a `prod:…` key). Public `NEXT_PUBLIC_CONVEX_*` / `NEXT_PUBLIC_APP_URL` are in `wrangler.jsonc` `vars` and must also be present at build time.
+
+Push Convex functions while developing with `pnpm convex:dev` (or `convex dev --once`). `pnpm convex:deploy` refuses to run (it would hit Prod). CI uses `pnpm convex:ci-deploy` / `pnpm exec convex deploy` with a Dev-scoped `CONVEX_DEPLOY_KEY`.
+
+Keep `src/middleware.ts` named `middleware.ts` (OpenNext does not support Next 16 `proxy.ts` yet). Do not re-run `scripts/setup-convex-auth.mjs` against the live app unless `SITE_URL` changes.
 
 ### Lint
 `pnpm lint` runs but currently reports pre-existing errors (mostly `react-hooks` purity/set-state rules); these are not caused by environment setup.
