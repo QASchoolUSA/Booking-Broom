@@ -442,7 +442,13 @@ async function queryTopQueries(
       ctr: row.ctr ?? 0,
       position: row.position ?? 0,
     }))
-    .filter((row) => row.query.length > 0);
+    .filter((row) => row.query.length > 0)
+    .sort(
+      (a, b) =>
+        b.impressions - a.impressions ||
+        b.clicks - a.clicks ||
+        a.query.localeCompare(b.query)
+    );
 }
 
 export const syncAllInternal = internalAction({

@@ -140,6 +140,6 @@ export function aggregateQueryHourlyRows(
       position:
         stats.impressions > 0 ? stats.posWeight / stats.impressions : 0,
     }))
-    .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)
+    .sort((a, b) => b.impressions - a.impressions || b.clicks - a.clicks)
     .slice(0, limit);
 }

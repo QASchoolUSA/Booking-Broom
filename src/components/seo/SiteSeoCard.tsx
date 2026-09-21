@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { SeoTopQuery } from "@/lib/types";
+import { sortSeoKeywords } from "@/lib/seoSort";
 
 const KEYWORD_PREVIEW = 5;
 
@@ -65,6 +66,9 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
   const [showCrawl, setShowCrawl] = useState(false);
   const [showScan, setShowScan] = useState(false);
   const [keywordsOpen, setKeywordsOpen] = useState(false);
+
+  const sortedKeywords = sortSeoKeywords(top_queries ?? []);
+  const previewKeywords = sortedKeywords.slice(0, KEYWORD_PREVIEW);
 
   useEffect(() => {
     setPropertyUrl(site.bing_property_url ?? "");
@@ -219,14 +223,14 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Top keywords
           </p>
-          {top_queries && top_queries.length > 0 ? (
+          {sortedKeywords.length > 0 ? (
             <>
               <KeywordList
-                queries={top_queries.slice(0, KEYWORD_PREVIEW)}
+                queries={previewKeywords}
                 startIndex={0}
                 compact
               />
-              {top_queries.length > KEYWORD_PREVIEW ? (
+              {sortedKeywords.length > KEYWORD_PREVIEW ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -234,7 +238,7 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
                   className="mt-1.5 h-auto px-0 text-xs font-medium text-muted-foreground hover:text-foreground"
                   onClick={() => setKeywordsOpen(true)}
                 >
-                  View all {top_queries.length} keywords
+                  View all {sortedKeywords.length} keywords
                 </Button>
               ) : null}
               <Sheet open={keywordsOpen} onOpenChange={setKeywordsOpen}>
@@ -245,12 +249,12 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
                   <SheetHeader className="border-b">
                     <SheetTitle>{site.name} · Top keywords</SheetTitle>
                     <SheetDescription>
-                      {top_queries.length} queries · clicks, impressions, CTR,
+                      {sortedKeywords.length} queries · clicks, impressions, CTR,
                       and average position
                     </SheetDescription>
                   </SheetHeader>
                   <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-                    <KeywordList queries={top_queries} startIndex={0} />
+                    <KeywordList queries={sortedKeywords} startIndex={0} />
                   </div>
                 </SheetContent>
               </Sheet>

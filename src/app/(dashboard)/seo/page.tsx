@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoader } from "@/components/loading/PageLoader";
+import { sortSeoSiteRows } from "@/lib/seoSort";
 import type { SeoPeriodDays, SeoSource, SiteSeoRow } from "@/lib/types";
 
 const PERIODS: { value: SeoPeriodDays; label: string }[] = [
@@ -56,7 +57,10 @@ function SeoPageContent() {
   );
 
   const rowsRaw = source === "google" ? gscRowsRaw : bingRowsRaw;
-  const rows = (rowsRaw ?? []) as SiteSeoRow[];
+  const rows = useMemo(
+    () => sortSeoSiteRows((rowsRaw ?? []) as SiteSeoRow[]),
+    [rowsRaw]
+  );
   const metricsLoading = isAuthenticated && rowsRaw === undefined;
 
   const showContent =

@@ -7,6 +7,7 @@ import {
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { formatDateUTC } from "./lib/gscMatch";
+import { compareSeoSiteMetrics, sortSeoQueries } from "./lib/seoSort";
 
 const periodDays = v.union(
   v.literal(1),
@@ -185,7 +186,9 @@ export const listMetrics = query({
         property_url: propertyStatus?.propertyUrl ?? null,
         metrics: metric ? mapMetric(metric) : null,
         delta,
-        top_queries: queryDoc?.queries?.length ? queryDoc.queries : null,
+        top_queries: queryDoc?.queries?.length
+          ? sortSeoQueries(queryDoc.queries)
+          : null,
         crawl_issues: crawl
           ? {
               issue_count: crawl.issueCount,
@@ -207,7 +210,18 @@ export const listMetrics = query({
       });
     }
 
-    return results;
+    return results.sort((a, b) =>
+      compareSeoSiteMetrics(
+        a.metrics
+          ? { impressions: a.metrics.impressions, clicks: a.metrics.clicks }
+          : null,
+        b.metrics
+          ? { impressions: b.metrics.impressions, clicks: b.metrics.clicks }
+          : null,
+        a.site.name,
+        b.site.name
+      )
+    );
   },
 });
 

@@ -10,6 +10,14 @@ public struct SiteSEOCard: View {
         self.seo = seo
     }
 
+    private var rankedKeywords: [SEOQuery] {
+        seo.topQueries.sorted { a, b in
+            if a.impressions != b.impressions { return a.impressions > b.impressions }
+            if a.clicks != b.clicks { return a.clicks > b.clicks }
+            return a.query < b.query
+        }
+    }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             // Header: Site Name & Source Pill
@@ -45,13 +53,13 @@ public struct SiteSEOCard: View {
             }
 
             // Top Keywords
-            if !seo.topQueries.isEmpty {
+            if !rankedKeywords.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Top Search Keywords")
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
 
-                    ForEach(Array(seo.topQueries.prefix(keywordPreviewCount))) { q in
+                    ForEach(Array(rankedKeywords.prefix(keywordPreviewCount))) { q in
                         HStack(alignment: .firstTextBaseline) {
                             Text(q.query)
                                 .font(.caption.weight(.medium))
@@ -65,11 +73,11 @@ public struct SiteSEOCard: View {
                         .padding(.vertical, 2)
                     }
 
-                    if seo.topQueries.count > keywordPreviewCount {
+                    if rankedKeywords.count > keywordPreviewCount {
                         Button {
                             showAllKeywords = true
                         } label: {
-                            Text("View all \(seo.topQueries.count) keywords")
+                            Text("View all \(rankedKeywords.count) keywords")
                                 .font(.caption.weight(.semibold))
                         }
                         .buttonStyle(.plain)
@@ -82,7 +90,7 @@ public struct SiteSEOCard: View {
         .padding(16)
         .glassCard()
         .sheet(isPresented: $showAllKeywords) {
-            SEOKeywordsSheet(siteName: seo.siteName, queries: seo.topQueries)
+            SEOKeywordsSheet(siteName: seo.siteName, queries: rankedKeywords)
         }
     }
 }

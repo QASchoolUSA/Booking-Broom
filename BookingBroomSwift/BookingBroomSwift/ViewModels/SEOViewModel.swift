@@ -56,7 +56,7 @@ public final class SEOViewModel: ObservableObject {
                     source: self.selectedSource,
                     periodDays: self.selectedPeriodDays
                 )
-                self.seoMetricsList = fetched
+                self.seoMetricsList = Self.ranked(fetched)
             } catch {
                 self.seoMetricsList = []
                 self.loadError = error.localizedDescription
@@ -94,7 +94,7 @@ public final class SEOViewModel: ObservableObject {
                     source: self.selectedSource,
                     periodDays: self.selectedPeriodDays
                 )
-                self.seoMetricsList = fetched
+                self.seoMetricsList = Self.ranked(fetched)
                 self.loadError = nil
                 HapticFeedback.notification(.success)
             } catch {
@@ -107,5 +107,24 @@ public final class SEOViewModel: ObservableObject {
     
     public func clearSyncError() {
         syncError = nil
+    }
+
+    /// Sites by impressions then clicks (desc); keywords within each site the same way.
+    private static func ranked(_ list: [SEOMetrics]) -> [SEOMetrics] {
+        list
+            .map { site in
+                var copy = site
+                copy.topQueries = site.topQueries.sorted { a, b in
+                    if a.impressions != b.impressions { return a.impressions > b.impressions }
+                    if a.clicks != b.clicks { return a.clicks > b.clicks }
+                    return a.query < b.query
+                }
+                return copy
+            }
+            .sorted { a, b in
+                if a.impressions != b.impressions { return a.impressions > b.impressions }
+                if a.clicks != b.clicks { return a.clicks > b.clicks }
+                return a.siteName < b.siteName
+            }
     }
 }
