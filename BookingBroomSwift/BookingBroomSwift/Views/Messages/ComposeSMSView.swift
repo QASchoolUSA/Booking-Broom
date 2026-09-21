@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct ComposeSMSView: View {
-    @ObservedObject var messagesVM: MessagesViewModel
+    @Bindable var messagesVM: MessagesViewModel
     @Environment(\.dismiss) private var dismiss
     
     public var prefillTo: String?

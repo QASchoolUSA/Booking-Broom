@@ -1,10 +1,10 @@
 import SwiftUI
 
 public struct OpsHubView: View {
-    @ObservedObject var opsVM: OpsViewModel
-    @ObservedObject var seoVM: SEOViewModel
-    @ObservedObject var perfVM: PerformanceViewModel
-    @ObservedObject var deploymentsVM: DeploymentsViewModel
+    @Bindable var opsVM: OpsViewModel
+    @Bindable var seoVM: SEOViewModel
+    @Bindable var perfVM: PerformanceViewModel
+    @Bindable var deploymentsVM: DeploymentsViewModel
     
     public init(
         opsVM: OpsViewModel,

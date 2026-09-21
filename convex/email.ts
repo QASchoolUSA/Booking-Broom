@@ -319,6 +319,31 @@ export const listMessages = query({
   },
 });
 
+/**
+ * Newest `limit` messages of a thread WITH bodies, in ascending order.
+ * One-shot fetch for native clients (BookingBroomSwift) — replaces
+ * listMessages + N×getMessage. Do not subscribe to this from the web app.
+ */
+export const listThreadMessages = query({
+  args: {
+    threadId: v.id("emailThreads"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    const limit = Math.min(Math.max(Math.floor(args.limit ?? 100), 1), 300);
+    const newestFirst = await ctx.db
+      .query("emailMessages")
+      .withIndex("by_thread_and_sentAt", (q) =>
+        q.eq("threadId", args.threadId)
+      )
+      .order("desc")
+      .take(limit);
+    return newestFirst.reverse().map(mapMessage);
+  },
+});
+
 /** Full message including bodies — prefer one-shot client fetch, not useQuery. */
 export const getMessage = query({
   args: {

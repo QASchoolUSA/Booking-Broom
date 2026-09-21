@@ -1,24 +1,26 @@
 import SwiftUI
-import Combine
+import Observation
 
 /// Shared session state for Mac menus / Settings scene and the main shell.
 @MainActor
-public final class AppController: ObservableObject {
-    @Published public var sidebarSelection: AppSidebarItem = .dashboard
-    @Published public var showingNewBooking = false
-    @Published public var pendingPushBookingId: String?
+@Observable
+public final class AppController {
+    public var sidebarSelection: AppSidebarItem = .dashboard
+    public var showingNewBooking = false
+    public var pendingPushBookingId: String?
     
-    public let bookingsVM = BookingsViewModel()
-    public let messagesVM = MessagesViewModel()
-    public let emailVM = EmailViewModel()
-    public let opsVM = OpsViewModel()
-    public let seoVM = SEOViewModel()
-    public let perfVM = PerformanceViewModel()
-    public let deploymentsVM = DeploymentsViewModel()
-    public let settingsVM = SettingsViewModel()
+    @ObservationIgnored public let bookingsVM = BookingsViewModel()
+    @ObservationIgnored public let messagesVM = MessagesViewModel()
+    @ObservationIgnored public let emailVM = EmailViewModel()
+    @ObservationIgnored public let opsVM = OpsViewModel()
+    @ObservationIgnored public let seoVM = SEOViewModel()
+    @ObservationIgnored public let perfVM = PerformanceViewModel()
+    @ObservationIgnored public let deploymentsVM = DeploymentsViewModel()
+    @ObservationIgnored public let settingsVM = SettingsViewModel()
     
-    private var lastForegroundRefreshAt: Date?
-    private let foregroundRefreshDebounce: TimeInterval = 2
+    @ObservationIgnored private var lastForegroundRefreshAt: Date?
+    /// Returning from the background within this window costs zero Convex calls.
+    @ObservationIgnored private let foregroundRefreshDebounce: TimeInterval = 30
     
     public init() {}
     
@@ -26,32 +28,23 @@ public final class AppController: ObservableObject {
         sidebarSelection = item
     }
     
-    /// Clear sticky ViewModel state and force a fresh Convex reload after login / Face ID unlock.
+    /// Clear sticky ViewModel state after login / Face ID unlock, then load only
+    /// what the first screen needs (bookings + sites). Every other tab loads
+    /// itself lazily via `ensure*Loaded()` in its root view's `onAppear`.
     public func resetAndReloadForSession() {
-        ConvexAPIService.shared.invalidateSitesCache()
-        bookingsVM.resetForNewSession()
-        messagesVM.resetForNewSession()
-        emailVM.resetForNewSession()
-        opsVM.resetForNewSession()
-        seoVM.resetForNewSession()
-        perfVM.resetForNewSession()
-        deploymentsVM.resetForNewSession()
-        settingsVM.resetForNewSession()
-        
+        Task { await ConvexAPIService.shared.invalidateSitesCache() }
+        resetAllViewModels()
         bookingsVM.ensureBookingsLoaded()
-        messagesVM.ensureLoaded()
-        emailVM.ensureLoaded()
-        opsVM.ensureHealthLoaded()
-        opsVM.ensurePricingLoaded()
-        seoVM.ensureLoaded()
-        perfVM.ensureLoaded()
-        deploymentsVM.ensureLoaded()
-        settingsVM.ensureLoaded()
     }
     
     /// Drop in-memory lists on logout so the next unlock cannot flash stale demo/live data.
     public func clearSessionData() {
-        ConvexAPIService.shared.invalidateSitesCache()
+        Task { await ConvexAPIService.shared.invalidateSitesCache() }
+        resetAllViewModels()
+        lastForegroundRefreshAt = nil
+    }
+    
+    private func resetAllViewModels() {
         bookingsVM.resetForNewSession()
         messagesVM.resetForNewSession()
         emailVM.resetForNewSession()
@@ -60,10 +53,10 @@ public final class AppController: ObservableObject {
         perfVM.resetForNewSession()
         deploymentsVM.resetForNewSession()
         settingsVM.resetForNewSession()
-        lastForegroundRefreshAt = nil
     }
     
-    /// Refetch live lists when the app returns to the foreground (debounced).
+    /// Refetch when the app returns to the foreground: bookings (if stale) plus
+    /// the data behind the currently visible tab. Debounced to 30 s.
     public func refreshOnForeground() {
         let now = Date()
         if let last = lastForegroundRefreshAt,
@@ -71,9 +64,23 @@ public final class AppController: ObservableObject {
             return
         }
         lastForegroundRefreshAt = now
-        bookingsVM.loadBookings()
-        messagesVM.loadMessages()
-        emailVM.loadMailboxes()
+        bookingsVM.refreshIfStale(olderThan: 60)
+        
+        switch sidebarSelection {
+        case .messages:
+            messagesVM.refreshIfStale(olderThan: 60)
+        case .email:
+            emailVM.refreshIfStale(olderThan: 60)
+        case .dashboard:
+            messagesVM.refreshIfStale(olderThan: 60)
+        default:
+            break
+        }
+    }
+    
+    /// A booking push arrived while the app was active — only bookings can have changed.
+    public func refreshForForegroundPush() {
+        bookingsVM.refreshIfStale(olderThan: 5)
     }
     
     public func openBookingFromPush(bookingId: String?) {
@@ -92,6 +99,7 @@ public final class AppController: ObservableObject {
         }
     }
     
+    /// ⌘R / toolbar Sync — the one place external-provider syncs are triggered.
     public func syncCurrent() {
         switch sidebarSelection {
         case .bookings:
@@ -103,9 +111,9 @@ public final class AppController: ObservableObject {
         case .seo:
             seoVM.syncMetrics()
         case .speed:
-            perfVM.loadPerformance()
+            perfVM.runAudits()
         case .health:
-            opsVM.loadHealth()
+            opsVM.checkHealthNow()
         case .deploys:
             deploymentsVM.syncNow()
         case .pricing:

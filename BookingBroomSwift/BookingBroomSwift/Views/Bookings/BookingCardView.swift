@@ -2,8 +2,8 @@ import SwiftUI
 
 public struct BookingCardView: View {
     public let booking: Booking
-    @ObservedObject var bookingsVM: BookingsViewModel
-    @ObservedObject var messagesVM: MessagesViewModel
+    @Bindable var bookingsVM: BookingsViewModel
+    @Bindable var messagesVM: MessagesViewModel
     public var onStatusChange: ((BookingStatus) -> Void)?
     
     @State private var showingDetailSheet = false

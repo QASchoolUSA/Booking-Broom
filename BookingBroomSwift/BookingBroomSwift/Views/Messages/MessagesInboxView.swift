@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct MessagesInboxView: View {
-    @ObservedObject var messagesVM: MessagesViewModel
+    @Bindable var messagesVM: MessagesViewModel
     @State private var selectedThreadId: String?
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
@@ -65,7 +65,8 @@ public struct MessagesInboxView: View {
                 ComposeSMSView(messagesVM: messagesVM)
             }
             .refreshable {
-                messagesVM.syncVoipms()
+                // Pull-to-refresh reloads from Convex only; Voip.ms sync stays on the toolbar button / ⌘R.
+                await messagesVM.loadMessagesAndWait()
             }
             .onAppear {
                 messagesVM.ensureLoaded()

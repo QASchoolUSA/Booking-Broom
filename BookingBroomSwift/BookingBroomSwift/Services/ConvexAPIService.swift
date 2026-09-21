@@ -1,73 +1,182 @@
 import Foundation
 
-public struct ConvexQueryRequest<T: Encodable>: Encodable {
-    public let path: String
-    public let args: T
+/// Typed failure surfaced by every Convex call so ViewModels can tell
+/// "empty result" from "request failed" and react to auth expiry.
+public enum ConvexError: LocalizedError, Equatable {
+    case invalidURL
+    case network(String)
+    case invalidJSON(Int)
+    case unauthenticated
+    case server(String)
+    case cancelled
+    
+    public var errorDescription: String? {
+        switch self {
+        case .invalidURL: return "Invalid Convex URL."
+        case .network(let message): return "Network error: \(message)"
+        case .invalidJSON(let code): return "Unexpected response from server (HTTP \(code))."
+        case .unauthenticated: return "Your session expired. Sign in again."
+        case .server(let message): return message
+        case .cancelled: return "Request cancelled."
+        }
+    }
+    
+    public var isCancelled: Bool {
+        if case .cancelled = self { return true }
+        return false
+    }
 }
 
-public struct ConvexResponse<T: Decodable>: Decodable {
-    public let status: String
-    public let value: T?
-    public let errorMessage: String?
-}
-
-public final class ConvexAPIService {
+/// Single HTTP transport for the Convex deployment.
+///
+/// - All mutable state is actor-isolated (token, cache, config).
+/// - Every function goes through `call(_:_:args:timeout:)`, which attaches the
+///   bearer token, refreshes it when it is about to expire or is rejected, and
+///   maps Convex `status/value/errorMessage` into `ConvexError`.
+/// - Concurrent `sites:list` and refresh requests are de-duplicated.
+public actor ConvexAPIService {
     public static let shared = ConvexAPIService()
     
-    // Live Convex deployment URL (and fallback local development URL)
-    public var baseURLString: String = "https://dynamic-gnu-491.convex.cloud"
-    public var useMockData: Bool = false
-    public var authToken: String? = nil
+    public nonisolated static let defaultBaseURL = "https://dynamic-gnu-491.convex.cloud"
+    
+    public typealias SessionExpiredHandler = @Sendable () -> Void
+    public typealias TokensRotatedHandler = @Sendable (_ token: String, _ refreshToken: String?) -> Void
+    
+    // MARK: Configuration
+    
+    private var baseURLString: String = ConvexAPIService.defaultBaseURL
+    private var useMockData: Bool = false
+    
+    // MARK: Session
+    
+    private var authToken: String?
+    private var refreshToken: String?
+    private var tokenExpiresAt: Date?
+    private var refreshTask: Task<String, Error>?
+    private var sessionExpiredHandler: SessionExpiredHandler?
+    private var tokensRotatedHandler: TokensRotatedHandler?
+    
+    /// Refresh proactively when the JWT is within this window of expiring.
+    private let refreshLeeway: TimeInterval = 60
+    
+    // MARK: Sites cache (60 s TTL + in-flight de-dup)
     
     private var cachedSites: [CleaningSite]?
     private var cachedSitesFetchedAt: Date?
+    private var sitesTask: Task<[CleaningSite], Error>?
     private let sitesCacheTTL: TimeInterval = 60
     
-    /// Shared ISO8601 parsers (reused — do not recreate per row).
-    nonisolated private static let iso8601Fractional: ISO8601DateFormatter = {
+    private init() {}
+    
+    // MARK: - Shared parsers
+    
+    nonisolated(unsafe) private static let iso8601Fractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
     
-    nonisolated private static let iso8601: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let iso8601: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
     
-    private init() {}
-    
     nonisolated static func parseISO8601(_ string: String) -> Date? {
         iso8601Fractional.date(from: string) ?? iso8601.date(from: string)
     }
     
-    /// Parse JSON dictionary off the main actor to avoid UI hitching.
+    /// Parse JSON off the main actor to avoid UI hitching on large payloads.
     nonisolated private static func jsonObject(from data: Data) async -> [String: Any]? {
         await Task.detached(priority: .userInitiated) {
             (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         }.value
     }
     
+    /// Decode the `exp` claim of a JWT without verifying the signature.
+    nonisolated static func jwtExpiry(_ token: String) -> Date? {
+        let parts = token.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var b64 = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        guard let data = Data(base64Encoded: b64),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return nil
+        }
+        if let exp = json["exp"] as? Double { return Date(timeIntervalSince1970: exp) }
+        if let exp = json["exp"] as? Int { return Date(timeIntervalSince1970: Double(exp)) }
+        return nil
+    }
+    
+    nonisolated private static func isAuthFailureMessage(_ message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("unauthenticated")
+            || lower.contains("not authenticated")
+            || lower.contains("invalid token")
+            || lower.contains("token expired")
+            || lower.contains("expired token")
+            || lower.contains("jwt")
+            || lower.contains("unauthorized")
+    }
+    
+    // MARK: - Configuration API
+    
+    public var currentBaseURL: String { baseURLString }
+    public var isMockMode: Bool { useMockData }
+    public var hasAuthToken: Bool { authToken != nil }
+    public var currentAuthToken: String? { authToken }
+    
+    public func setBaseURL(_ url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != baseURLString else { return }
+        baseURLString = trimmed
+        invalidateSitesCache()
+    }
+    
+    public func setMockMode(_ enabled: Bool) {
+        guard enabled != useMockData else { return }
+        useMockData = enabled
+        invalidateSitesCache()
+    }
+    
+    public func setSessionExpiredHandler(_ handler: SessionExpiredHandler?) {
+        sessionExpiredHandler = handler
+    }
+    
+    public func setTokensRotatedHandler(_ handler: TokensRotatedHandler?) {
+        tokensRotatedHandler = handler
+    }
+    
+    /// Install the session tokens after login / unlock / launch restore.
+    /// `token` may be nil when only a refresh token survived — the pipeline
+    /// will exchange it before the first authenticated call.
+    public func setSession(token: String?, refreshToken: String?) {
+        authToken = token
+        tokenExpiresAt = token.flatMap(Self.jwtExpiry)
+        if let refreshToken, !refreshToken.isEmpty {
+            self.refreshToken = refreshToken
+        }
+    }
+    
+    public func clearSession() {
+        authToken = nil
+        refreshToken = nil
+        tokenExpiresAt = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        invalidateSitesCache()
+    }
+    
     public func invalidateSitesCache() {
         cachedSites = nil
         cachedSitesFetchedAt = nil
+        sitesTask?.cancel()
+        sitesTask = nil
     }
     
-    private var headers: [String: String] {
-        var h = ["Content-Type": "application/json"]
-        if let token = authToken {
-            h["Authorization"] = "Bearer \(token)"
-        }
-        return h
-    }
-    
-    // MARK: - Auth helpers
-    
-    /// No-op when unauthenticated. Callers must not invent demo credentials.
-    public func ensureAuthenticated() async {
-        // Intentionally empty — use the Keychain / Login flow for real sessions.
-    }
+    // MARK: - Auth errors
     
     public enum AuthError: LocalizedError {
         case invalidCredentials
@@ -98,6 +207,193 @@ public final class ConvexAPIService {
         }
     }
     
+    // MARK: - Request pipeline
+    
+    private enum FunctionKind: String {
+        case query, mutation, action
+    }
+    
+    private var headers: [String: String] {
+        var h = ["Content-Type": "application/json"]
+        if let token = authToken {
+            h["Authorization"] = "Bearer \(token)"
+        }
+        return h
+    }
+    
+    /// Run a Convex function. Proactively refreshes an expiring JWT, retries
+    /// once after a refresh when the server rejects the token, and notifies the
+    /// session-expired handler only when the refresh itself fails.
+    @discardableResult
+    private func call(
+        _ kind: FunctionKind,
+        _ path: String,
+        args: [String: Any] = [:],
+        timeout: TimeInterval = 30
+    ) async throws -> Any? {
+        try await refreshIfExpiring()
+        
+        do {
+            return try await perform(kind, path, args: args, timeout: timeout)
+        } catch ConvexError.unauthenticated {
+            guard refreshToken != nil else {
+                notifySessionExpired()
+                throw ConvexError.unauthenticated
+            }
+            do {
+                _ = try await refreshAccessToken()
+            } catch {
+                if case AuthError.network(let message) = error {
+                    throw ConvexError.network(message)
+                }
+                notifySessionExpired()
+                throw ConvexError.unauthenticated
+            }
+            // Refresh succeeded: the session is valid, so a second rejection is a
+            // function-level authorization error, not an expired session.
+            do {
+                return try await perform(kind, path, args: args, timeout: timeout)
+            } catch ConvexError.unauthenticated {
+                throw ConvexError.server("\(path): unauthorized")
+            }
+        }
+    }
+    
+    private func perform(
+        _ kind: FunctionKind,
+        _ path: String,
+        args: [String: Any],
+        timeout: TimeInterval
+    ) async throws -> Any? {
+        guard let url = URL(string: "\(baseURLString)/api/\(kind.rawValue)") else {
+            throw ConvexError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["path": path, "args": args])
+        
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            throw ConvexError.cancelled
+        } catch is CancellationError {
+            throw ConvexError.cancelled
+        } catch {
+            throw ConvexError.network(error.localizedDescription)
+        }
+        
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if code == 401 || code == 403 {
+            throw ConvexError.unauthenticated
+        }
+        
+        guard let json = await Self.jsonObject(from: data) else {
+            throw ConvexError.invalidJSON(code)
+        }
+        
+        let errorMessage = (json["errorMessage"] as? String) ?? (json["message"] as? String)
+        if let errorMessage, !errorMessage.isEmpty {
+            if Self.isAuthFailureMessage(errorMessage) {
+                throw ConvexError.unauthenticated
+            }
+            throw ConvexError.server(errorMessage)
+        }
+        
+        guard code == 200 else {
+            throw ConvexError.server("\(path) failed (HTTP \(code)).")
+        }
+        guard let status = json["status"] as? String, status == "success" else {
+            throw ConvexError.server("\(path) returned an unexpected payload.")
+        }
+        
+        let value = json["value"]
+        return value is NSNull ? nil : value
+    }
+    
+    private func query(_ path: String, args: [String: Any] = [:], timeout: TimeInterval = 30) async throws -> Any? {
+        try await call(.query, path, args: args, timeout: timeout)
+    }
+    
+    @discardableResult
+    private func mutation(_ path: String, args: [String: Any] = [:], timeout: TimeInterval = 30) async throws -> Any? {
+        try await call(.mutation, path, args: args, timeout: timeout)
+    }
+    
+    @discardableResult
+    private func action(_ path: String, args: [String: Any] = [:], timeout: TimeInterval = 60) async throws -> Any? {
+        try await call(.action, path, args: args, timeout: timeout)
+    }
+    
+    private func listValue(_ value: Any?) -> [[String: Any]] {
+        value as? [[String: Any]] ?? []
+    }
+    
+    // MARK: - Token refresh
+    
+    private func refreshIfExpiring() async throws {
+        if authToken == nil {
+            // Refresh-token-only session (launch restore): exchange before the first call.
+            guard refreshToken != nil else { return }
+            do {
+                _ = try await refreshAccessToken()
+            } catch AuthError.sessionExpired {
+                notifySessionExpired()
+                throw ConvexError.unauthenticated
+            } catch {
+                // Network hiccup — let the real call decide.
+            }
+            return
+        }
+        guard let expiresAt = tokenExpiresAt,
+              expiresAt.timeIntervalSinceNow < refreshLeeway else { return }
+        guard refreshToken != nil else {
+            // Token is expired and cannot be renewed — surface immediately.
+            if expiresAt.timeIntervalSinceNow < 0 {
+                notifySessionExpired()
+                throw ConvexError.unauthenticated
+            }
+            return
+        }
+        do {
+            _ = try await refreshAccessToken()
+        } catch AuthError.sessionExpired {
+            notifySessionExpired()
+            throw ConvexError.unauthenticated
+        } catch {
+            // Network hiccup — let the real call decide.
+        }
+    }
+    
+    /// De-duplicated refresh: concurrent callers await the same task.
+    private func refreshAccessToken() async throws -> String {
+        if let task = refreshTask {
+            return try await task.value
+        }
+        guard let refresh = refreshToken, !refresh.isEmpty else {
+            throw AuthError.sessionExpired
+        }
+        let task = Task<String, Error> {
+            let result = try await self.refreshSession(using: refresh)
+            return result.token
+        }
+        refreshTask = task
+        defer { refreshTask = nil }
+        return try await task.value
+    }
+    
+    private func notifySessionExpired() {
+        authToken = nil
+        refreshToken = nil
+        tokenExpiresAt = nil
+        invalidateSitesCache()
+        sessionExpiredHandler?()
+    }
+    
     // MARK: - Authentication
     
     public func login(email: String, password: String) async throws -> (token: String, email: String) {
@@ -109,61 +405,26 @@ public final class ConvexAPIService {
     }
     
     /// Exchange a Convex Auth refresh token for a new access token (and rotated refresh token).
+    /// Installs the new tokens on the service and persists them to the Keychain.
     public func refreshSession(using refreshToken: String) async throws -> (token: String, refreshToken: String?) {
         if useMockData {
             let token = "mock_token_\(UUID().uuidString)"
-            self.authToken = token
+            setSession(token: token, refreshToken: refreshToken)
             return (token, refreshToken)
         }
         
-        guard let url = URL(string: "\(baseURLString)/api/action") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        
-        let body: [String: Any] = [
-            "path": "auth:signIn",
-            "args": [
-                "refreshToken": refreshToken
-            ]
-        ]
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 30
-        
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            throw AuthError.network(error.localizedDescription)
-        }
-        
-        let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            let snippet = String(data: data, encoding: .utf8)?.prefix(200) ?? ""
-            throw AuthError.server("Unexpected refresh response (HTTP \(httpStatus)): \(snippet)")
-        }
+        let json = try await postAuthAction(args: ["refreshToken": refreshToken], timeout: 30)
         
         if let errMsg = json["errorMessage"] as? String, !errMsg.isEmpty {
             throw AuthError.sessionExpired
         }
-        
-        let status = json["status"] as? String
-        guard status == "success" else {
+        guard (json["status"] as? String) == "success",
+              let value = json["value"] as? [String: Any] else {
             throw AuthError.sessionExpired
         }
-        
-        guard let value = json["value"] as? [String: Any] else {
-            throw AuthError.sessionExpired
-        }
-        
         if let tokensNull = value["tokens"], tokensNull is NSNull {
             throw AuthError.sessionExpired
         }
-        
         guard let token = extractAuthToken(from: value) else {
             throw AuthError.sessionExpired
         }
@@ -174,100 +435,40 @@ public final class ConvexAPIService {
             newRefresh = refresh
         }
         
-        self.authToken = token
+        setSession(token: token, refreshToken: newRefresh ?? refreshToken)
+        KeychainStore.set(token, forKey: KeychainStore.Key.authToken)
+        if let newRefresh {
+            KeychainStore.set(newRefresh, forKey: KeychainStore.Key.refreshToken)
+        }
+        tokensRotatedHandler?(token, newRefresh)
         return (token, newRefresh)
     }
     
     /// Lightweight authenticated probe — throws if the current Bearer token is rejected.
+    /// Only needed for the "stored access token, no refresh token" fallback path.
     public func validateAuthenticatedSession() async throws {
         if useMockData { return }
-        
-        guard authToken != nil else {
-            throw AuthError.sessionExpired
-        }
-        
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        
-        let body: [String: Any] = ["path": "sites:list", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 20
-        
-        let data: Data
-        let response: URLResponse
+        guard authToken != nil else { throw AuthError.sessionExpired }
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            throw AuthError.network(error.localizedDescription)
-        }
-        
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if code == 401 || code == 403 {
+            _ = try await perform(.query, "sites:list", args: [:], timeout: 20)
+        } catch ConvexError.unauthenticated {
             throw AuthError.sessionExpired
-        }
-        
-        guard let json = await Self.jsonObject(from: data) else {
-            throw AuthError.server("Session check returned invalid JSON.")
-        }
-        
-        if let errorMessage = json["errorMessage"] as? String, !errorMessage.isEmpty {
-            let lower = errorMessage.lowercased()
-            if lower.contains("unauthenticated")
-                || lower.contains("unauthorized")
-                || lower.contains("not authenticated")
-                || lower.contains("invalid token")
-                || lower.contains("jwt") {
-                throw AuthError.sessionExpired
-            }
-            throw AuthError.server(errorMessage)
-        }
-        
-        guard code == 200,
-              let status = json["status"] as? String,
-              status == "success" else {
-            if code != 200 {
-                throw AuthError.sessionExpired
-            }
-            throw AuthError.server("Session check failed.")
+        } catch ConvexError.network(let message) {
+            throw AuthError.network(message)
+        } catch let error as ConvexError {
+            throw AuthError.server(error.errorDescription ?? "Session check failed.")
         }
     }
     
-    private func authenticate(
-        email: String,
-        password: String,
-        flow: String
-    ) async throws -> (token: String, email: String) {
-        if useMockData {
-            let token = "mock_token_\(UUID().uuidString)"
-            self.authToken = token
-            return (token, email)
-        }
-        
+    private func postAuthAction(args: [String: Any], timeout: TimeInterval) async throws -> [String: Any] {
         guard let url = URL(string: "\(baseURLString)/api/action") else {
             throw AuthError.server("Invalid Convex URL.")
         }
-        
-        let body: [String: Any] = [
-            "path": "auth:signIn",
-            "args": [
-                "provider": "password",
-                "params": [
-                    "flow": flow,
-                    "email": email,
-                    "password": password
-                ]
-            ]
-        ]
-        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 30
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["path": "auth:signIn", "args": args])
+        request.timeoutInterval = timeout
         
         let data: Data
         let response: URLResponse
@@ -278,40 +479,61 @@ public final class ConvexAPIService {
         }
         
         let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let json = await Self.jsonObject(from: data) else {
             let snippet = String(data: data, encoding: .utf8)?.prefix(200) ?? ""
             throw AuthError.server("Unexpected response (HTTP \(httpStatus)): \(snippet)")
         }
+        return json
+    }
+    
+    private func authenticate(
+        email: String,
+        password: String,
+        flow: String
+    ) async throws -> (token: String, email: String) {
+        if useMockData {
+            let token = "mock_token_\(UUID().uuidString)"
+            setSession(token: token, refreshToken: nil)
+            return (token, email)
+        }
+        
+        let json = try await postAuthAction(
+            args: [
+                "provider": "password",
+                "params": [
+                    "flow": flow,
+                    "email": email,
+                    "password": password
+                ]
+            ],
+            timeout: 30
+        )
         
         if let errMsg = json["errorMessage"] as? String, !errMsg.isEmpty {
             throw mapAuthServerError(errMsg, flow: flow)
         }
-        
-        let status = json["status"] as? String
-        guard status == "success" else {
-            let snippet = String(data: data, encoding: .utf8)?.prefix(200) ?? "HTTP \(httpStatus)"
-            throw AuthError.server("Sign-in failed: \(snippet)")
+        guard (json["status"] as? String) == "success" else {
+            throw AuthError.server("Sign-in failed.")
         }
-        
         guard let value = json["value"] as? [String: Any] else {
             throw AuthError.missingToken
         }
-        
         // Convex Auth may return { tokens: null } when email verification is required
         if let tokensNull = value["tokens"], tokensNull is NSNull {
             throw AuthError.server("Additional verification required. Complete sign-in on the web app first.")
         }
-        
         guard let token = extractAuthToken(from: value) else {
             throw AuthError.missingToken
         }
         
+        var refresh: String? = nil
         if let tokens = value["tokens"] as? [String: Any],
-           let refresh = tokens["refreshToken"] as? String {
-            KeychainStore.set(refresh, forKey: KeychainStore.Key.refreshToken)
+           let r = tokens["refreshToken"] as? String, !r.isEmpty {
+            refresh = r
+            KeychainStore.set(r, forKey: KeychainStore.Key.refreshToken)
         }
         
-        self.authToken = token
+        setSession(token: token, refreshToken: refresh)
         return (token, email)
     }
     
@@ -343,243 +565,179 @@ public final class ConvexAPIService {
     
     // MARK: - Sites
     
-    public func fetchSites() async throws -> [CleaningSite] {
+    /// Cached for 60 s; concurrent callers share one in-flight request.
+    public func fetchSites(force: Bool = false) async throws -> [CleaningSite] {
         if useMockData { return MockDataService.shared.sampleSites }
         
-        if let cached = cachedSites,
+        if !force,
+           let cached = cachedSites,
            let fetchedAt = cachedSitesFetchedAt,
            Date().timeIntervalSince(fetchedAt) < sitesCacheTTL {
             return cached
         }
-        
-        await ensureAuthenticated()
-        
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            return cachedSites ?? []
+        if let task = sitesTask {
+            return try await task.value
         }
         
-        let body: [String: Any] = ["path": "sites:list", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        let task = Task<[CleaningSite], Error> {
+            let raw = try await self.query("sites:list")
+            let rawSites = self.listValue(raw)
+            return await Task.detached(priority: .userInitiated) {
+                rawSites.map(ConvexAPIService.parseSite)
+            }.value
+        }
+        sitesTask = task
+        defer { sitesTask = nil }
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-                return cachedSites ?? []
-            }
-            if let json = await Self.jsonObject(from: data),
-               let status = json["status"] as? String, status == "success",
-               let rawSites = json["value"] as? [[String: Any]] {
-                let sites = await Task.detached(priority: .userInitiated) {
-                    rawSites.map { item -> CleaningSite in
-                        CleaningSite(
-                            id: item["id"] as? String ?? UUID().uuidString,
-                            slug: item["slug"] as? String ?? "site",
-                            name: item["name"] as? String ?? "Cleaning Site",
-                            domain: item["domain"] as? String ?? "example.com",
-                            accentHex: item["accent_color"] as? String ?? "#0284C7",
-                            contactEmail: item["contact_email"] as? String,
-                            phoneNumber: item["phone_number"] as? String,
-                            hostingProvider: item["hosting_provider"] as? String ?? "cloudflare",
-                            emailConfigured: item["email_configured"] as? Bool ?? true
-                        )
-                    }
-                }.value
-                cachedSites = sites
-                cachedSitesFetchedAt = Date()
-                return sites
-            }
-        } catch { }
-        
-        return cachedSites ?? []
+            let sites = try await task.value
+            cachedSites = sites
+            cachedSitesFetchedAt = Date()
+            return sites
+        } catch {
+            if let cached = cachedSites { return cached }
+            throw error
+        }
+    }
+    
+    nonisolated private static func parseSite(_ item: [String: Any]) -> CleaningSite {
+        CleaningSite(
+            id: item["id"] as? String ?? UUID().uuidString,
+            slug: item["slug"] as? String ?? "site",
+            name: item["name"] as? String ?? "Cleaning Site",
+            domain: item["domain"] as? String ?? "example.com",
+            accentHex: item["accent_color"] as? String ?? "#0284C7",
+            contactEmail: item["contact_email"] as? String,
+            phoneNumber: item["phone_number"] as? String,
+            hostingProvider: item["hosting_provider"] as? String ?? "cloudflare",
+            emailConfigured: item["email_configured"] as? Bool ?? true
+        )
     }
     
     // MARK: - Bookings
     
-    public func fetchBookings(includeArchived: Bool = false) async throws -> [Booking] {
+    public func fetchBookings(includeArchived: Bool = false, limit: Int? = nil) async throws -> [Booking] {
         if useMockData {
-            if includeArchived {
-                return MockDataService.shared.sampleArchivedBookings
-            }
-            return MockDataService.shared.sampleBookings
-        }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
+            return includeArchived
+                ? MockDataService.shared.sampleArchivedBookings
+                : MockDataService.shared.sampleBookings
         }
         
         var args: [String: Any] = [:]
         if includeArchived { args["includeArchived"] = true }
-        let body: [String: Any] = ["path": "bookings:list", "args": args]
+        if let limit { args["limit"] = limit }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            let detail = String(data: data, encoding: .utf8)?.prefix(200) ?? ""
-            throw AuthError.server("bookings:list failed (\(code)) \(detail)")
-        }
-        
-        guard let json = await Self.jsonObject(from: data) else {
-            throw AuthError.server("bookings:list returned invalid JSON.")
-        }
-        
-        if let errorMessage = json["errorMessage"] as? String, !errorMessage.isEmpty {
-            throw AuthError.server(errorMessage)
-        }
-        
-        guard let status = json["status"] as? String, status == "success",
-              let rawBookings = json["value"] as? [[String: Any]] else {
-            throw AuthError.server("bookings:list returned an unexpected payload.")
-        }
-        
+        let raw = listValue(try await query("bookings:list", args: args))
         return await Task.detached(priority: .userInitiated) {
-            rawBookings.compactMap { item -> Booking? in
-                // Convex may return id as String or nested; accept common shapes.
-                let id = (item["id"] as? String)
-                    ?? (item["_id"] as? String)
-                    ?? ((item["_id"] as? [String: Any])?["id"] as? String)
-                let siteId = (item["site_id"] as? String)
-                    ?? (item["siteId"] as? String)
-                    ?? ((item["site_id"] as? [String: Any])?["id"] as? String)
-                guard let id, let siteId,
-                      let custName = item["customer_name"] as? String
-                        ?? item["customerName"] as? String,
-                      let service = item["service_type"] as? String
-                        ?? item["serviceType"] as? String else {
-                    return nil
-                }
-                
-                let statusStr = item["status"] as? String ?? "new"
-                let status = BookingStatus(rawValue: statusStr) ?? .new
-                
-                var siteName = "Cleaning Site"
-                var siteSlug = "unknown"
-                if let siteObj = item["site"] as? [String: Any] {
-                    siteName = siteObj["name"] as? String ?? siteName
-                    siteSlug = siteObj["slug"] as? String ?? siteSlug
-                }
-                
-                var quoteObj: BookingQuote? = nil
-                if let q = item["quote"] as? [String: Any] {
-                    var addOnsList: [QuoteAddOn]? = nil
-                    if let arr = q["add_ons"] as? [[String: Any]] {
-                        addOnsList = arr.compactMap { a in
-                            guard let lbl = a["label"] as? String else { return nil }
-                            return QuoteAddOn(label: lbl, price: a["price"] as? Double, quantity: a["quantity"] as? Int)
-                        }
-                    }
-                    
-                    quoteObj = BookingQuote(
-                        estimate: q["estimate"] as? Double,
-                        estimateLow: q["estimate_low"] as? Double,
-                        estimateHigh: q["estimate_high"] as? Double,
-                        recurringEstimate: q["recurring_estimate"] as? Double,
-                        currency: q["currency"] as? String ?? "USD",
-                        serviceLevel: q["service_level"] as? String,
-                        frequency: q["frequency"] as? String,
-                        addOns: addOnsList,
-                        internalQuote: q["internal"] as? Bool
-                    )
-                }
-                
-                var propObj: PropertyDetails? = nil
-                if let p = item["property"] as? [String: Any] {
-                    propObj = PropertyDetails(
-                        bedrooms: p["bedrooms"] as? Int,
-                        bathrooms: p["bathrooms"] as? Int,
-                        squareFeet: p["square_feet"] as? Int,
-                        sizeLabel: p["size_label"] as? String,
-                        homeType: p["home_type"] as? String,
-                        condition: p["condition"] as? String,
-                        occupants: p["occupants"] as? Int,
-                        lastCleaned: p["last_cleaned"] as? String,
-                        excludedAreas: p["excluded_areas"] as? [String]
-                    )
-                }
-                
-                let schedStartMs = item["scheduled_start_at_ms"] as? Double
-                let schedEndMs = item["scheduled_end_at_ms"] as? Double
-                let schedStart = schedStartMs != nil ? Date(timeIntervalSince1970: schedStartMs! / 1000.0) : nil
-                let schedEnd = schedEndMs != nil ? Date(timeIntervalSince1970: schedEndMs! / 1000.0) : nil
-                
-                return Booking(
-                    id: id,
-                    siteId: siteId,
-                    siteSlug: siteSlug,
-                    siteName: siteName,
-                    status: status,
-                    customerName: custName,
-                    email: item["email"] as? String,
-                    phone: item["phone"] as? String,
-                    address: item["address"] as? String,
-                    serviceType: service,
-                    preferredDate: item["preferred_date"] as? String,
-                    preferredTime: item["preferred_time"] as? String,
-                    scheduledStartAt: schedStart,
-                    scheduledEndAt: schedEnd,
-                    scheduledStartAtMs: schedStartMs,
-                    scheduledEndAtMs: schedEndMs,
-                    timezone: item["timezone"] as? String,
-                    notes: item["notes"] as? String,
-                    internalNotes: item["internal_notes"] as? String,
-                    property: propObj,
-                    quote: quoteObj
-                )
-            }
+            raw.compactMap(ConvexAPIService.parseBooking)
         }.value
     }
-
+    
+    nonisolated private static func parseQuote(_ q: [String: Any]) -> BookingQuote {
+        var addOnsList: [QuoteAddOn]? = nil
+        if let arr = q["add_ons"] as? [[String: Any]] {
+            addOnsList = arr.compactMap { a in
+                guard let lbl = a["label"] as? String else { return nil }
+                return QuoteAddOn(label: lbl, price: a["price"] as? Double, quantity: a["quantity"] as? Int)
+            }
+        }
+        return BookingQuote(
+            estimate: q["estimate"] as? Double,
+            estimateLow: q["estimate_low"] as? Double,
+            estimateHigh: q["estimate_high"] as? Double,
+            recurringEstimate: q["recurring_estimate"] as? Double,
+            currency: q["currency"] as? String ?? "USD",
+            serviceLevel: q["service_level"] as? String,
+            frequency: q["frequency"] as? String,
+            addOns: addOnsList,
+            internalQuote: q["internal"] as? Bool
+        )
+    }
+    
+    nonisolated private static func parseProperty(_ p: [String: Any]) -> PropertyDetails {
+        PropertyDetails(
+            bedrooms: p["bedrooms"] as? Int,
+            bathrooms: p["bathrooms"] as? Int,
+            squareFeet: p["square_feet"] as? Int,
+            sizeLabel: p["size_label"] as? String,
+            homeType: p["home_type"] as? String,
+            condition: p["condition"] as? String,
+            occupants: p["occupants"] as? Int,
+            lastCleaned: p["last_cleaned"] as? String,
+            excludedAreas: p["excluded_areas"] as? [String]
+        )
+    }
+    
+    nonisolated static func parseBooking(_ item: [String: Any]) -> Booking? {
+        let id = (item["id"] as? String)
+            ?? (item["_id"] as? String)
+            ?? ((item["_id"] as? [String: Any])?["id"] as? String)
+        let siteId = (item["site_id"] as? String)
+            ?? (item["siteId"] as? String)
+            ?? ((item["site_id"] as? [String: Any])?["id"] as? String)
+        guard let id, let siteId,
+              let custName = item["customer_name"] as? String ?? item["customerName"] as? String,
+              let service = item["service_type"] as? String ?? item["serviceType"] as? String else {
+            return nil
+        }
+        
+        let status = BookingStatus(rawValue: item["status"] as? String ?? "new") ?? .new
+        
+        var siteName = "Cleaning Site"
+        var siteSlug = "unknown"
+        if let siteObj = item["site"] as? [String: Any] {
+            siteName = siteObj["name"] as? String ?? siteName
+            siteSlug = siteObj["slug"] as? String ?? siteSlug
+        }
+        
+        let quoteObj = (item["quote"] as? [String: Any]).map(parseQuote)
+        let propObj = (item["property"] as? [String: Any]).map(parseProperty)
+        
+        let schedStartMs = item["scheduled_start_at_ms"] as? Double
+        let schedEndMs = item["scheduled_end_at_ms"] as? Double
+        let schedStart = schedStartMs.map { Date(timeIntervalSince1970: $0 / 1000.0) }
+        let schedEnd = schedEndMs.map { Date(timeIntervalSince1970: $0 / 1000.0) }
+        let archivedAt = (item["archived_at"] as? String).flatMap(parseISO8601)
+        let createdAt = (item["created_at"] as? String).flatMap(parseISO8601) ?? Date()
+        let updatedAt = (item["updated_at"] as? String).flatMap(parseISO8601) ?? createdAt
+        
+        return Booking(
+            id: id,
+            siteId: siteId,
+            siteSlug: siteSlug,
+            siteName: siteName,
+            status: status,
+            customerName: custName,
+            email: item["email"] as? String,
+            phone: item["phone"] as? String,
+            address: item["address"] as? String,
+            serviceType: service,
+            preferredDate: item["preferred_date"] as? String,
+            preferredTime: item["preferred_time"] as? String,
+            scheduledStartAt: schedStart,
+            scheduledEndAt: schedEnd,
+            scheduledStartAtMs: schedStartMs,
+            scheduledEndAtMs: schedEndMs,
+            timezone: item["timezone"] as? String,
+            notes: item["notes"] as? String,
+            internalNotes: item["internal_notes"] as? String,
+            property: propObj,
+            quote: quoteObj,
+            archivedAt: archivedAt,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+    
     public func fetchPartialLeads(siteSlug: String? = nil) async throws -> [PartialLead] {
-        if useMockData {
-            return []
-        }
-
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-
+        if useMockData { return [] }
+        
         var args: [String: Any] = [:]
-        if let siteSlug, !siteSlug.isEmpty {
-            args["siteSlug"] = siteSlug
-        }
-        let body: [String: Any] = ["path": "partialLeads:list", "args": args]
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            let detail = String(data: data, encoding: .utf8)?.prefix(200) ?? ""
-            throw AuthError.server("partialLeads:list failed (\(code)) \(detail)")
-        }
-
-        guard let json = await Self.jsonObject(from: data) else {
-            throw AuthError.server("partialLeads:list returned invalid JSON.")
-        }
-
-        if let errorMessage = json["errorMessage"] as? String, !errorMessage.isEmpty {
-            throw AuthError.server(errorMessage)
-        }
-
-        guard let status = json["status"] as? String, status == "success",
-              let rawLeads = json["value"] as? [[String: Any]] else {
-            throw AuthError.server("partialLeads:list returned an unexpected payload.")
-        }
-
+        if let siteSlug, !siteSlug.isEmpty { args["siteSlug"] = siteSlug }
+        
+        let raw = listValue(try await query("partialLeads:list", args: args))
         return await Task.detached(priority: .userInitiated) {
-            rawLeads.compactMap { item -> PartialLead? in
+            raw.compactMap { item -> PartialLead? in
                 let id = (item["id"] as? String)
                     ?? (item["_id"] as? String)
                     ?? ((item["_id"] as? [String: Any])?["id"] as? String)
@@ -588,58 +746,17 @@ public final class ConvexAPIService {
                     ?? ((item["site_id"] as? [String: Any])?["id"] as? String)
                 let sessionKey = item["session_key"] as? String ?? item["sessionKey"] as? String
                 guard let id, let siteId, let sessionKey else { return nil }
-
+                
                 var siteName = "Cleaning Site"
                 var siteSlugValue = "unknown"
                 if let siteObj = item["site"] as? [String: Any] {
                     siteName = siteObj["name"] as? String ?? siteName
                     siteSlugValue = siteObj["slug"] as? String ?? siteSlugValue
                 }
-
-                var quoteObj: BookingQuote? = nil
-                if let q = item["quote"] as? [String: Any] {
-                    var addOnsList: [QuoteAddOn]? = nil
-                    if let arr = q["add_ons"] as? [[String: Any]] {
-                        addOnsList = arr.compactMap { a in
-                            guard let lbl = a["label"] as? String else { return nil }
-                            return QuoteAddOn(
-                                label: lbl,
-                                price: a["price"] as? Double,
-                                quantity: a["quantity"] as? Int
-                            )
-                        }
-                    }
-                    quoteObj = BookingQuote(
-                        estimate: q["estimate"] as? Double,
-                        estimateLow: q["estimate_low"] as? Double,
-                        estimateHigh: q["estimate_high"] as? Double,
-                        recurringEstimate: q["recurring_estimate"] as? Double,
-                        currency: q["currency"] as? String ?? "USD",
-                        serviceLevel: q["service_level"] as? String,
-                        frequency: q["frequency"] as? String,
-                        addOns: addOnsList,
-                        internalQuote: q["internal"] as? Bool
-                    )
-                }
-
-                var propObj: PropertyDetails? = nil
-                if let p = item["property"] as? [String: Any] {
-                    propObj = PropertyDetails(
-                        bedrooms: p["bedrooms"] as? Int,
-                        bathrooms: p["bathrooms"] as? Int,
-                        squareFeet: p["square_feet"] as? Int,
-                        sizeLabel: p["size_label"] as? String,
-                        homeType: p["home_type"] as? String,
-                        condition: p["condition"] as? String,
-                        occupants: p["occupants"] as? Int,
-                        lastCleaned: p["last_cleaned"] as? String,
-                        excludedAreas: p["excluded_areas"] as? [String]
-                    )
-                }
-
-                let createdAt = (item["created_at"] as? String).flatMap(Self.parseISO8601) ?? Date()
-                let updatedAt = (item["updated_at"] as? String).flatMap(Self.parseISO8601) ?? createdAt
-
+                
+                let createdAt = (item["created_at"] as? String).flatMap(ConvexAPIService.parseISO8601) ?? Date()
+                let updatedAt = (item["updated_at"] as? String).flatMap(ConvexAPIService.parseISO8601) ?? createdAt
+                
                 return PartialLead(
                     id: id,
                     siteId: siteId,
@@ -654,8 +771,8 @@ public final class ConvexAPIService {
                     preferredDate: item["preferred_date"] as? String,
                     preferredTime: item["preferred_time"] as? String,
                     notes: item["notes"] as? String,
-                    property: propObj,
-                    quote: quoteObj,
+                    property: (item["property"] as? [String: Any]).map(ConvexAPIService.parseProperty),
+                    quote: (item["quote"] as? [String: Any]).map(ConvexAPIService.parseQuote),
                     intent: item["intent"] as? String,
                     lastStep: item["last_step"] as? String,
                     createdAt: createdAt,
@@ -665,29 +782,14 @@ public final class ConvexAPIService {
         }.value
     }
     
-    public func updateBookingStatus(bookingId: String, newStatus: BookingStatus) async throws -> Bool {
+    public func updateBookingStatus(bookingId: String, newStatus: BookingStatus) async throws {
         if useMockData {
             if let idx = MockDataService.shared.sampleBookings.firstIndex(where: { $0.id == bookingId }) {
                 MockDataService.shared.sampleBookings[idx].status = newStatus
             }
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "bookings:updateStatus",
-            "args": ["bookingId": bookingId, "status": newStatus.rawValue]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("bookings:updateStatus", args: ["bookingId": bookingId, "status": newStatus.rawValue])
     }
     
     public func scheduleBooking(
@@ -697,7 +799,7 @@ public final class ConvexAPIService {
         timezone: String = "America/New_York",
         confirm: Bool = true,
         alertOffsetsMinutes: [Int] = [1440, 60]
-    ) async throws -> Bool {
+    ) async throws {
         if useMockData {
             if let idx = MockDataService.shared.sampleBookings.firstIndex(where: { $0.id == bookingId }) {
                 MockDataService.shared.sampleBookings[idx].scheduledStartAtMs = scheduledStartAt
@@ -709,168 +811,88 @@ public final class ConvexAPIService {
                     MockDataService.shared.sampleBookings[idx].status = .confirmed
                 }
             }
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "bookings:schedule",
-            "args": [
-                "bookingId": bookingId,
-                "scheduledStartAt": scheduledStartAt,
-                "scheduledEndAt": scheduledEndAt,
-                "timezone": timezone,
-                "confirm": confirm,
-                "alertOffsetsMinutes": alertOffsetsMinutes
-            ]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("bookings:schedule", args: [
+            "bookingId": bookingId,
+            "scheduledStartAt": scheduledStartAt,
+            "scheduledEndAt": scheduledEndAt,
+            "timezone": timezone,
+            "confirm": confirm,
+            "alertOffsetsMinutes": alertOffsetsMinutes
+        ])
     }
     
-    public func saveInternalNotes(bookingId: String, notes: String) async throws -> Bool {
+    public func saveInternalNotes(bookingId: String, notes: String) async throws {
         if useMockData {
             if let idx = MockDataService.shared.sampleBookings.firstIndex(where: { $0.id == bookingId }) {
                 MockDataService.shared.sampleBookings[idx].internalNotes = notes
             }
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "bookings:saveInternalNotes",
-            "args": ["bookingId": bookingId, "internalNotes": notes]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("bookings:updateInternalNotes", args: ["bookingId": bookingId, "notes": notes])
     }
     
-    public func archiveBooking(bookingId: String) async throws -> Bool {
+    public func archiveBooking(bookingId: String) async throws {
         if useMockData {
             if let idx = MockDataService.shared.sampleBookings.firstIndex(where: { $0.id == bookingId }) {
                 var b = MockDataService.shared.sampleBookings.remove(at: idx)
                 b.archivedAt = Date()
                 MockDataService.shared.sampleArchivedBookings.insert(b, at: 0)
             }
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "bookings:archive",
-            "args": ["bookingId": bookingId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("bookings:archive", args: ["bookingId": bookingId])
     }
     
-    public func unarchiveBooking(bookingId: String) async throws -> Bool {
+    public func unarchiveBooking(bookingId: String) async throws {
         if useMockData {
             if let idx = MockDataService.shared.sampleArchivedBookings.firstIndex(where: { $0.id == bookingId }) {
                 var b = MockDataService.shared.sampleArchivedBookings.remove(at: idx)
                 b.archivedAt = nil
                 MockDataService.shared.sampleBookings.insert(b, at: 0)
             }
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "bookings:unarchive",
-            "args": ["bookingId": bookingId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("bookings:unarchive", args: ["bookingId": bookingId])
     }
     
-    public func deleteBookingPermanently(bookingId: String) async throws -> Bool {
+    public func deleteBookingPermanently(bookingId: String) async throws {
         if useMockData {
             MockDataService.shared.sampleBookings.removeAll(where: { $0.id == bookingId })
             MockDataService.shared.sampleArchivedBookings.removeAll(where: { $0.id == bookingId })
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "bookings:remove",
-            "args": ["bookingId": bookingId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("bookings:remove", args: ["bookingId": bookingId])
     }
     
-    public func createBooking(_ booking: Booking) async throws -> Bool {
+    /// Manager-created booking via `bookings:createManual` (no customer notifications).
+    /// Returns the server booking (real Convex id) to replace the optimistic row.
+    public func createBooking(from draft: Booking) async throws -> Booking {
         if useMockData {
-            MockDataService.shared.sampleBookings.insert(booking, at: 0)
-            return true
+            MockDataService.shared.sampleBookings.insert(draft, at: 0)
+            return draft
         }
         
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "bookings:createPublic",
-            "args": [
-                "siteSlug": booking.siteSlug,
-                "apiKeyHash": "2421ab88cd45273d60c96dc03521b771978f911fa726e9c74d7097f9b85f84ee",
-                "customerName": booking.customerName,
-                "email": booking.email ?? "customer@example.com",
-                "phone": booking.phone ?? "+14075550100",
-                "address": booking.address ?? "100 Main St, Sanford FL",
-                "serviceType": booking.serviceType,
-                "preferredDate": booking.preferredDate ?? "2026-09-10",
-                "notes": booking.notes ?? ""
-            ]
+        var args: [String: Any] = [
+            "siteId": draft.siteId,
+            "customerName": draft.customerName,
+            "serviceType": draft.serviceType,
+            "status": draft.status.rawValue
         ]
+        if let v = draft.email, !v.isEmpty { args["email"] = v }
+        if let v = draft.phone, !v.isEmpty { args["phone"] = v }
+        if let v = draft.address, !v.isEmpty { args["address"] = v }
+        if let v = draft.preferredDate, !v.isEmpty { args["preferredDate"] = v }
+        if let v = draft.preferredTime, !v.isEmpty { args["preferredTime"] = v }
+        if let v = draft.notes, !v.isEmpty { args["notes"] = v }
+        if let v = draft.internalNotes, !v.isEmpty { args["internalNotes"] = v }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        guard let value = try await mutation("bookings:createManual", args: args) as? [String: Any],
+              let booking = Self.parseBooking(value) else {
+            throw ConvexError.server("bookings:createManual returned an unexpected payload.")
+        }
+        return booking
     }
     
     // MARK: - Calendar & Reminders
@@ -923,49 +945,32 @@ public final class ConvexAPIService {
             return events
         }
         
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else { return [] }
-        let body: [String: Any] = [
-            "path": "calendar:listInRange",
-            "args": ["startAt": startAt, "endAt": endAt]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let rawEvents = json["value"] as? [[String: Any]] {
-                return rawEvents.compactMap { ev in
-                    guard let id = ev["id"] as? String,
-                          let title = ev["title"] as? String,
-                          let startMs = ev["start_at_ms"] as? Double else { return nil }
-                    let kindStr = ev["kind"] as? String ?? "booking_scheduled"
-                    let kind = CalendarEventKind(rawValue: kindStr) ?? .bookingScheduled
-                    var siteName: String? = nil
-                    if let s = ev["site"] as? [String: Any] { siteName = s["name"] as? String }
-                    
-                    return CalendarEvent(
-                        id: id,
-                        kind: kind,
-                        title: title,
-                        subtitle: ev["subtitle"] as? String,
-                        startAtMs: startMs,
-                        endAtMs: ev["end_at_ms"] as? Double,
-                        color: ev["color"] as? String ?? "#0284C7",
-                        bookingId: ev["booking_id"] as? String,
-                        siteName: siteName,
-                        allDay: ev["all_day"] as? Bool ?? false
-                    )
-                }
+        let raw = listValue(try await query("calendar:listInRange", args: ["startAt": startAt, "endAt": endAt]))
+        return await Task.detached(priority: .userInitiated) {
+            raw.compactMap { ev -> CalendarEvent? in
+                guard let id = ev["id"] as? String,
+                      let title = ev["title"] as? String,
+                      let startMs = ev["start_at_ms"] as? Double else { return nil }
+                let kind = CalendarEventKind(rawValue: ev["kind"] as? String ?? "booking_scheduled") ?? .bookingScheduled
+                var siteName: String? = nil
+                if let s = ev["site"] as? [String: Any] { siteName = s["name"] as? String }
+                return CalendarEvent(
+                    id: id,
+                    kind: kind,
+                    title: title,
+                    subtitle: ev["subtitle"] as? String,
+                    startAtMs: startMs,
+                    endAtMs: ev["end_at_ms"] as? Double,
+                    color: ev["color"] as? String ?? "#0284C7",
+                    bookingId: ev["booking_id"] as? String,
+                    siteName: siteName,
+                    allDay: ev["all_day"] as? Bool ?? false
+                )
             }
-        } catch {}
-        return []
+        }.value
     }
     
+    /// `bookingId == nil` → `reminders:listPending` (upcoming across all bookings).
     public func fetchReminders(bookingId: String? = nil) async throws -> [ReminderItem] {
         if useMockData {
             if let bid = bookingId {
@@ -974,122 +979,61 @@ public final class ConvexAPIService {
             return MockDataService.shared.sampleReminders
         }
         
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else { return [] }
-        var args: [String: Any] = [:]
-        if let bid = bookingId { args["bookingId"] = bid }
-        let body: [String: Any] = [
-            "path": bookingId != nil ? "reminders:listByBooking" : "reminders:listPending",
-            "args": args
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let rawList = json["value"] as? [[String: Any]] {
-                return rawList.compactMap { r in
-                    guard let id = r["id"] as? String,
-                          let title = r["title"] as? String,
-                          let dueMs = r["due_at_ms"] as? Double else { return nil }
-                    return ReminderItem(
-                        id: id,
-                        title: title,
-                        notes: r["notes"] as? String,
-                        dueAtMs: dueMs,
-                        status: r["status"] as? String ?? "pending",
-                        offsetMinutes: r["offset_minutes"] as? Int,
-                        bookingId: r["booking_id"] as? String,
-                        allDay: r["all_day"] as? Bool ?? false
-                    )
-                }
-            }
-        } catch {}
-        return []
+        let raw: [[String: Any]]
+        if let bid = bookingId {
+            raw = listValue(try await query("reminders:listByBooking", args: ["bookingId": bid]))
+        } else {
+            raw = listValue(try await query("reminders:listPending"))
+        }
+        return raw.compactMap { r in
+            guard let id = r["id"] as? String,
+                  let title = r["title"] as? String,
+                  let dueMs = r["due_at_ms"] as? Double else { return nil }
+            return ReminderItem(
+                id: id,
+                title: title,
+                notes: r["notes"] as? String,
+                dueAtMs: dueMs,
+                status: r["status"] as? String ?? "pending",
+                offsetMinutes: r["offset_minutes"] as? Int,
+                bookingId: r["booking_id"] as? String,
+                allDay: r["all_day"] as? Bool ?? false
+            )
+        }
     }
     
-    public func createReminder(title: String, notes: String? = nil, dueAt: Double, allDay: Bool = false, bookingId: String? = nil) async throws -> Bool {
+    public func createReminder(title: String, notes: String? = nil, dueAt: Double, allDay: Bool = false, bookingId: String? = nil) async throws {
         if useMockData {
             let rem = ReminderItem(id: "rem_\(UUID().uuidString.prefix(6))", title: title, notes: notes, dueAtMs: dueAt, bookingId: bookingId, allDay: allDay)
             MockDataService.shared.sampleReminders.insert(rem, at: 0)
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
         var args: [String: Any] = ["title": title, "dueAt": dueAt, "allDay": allDay]
         if let n = notes, !n.isEmpty { args["notes"] = n }
         if let b = bookingId { args["bookingId"] = b }
-        
-        let body: [String: Any] = ["path": "reminders:create", "args": args]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("reminders:create", args: args)
     }
     
-    public func removeReminder(reminderId: String) async throws -> Bool {
+    public func removeReminder(reminderId: String) async throws {
         if useMockData {
             MockDataService.shared.sampleReminders.removeAll(where: { $0.id == reminderId })
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "reminders:remove",
-            "args": ["reminderId": reminderId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("reminders:remove", args: ["reminderId": reminderId])
     }
     
     // MARK: - Email Suite (SpaceMail)
     
     public func fetchEmailMailboxes() async throws -> [EmailMailbox] {
         if useMockData { return MockDataService.shared.sampleMailboxes }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        let body: [String: Any] = ["path": "email:listMailboxes", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            throw AuthError.server("email:listMailboxes failed (\(code))")
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rawList = json["value"] as? [[String: Any]] else {
-            throw AuthError.server("email:listMailboxes returned an unexpected payload.")
-        }
-        return rawList.compactMap { mb in
+        let raw = listValue(try await query("email:listMailboxes"))
+        return raw.compactMap { mb in
             guard let id = mb["id"] as? String,
                   let email = mb["email"] as? String else { return nil }
             return EmailMailbox(
                 id: id,
                 email: email,
-                label: mb["label"] as? String,
+                label: mb["label"] as? String ?? mb["display_name"] as? String,
                 siteSlug: mb["site_slug"] as? String,
                 siteName: mb["site_name"] as? String,
                 unreadCount: mb["unread_count"] as? Int ?? 0,
@@ -1102,171 +1046,76 @@ public final class ConvexAPIService {
         if useMockData {
             return MockDataService.shared.sampleEmailThreads.filter { $0.mailboxId == mailboxId }
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else { return [] }
-        let body: [String: Any] = [
-            "path": "email:listThreads",
-            "args": ["mailboxId": mailboxId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-            if let json = await Self.jsonObject(from: data),
-               let rawList = json["value"] as? [[String: Any]] {
-                return await Task.detached(priority: .userInitiated) {
-                    rawList.compactMap { t -> EmailThread? in
-                    guard let id = t["id"] as? String,
-                          let mbId = t["mailbox_id"] as? String else { return nil }
-                    let participants = t["participants"] as? [String] ?? []
-                    let lastMsgDateStr = t["last_message_at"] as? String
-                    let lastDate = lastMsgDateStr.flatMap { ConvexAPIService.parseISO8601($0) } ?? Date()
-                    
-                    return EmailThread(
-                        id: id,
-                        mailboxId: mbId,
-                        subject: t["subject"] as? String ?? "(no subject)",
-                        participants: participants,
-                        lastSnippet: t["last_snippet"] as? String ?? "",
-                        lastMessageAt: lastDate,
-                        unreadCount: t["unread_count"] as? Int ?? 0,
-                        siteName: t["site_name"] as? String
-                    )
-                }
-                }.value
+        let raw = listValue(try await query("email:listThreads", args: ["mailboxId": mailboxId]))
+        return await Task.detached(priority: .userInitiated) {
+            raw.compactMap { t -> EmailThread? in
+                guard let id = t["id"] as? String,
+                      let mbId = t["mailbox_id"] as? String else { return nil }
+                let lastDate = (t["last_message_at"] as? String).flatMap(ConvexAPIService.parseISO8601) ?? Date()
+                return EmailThread(
+                    id: id,
+                    mailboxId: mbId,
+                    subject: t["subject"] as? String ?? "(no subject)",
+                    participants: t["participants"] as? [String] ?? [],
+                    lastSnippet: t["last_snippet"] as? String ?? "",
+                    lastMessageAt: lastDate,
+                    unreadCount: t["unread_count"] as? Int ?? 0,
+                    siteName: t["site_name"] as? String
+                )
             }
-        } catch {}
-        return []
+        }.value
     }
     
-    public func fetchEmailMessages(threadId: String) async throws -> [EmailMessage] {
+    /// One query (`email:listThreadMessages`) returns bodies inline — no N+1 hydration.
+    /// Plain-text bodies are derived once here, off the main actor.
+    public func fetchEmailMessages(threadId: String, limit: Int = 100) async throws -> [EmailMessage] {
         if useMockData {
-            return MockDataService.shared.sampleEmailMessages[threadId] ?? []
-        }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else { return [] }
-        let body: [String: Any] = [
-            "path": "email:listMessages",
-            "args": ["threadId": threadId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-            guard let json = await Self.jsonObject(from: data),
-                  let rawList = json["value"] as? [[String: Any]] else { return [] }
-
-            let summaries: [EmailMessage] = await Task.detached(priority: .userInitiated) {
-                rawList.compactMap { m -> EmailMessage? in
-                    guard let id = m["id"] as? String,
-                          let from = m["from"] as? String else { return nil }
-                    let sentAtStr = m["sent_at"] as? String
-                    let sentDate = sentAtStr.flatMap { ConvexAPIService.parseISO8601($0) } ?? Date()
-
-                    var atts: [EmailAttachment] = []
-                    if let rawAtts = m["attachments"] as? [[String: Any]] {
-                        atts = rawAtts.compactMap { a in
-                            guard let fn = a["filename"] as? String else { return nil }
-                            return EmailAttachment(filename: fn, size: a["size"] as? Int, skipped: a["skipped"] as? Bool)
-                        }
-                    }
-
-                    return EmailMessage(
-                        id: id,
-                        from: from,
-                        subject: m["subject"] as? String ?? "",
-                        textBody: m["text_body"] as? String,
-                        htmlBody: m["html_body"] as? String,
-                        sentAt: sentDate,
-                        direction: m["direction"] as? String ?? "in",
-                        attachments: atts
-                    )
-                }
-            }.value
-
-            // Bodies are omitted from listMessages to cut Convex I/O — hydrate once per open.
-            return await withTaskGroup(of: EmailMessage.self, returning: [EmailMessage].self) { group in
-                for summary in summaries {
-                    group.addTask {
-                        if summary.textBody != nil || summary.htmlBody != nil {
-                            return summary
-                        }
-                        if let full = try? await self.fetchEmailMessageBody(messageId: summary.id) {
-                            return EmailMessage(
-                                id: summary.id,
-                                from: summary.from,
-                                subject: summary.subject,
-                                textBody: full.textBody,
-                                htmlBody: full.htmlBody,
-                                sentAt: summary.sentAt,
-                                direction: summary.direction,
-                                attachments: summary.attachments
-                            )
-                        }
-                        return summary
-                    }
-                }
-                var out: [EmailMessage] = []
-                out.reserveCapacity(summaries.count)
-                for await msg in group { out.append(msg) }
-                // Preserve thread order from summaries
-                let byId = Dictionary(uniqueKeysWithValues: out.map { ($0.id, $0) })
-                return summaries.compactMap { byId[$0.id] }
+            return (MockDataService.shared.sampleEmailMessages[threadId] ?? []).map { msg in
+                var m = msg
+                if m.plainText == nil { m.plainText = EmailMessage.derivePlainText(text: m.textBody, html: m.htmlBody) }
+                return m
             }
-        } catch {}
-        return []
-    }
-
-    private func fetchEmailMessageBody(messageId: String) async throws -> (textBody: String?, htmlBody: String?) {
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            return (nil, nil)
         }
-        let body: [String: Any] = [
-            "path": "email:getMessage",
-            "args": ["messageId": messageId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { return (nil, nil) }
-        guard let json = await Self.jsonObject(from: data),
-              let value = json["value"] as? [String: Any] else { return (nil, nil) }
-        return (value["text_body"] as? String, value["html_body"] as? String)
+        
+        let raw = listValue(try await query("email:listThreadMessages", args: ["threadId": threadId, "limit": limit]))
+        return await Task.detached(priority: .userInitiated) {
+            raw.compactMap { m -> EmailMessage? in
+                guard let id = m["id"] as? String,
+                      let from = m["from"] as? String else { return nil }
+                let sentDate = (m["sent_at"] as? String).flatMap(ConvexAPIService.parseISO8601) ?? Date()
+                var atts: [EmailAttachment] = []
+                if let rawAtts = m["attachments"] as? [[String: Any]] {
+                    atts = rawAtts.compactMap { a in
+                        guard let fn = a["filename"] as? String else { return nil }
+                        return EmailAttachment(filename: fn, size: a["size"] as? Int, skipped: a["skipped"] as? Bool)
+                    }
+                }
+                let textBody = m["text_body"] as? String
+                let htmlBody = m["html_body"] as? String
+                return EmailMessage(
+                    id: id,
+                    from: from,
+                    subject: m["subject"] as? String ?? "",
+                    textBody: textBody,
+                    htmlBody: htmlBody,
+                    sentAt: sentDate,
+                    direction: m["direction"] as? String ?? "in",
+                    attachments: atts,
+                    plainText: EmailMessage.derivePlainText(text: textBody, html: htmlBody)
+                )
+            }
+        }.value
     }
     
-    public func syncEmailMailbox(mailboxId: String) async throws -> Bool {
+    public func syncEmailMailbox(mailboxId: String) async throws {
         if useMockData {
             try? await Task.sleep(nanoseconds: 800_000_000)
-            return true
+            return
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/action") else { return false }
-        let body: [String: Any] = [
-            "path": "emailActions:syncMailboxNow",
-            "args": ["mailboxId": mailboxId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await action("emailActions:syncMailboxNow", args: ["mailboxId": mailboxId], timeout: 120)
     }
     
-    public func sendEmailReply(threadId: String, text: String) async throws -> Bool {
+    public func sendEmailReply(threadId: String, text: String) async throws {
         if useMockData {
             let newMsg = EmailMessage(
                 id: "emsg_\(UUID().uuidString.prefix(6))",
@@ -1275,108 +1124,47 @@ public final class ConvexAPIService {
                 textBody: text,
                 htmlBody: "<p>\(text)</p>",
                 sentAt: Date(),
-                direction: "out"
+                direction: "out",
+                plainText: text
             )
             if MockDataService.shared.sampleEmailMessages[threadId] != nil {
                 MockDataService.shared.sampleEmailMessages[threadId]?.append(newMsg)
             } else {
                 MockDataService.shared.sampleEmailMessages[threadId] = [newMsg]
             }
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/action") else { return false }
-        let body: [String: Any] = [
-            "path": "emailActions:sendReply",
-            "args": ["threadId": threadId, "text": text]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await action("emailActions:sendReply", args: ["threadId": threadId, "text": text], timeout: 60)
     }
     
-    public func deleteEmailThread(threadId: String) async throws -> Bool {
+    public func deleteEmailThread(threadId: String) async throws {
         if useMockData {
             MockDataService.shared.sampleEmailThreads.removeAll(where: { $0.id == threadId })
             MockDataService.shared.sampleEmailMessages.removeValue(forKey: threadId)
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/action") else { return false }
-        let body: [String: Any] = [
-            "path": "emailActions:deleteThread",
-            "args": ["threadId": threadId]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await action("emailActions:deleteThread", args: ["threadId": threadId], timeout: 60)
     }
     
-    public func markEmailThreadRead(threadId: String) async {
+    public func markEmailThreadRead(threadId: String) async throws {
         if useMockData {
             if let idx = MockDataService.shared.sampleEmailThreads.firstIndex(where: { $0.id == threadId }) {
                 MockDataService.shared.sampleEmailThreads[idx].unreadCount = 0
             }
             return
         }
-        
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return }
-        let body: [String: Any] = ["path": "email:markThreadReadLocal", "args": ["threadId": threadId]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        _ = try? await URLSession.shared.data(for: request)
+        try await mutation("email:markThreadReadLocal", args: ["threadId": threadId])
     }
     
     // MARK: - SEO Metrics (GSC & Bing)
     
     public func fetchSEOMetrics(source: String = "google", periodDays: Int = 28) async throws -> [SEOMetrics] {
         if useMockData { return MockDataService.shared.sampleSEOMetrics }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
         
         let path = source == "google" ? "gsc:listMetrics" : "bing:listMetrics"
-        let body: [String: Any] = ["path": path, "args": ["periodDays": periodDays]]
+        let raw = listValue(try await query(path, args: ["periodDays": periodDays]))
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            throw AuthError.server("\(path) failed (\(code))")
-        }
-        
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let status = json["status"] as? String, status == "success",
-              let rawList = json["value"] as? [[String: Any]] else {
-            if let errorMessage = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["errorMessage"] as? String,
-               !errorMessage.isEmpty {
-                throw AuthError.server(errorMessage)
-            }
-            throw AuthError.server("\(path) returned an unexpected payload.")
-        }
-        
-        return rawList.compactMap { item -> SEOMetrics? in
+        return raw.compactMap { item -> SEOMetrics? in
             guard let siteObj = item["site"] as? [String: Any],
                   let siteId = siteObj["id"] as? String,
                   let siteName = siteObj["name"] as? String,
@@ -1388,7 +1176,6 @@ public final class ConvexAPIService {
             var impressions = 0
             var ctr = 0.0
             var position = 0.0
-            
             if let m = item["metrics"] as? [String: Any] {
                 clicks = Int(m["clicks"] as? Double ?? Double(m["clicks"] as? Int ?? 0))
                 impressions = Int(m["impressions"] as? Double ?? Double(m["impressions"] as? Int ?? 0))
@@ -1430,33 +1217,8 @@ public final class ConvexAPIService {
             try? await Task.sleep(nanoseconds: 600_000_000)
             return MockDataService.shared.sampleSEOMetrics
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/action") else {
-            throw NSError(domain: "ConvexAPI", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid Convex URL"])
-        }
-        
         let path = source == "google" ? "gscActions:syncNow" : "bingActions:syncNow"
-        let body: [String: Any] = ["path": path, "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
-                .flatMap { $0["errorMessage"] as? String ?? $0["message"] as? String }
-                ?? "SEO sync failed"
-            throw NSError(domain: "ConvexAPI", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: message])
-        }
-        
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let status = json["status"] as? String,
-           status == "error" {
-            let message = json["errorMessage"] as? String ?? "SEO sync failed"
-            throw NSError(domain: "ConvexAPI", code: -2, userInfo: [NSLocalizedDescriptionKey: message])
-        }
-        
+        try await action(path, timeout: 180)
         return try await fetchSEOMetrics(source: source, periodDays: periodDays)
     }
     
@@ -1464,28 +1226,9 @@ public final class ConvexAPIService {
     
     public func fetchPerformanceMetrics(strategy: String = "mobile") async throws -> [PerformanceMetrics] {
         if useMockData { return MockDataService.shared.samplePerformance }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        let body: [String: Any] = ["path": "pagespeed:listMetrics", "args": ["strategy": strategy]]
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            throw AuthError.server("pagespeed:listMetrics failed (\(code))")
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let status = json["status"] as? String, status == "success",
-              let rawList = json["value"] as? [[String: Any]] else {
-            throw AuthError.server("pagespeed:listMetrics returned an unexpected payload.")
-        }
-        return rawList.compactMap { item -> PerformanceMetrics? in
+        let raw = listValue(try await query("pagespeed:listMetrics", args: ["strategy": strategy]))
+        return raw.compactMap { item -> PerformanceMetrics? in
             guard let siteObj = item["site"] as? [String: Any],
                   let siteId = siteObj["id"] as? String,
                   let siteName = siteObj["name"] as? String,
@@ -1535,31 +1278,22 @@ public final class ConvexAPIService {
         }
     }
     
+    /// Runs PageSpeed audits for every site (`pagespeedActions:syncNow`), then re-reads metrics.
+    public func runPageSpeedAudits(strategy: String = "mobile") async throws -> [PerformanceMetrics] {
+        if useMockData {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            return MockDataService.shared.samplePerformance
+        }
+        try await action("pagespeedActions:syncNow", timeout: 300)
+        return try await fetchPerformanceMetrics(strategy: strategy)
+    }
+    
     // MARK: - Cloudflare Workers Builds (Deployments)
     
     public func fetchDeployments() async throws -> [DeploymentRow] {
         if useMockData { return MockDataService.shared.sampleDeployments }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        let body: [String: Any] = ["path": "deployments:listStatus", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            throw AuthError.server("deployments:listStatus failed (\(code))")
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let status = json["status"] as? String, status == "success",
-              let rawList = json["value"] as? [[String: Any]] else {
-            throw AuthError.server("deployments:listStatus returned an unexpected payload.")
-        }
-        return rawList.compactMap { Self.parseDeploymentRow($0) }
+        let raw = listValue(try await query("deployments:listStatus"))
+        return raw.compactMap { Self.parseDeploymentRow($0) }
     }
     
     public func syncDeployments() async throws -> [DeploymentRow] {
@@ -1567,34 +1301,11 @@ public final class ConvexAPIService {
             try? await Task.sleep(nanoseconds: 600_000_000)
             return MockDataService.shared.sampleDeployments
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/action") else {
-            throw NSError(domain: "ConvexAPI", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid Convex URL"])
-        }
-        let body: [String: Any] = ["path": "deploymentsActions:syncNow", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 180
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
-                .flatMap { $0["errorMessage"] as? String ?? $0["message"] as? String }
-                ?? "Deployment sync failed"
-            throw NSError(domain: "ConvexAPI", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: message])
-        }
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let status = json["status"] as? String,
-           status == "error" {
-            let message = json["errorMessage"] as? String ?? "Deployment sync failed"
-            throw NSError(domain: "ConvexAPI", code: -2, userInfo: [NSLocalizedDescriptionKey: message])
-        }
+        try await action("deploymentsActions:syncNow", timeout: 180)
         return try await fetchDeployments()
     }
     
-    private static func parseDeploymentRow(_ item: [String: Any]) -> DeploymentRow? {
+    nonisolated private static func parseDeploymentRow(_ item: [String: Any]) -> DeploymentRow? {
         guard let target = item["target"] as? [String: Any],
               let slug = target["slug"] as? String,
               let name = target["name"] as? String else { return nil }
@@ -1637,32 +1348,15 @@ public final class ConvexAPIService {
     
     public func fetchDids() async throws -> [[String: String]] {
         if useMockData { return MockDataService.shared.sampleDids }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        let body: [String: Any] = ["path": "sms:listDids", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            throw AuthError.server("sms:listDids failed (\(code))")
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let raw = json["value"] as? [[String: Any]] else {
-            throw AuthError.server("sms:listDids returned an unexpected payload.")
-        }
+        let raw = listValue(try await query("sms:listDids"))
         return raw.compactMap { d in
             guard let did = d["did"] as? String else { return nil }
             return [
                 "did": did,
                 "description": d["description"] as? String ?? "",
                 "sub_account": d["sub_account"] as? String ?? "",
-                "formatted": d["formatted"] as? String ?? did
+                "formatted": d["formatted"] as? String ?? did,
+                "site_id": d["site_id"] as? String ?? ""
             ]
         }
     }
@@ -1676,46 +1370,39 @@ public final class ConvexAPIService {
             }
         }
         
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else { return [] }
-        let body: [String: Any] = ["path": "sms:listThreads", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-            if let json = await Self.jsonObject(from: data),
-               let status = json["status"] as? String, status == "success",
-               let rawThreads = json["value"] as? [[String: Any]] {
-                return await Task.detached(priority: .userInitiated) {
-                    rawThreads.compactMap { item -> ChatThread? in
-                    guard let did = item["did"] as? String,
-                          let contact = item["contact"] as? String,
-                          let lastBody = item["last_body"] as? String else { return nil }
-                    let contactFormatted = item["contact_formatted"] as? String ?? contact
-                    let dirStr = item["last_direction"] as? String ?? "in"
-                    let direction: MessageDirection = dirStr == "out" ? .out : .in
-                    let stableId = item["last_id"] as? String ?? "\(did)_\(contact)_last"
-                    
-                    let lastMsg = SMSMessage(
-                        id: stableId,
-                        voipmsId: item["last_voipms_id"] as? String ?? stableId,
-                        did: did,
-                        contact: contact,
-                        direction: direction,
-                        type: .sms,
-                        body: lastBody,
-                        sentAt: Date()
-                    )
-                    return ChatThread(did: did, contact: contact, contactName: contactFormatted, lastMessage: lastMsg, unreadCount: 0, messages: [lastMsg])
-                }
-                }.value
+        let raw = listValue(try await query("sms:listThreads"))
+        return await Task.detached(priority: .userInitiated) {
+            raw.compactMap { item -> ChatThread? in
+                guard let did = item["did"] as? String,
+                      let contact = item["contact"] as? String,
+                      let lastBody = item["last_body"] as? String else { return nil }
+                let contactFormatted = item["contact_formatted"] as? String ?? contact
+                let direction: MessageDirection = (item["last_direction"] as? String ?? "in") == "out" ? .out : .in
+                let type: MessageType = (item["last_type"] as? String ?? "sms") == "mms" ? .mms : .sms
+                let sentAt = (item["last_sent_at"] as? String).flatMap(ConvexAPIService.parseISO8601) ?? Date()
+                let stableId = "\(did)_\(contact)_last"
+                
+                let lastMsg = SMSMessage(
+                    id: stableId,
+                    voipmsId: stableId,
+                    did: did,
+                    contact: contact,
+                    direction: direction,
+                    type: type,
+                    body: lastBody,
+                    sentAt: sentAt
+                )
+                let label = item["label"] as? String
+                return ChatThread(
+                    did: did,
+                    contact: contact,
+                    contactName: (label?.isEmpty == false) ? label : contactFormatted,
+                    lastMessage: lastMsg,
+                    unreadCount: 0,
+                    messages: [lastMsg]
+                )
             }
-        } catch {}
-        return []
+        }.value
     }
     
     public func fetchSMSMessages(did: String, contact: String) async throws -> [SMSMessage] {
@@ -1725,54 +1412,32 @@ public final class ConvexAPIService {
                 .sorted { $0.sentAt < $1.sentAt }
         }
         
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else { return [] }
-        let body: [String: Any] = [
-            "path": "sms:listMessages",
-            "args": ["did": did, "contact": contact]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-            if let json = await Self.jsonObject(from: data),
-               let status = json["status"] as? String, status == "success",
-               let rawList = json["value"] as? [[String: Any]] {
-                return await Task.detached(priority: .userInitiated) {
-                    rawList.compactMap { item -> SMSMessage? in
-                    guard let id = item["id"] as? String,
-                          let bodyText = item["body"] as? String else { return nil }
-                    let dirStr = (item["direction"] as? String ?? "in").lowercased()
-                    let direction: MessageDirection =
-                        (dirStr == "out" || dirStr == "outbound") ? .out : .in
-                    let typeStr = (item["type"] as? String ?? "sms").lowercased()
-                    let sentAtStr = item["sent_at"] as? String
-                    let sentAt = sentAtStr.flatMap { ConvexAPIService.parseISO8601($0) } ?? Date()
-                    let media = item["media_urls"] as? [String]
-                    return SMSMessage(
-                        id: id,
-                        voipmsId: item["voipms_id"] as? String ?? id,
-                        did: item["did"] as? String ?? did,
-                        contact: item["contact"] as? String ?? contact,
-                        direction: direction,
-                        type: typeStr == "mms" ? .mms : .sms,
-                        body: bodyText,
-                        mediaUrls: media,
-                        sentAt: sentAt,
-                        status: item["status"] as? String
-                    )
-                }
-                }.value
+        let raw = listValue(try await query("sms:listMessages", args: ["did": did, "contact": contact]))
+        return await Task.detached(priority: .userInitiated) {
+            raw.compactMap { item -> SMSMessage? in
+                guard let id = item["id"] as? String,
+                      let bodyText = item["body"] as? String else { return nil }
+                let dirStr = (item["direction"] as? String ?? "in").lowercased()
+                let direction: MessageDirection = (dirStr == "out" || dirStr == "outbound") ? .out : .in
+                let typeStr = (item["type"] as? String ?? "sms").lowercased()
+                let sentAt = (item["sent_at"] as? String).flatMap(ConvexAPIService.parseISO8601) ?? Date()
+                return SMSMessage(
+                    id: id,
+                    voipmsId: item["voipms_id"] as? String ?? id,
+                    did: item["did"] as? String ?? did,
+                    contact: item["contact"] as? String ?? contact,
+                    direction: direction,
+                    type: typeStr == "mms" ? .mms : .sms,
+                    body: bodyText,
+                    mediaUrls: item["media_urls"] as? [String],
+                    sentAt: sentAt,
+                    status: item["status"] as? String
+                )
             }
-        } catch {}
-        return []
+        }.value
     }
     
-    public func sendSMS(did: String, contact: String, message: String) async throws -> Bool {
+    public func sendSMS(did: String, contact: String, message: String) async throws {
         if useMockData {
             let newMsg = SMSMessage(
                 id: UUID().uuidString,
@@ -1785,91 +1450,33 @@ public final class ConvexAPIService {
                 sentAt: Date()
             )
             MockDataService.shared.sampleMessages.append(newMsg)
-            return true
+            return
         }
-        
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/action") else { return false }
-        let body: [String: Any] = [
-            "path": "voipmsActions:sendMessage",
-            "args": ["did": did, "contact": contact, "message": message]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await action("voipmsActions:sendMessage", args: ["did": did, "contact": contact, "message": message], timeout: 60)
     }
     
-    public func syncVoipmsNow() async throws -> Bool {
+    public func syncVoipmsNow() async throws {
         if useMockData {
             try? await Task.sleep(nanoseconds: 800_000_000)
-            return true
+            return
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/action") else { return false }
-        let body: [String: Any] = ["path": "voipmsActions:syncMessagesNow", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await action("voipmsActions:syncMessagesNow", timeout: 120)
     }
     
-    public func deleteSMSConversation(did: String, contact: String) async throws -> Bool {
+    public func deleteSMSConversation(did: String, contact: String) async throws {
         if useMockData {
             MockDataService.shared.sampleMessages.removeAll(where: { $0.did == did && $0.contact == contact })
-            return true
+            return
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "sms:deleteConversation",
-            "args": ["did": did, "contact": contact]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await mutation("sms:deleteConversation", args: ["did": did, "contact": contact])
     }
     
     // MARK: - Site Health & Pricing Ops
     
     public func fetchSiteHealth() async throws -> [SiteHealthRow] {
         if useMockData { return MockDataService.shared.sampleSiteHealth }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        let body: [String: Any] = ["path": "siteHealth:listStatus", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            throw AuthError.server("siteHealth:listStatus failed (\(code))")
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rawList = json["value"] as? [[String: Any]] else {
-            throw AuthError.server("siteHealth:listStatus returned an unexpected payload.")
-        }
-        return rawList.compactMap { row in
+        let raw = listValue(try await query("siteHealth:listStatus"))
+        return raw.compactMap { row in
             guard let s = row["site"] as? [String: Any],
                   let slug = s["slug"] as? String,
                   let name = s["name"] as? String,
@@ -1894,47 +1501,18 @@ public final class ConvexAPIService {
         }
     }
     
-    public func checkSiteHealthNow() async throws -> Bool {
+    public func checkSiteHealthNow() async throws {
         if useMockData {
             try? await Task.sleep(nanoseconds: 800_000_000)
-            return true
+            return
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/action") else { return false }
-        let body: [String: Any] = ["path": "siteHealthActions:checkNow", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch { return false }
+        try await action("siteHealthActions:checkNow", timeout: 120)
     }
     
     public func fetchSitePricing() async throws -> [SitePricingRow] {
         if useMockData { return MockDataService.shared.sampleSitePricing }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        let body: [String: Any] = ["path": "pricing:list", "args": [:]]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else {
-            throw AuthError.server("pricing:list failed (\(code))")
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rawList = json["value"] as? [[String: Any]] else {
-            throw AuthError.server("pricing:list returned an unexpected payload.")
-        }
-        return Self.mapPricingRows(rawList)
+        let raw = listValue(try await query("pricing:list"))
+        return Self.mapPricingRows(raw)
     }
     
     public func comparePricingScenario(_ scenario: PricingScenario) async throws -> [SitePricingRow] {
@@ -1942,31 +1520,11 @@ public final class ConvexAPIService {
             try? await Task.sleep(nanoseconds: 200_000_000)
             return MockDataService.shared.sampleSitePricing
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/query") else {
-            throw AuthError.server("Invalid Convex URL.")
-        }
-        let body: [String: Any] = [
-            "path": "pricing:compareScenario",
-            "args": scenario.convexArgs
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw NSError(domain: "ConvexAPI", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Failed to compare pricing"])
-        }
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let rawList = json["value"] as? [[String: Any]] {
-            return Self.mapPricingRows(rawList)
-        }
-        return []
+        let raw = listValue(try await query("pricing:compareScenario", args: scenario.convexArgs))
+        return Self.mapPricingRows(raw)
     }
     
-    public static func mapPricingRows(_ rawList: [[String: Any]]) -> [SitePricingRow] {
+    nonisolated public static func mapPricingRows(_ rawList: [[String: Any]]) -> [SitePricingRow] {
         rawList.compactMap { row in
             guard let s = row["site"] as? [String: Any],
                   let slug = s["slug"] as? String,
@@ -2014,7 +1572,7 @@ public final class ConvexAPIService {
         }
     }
     
-    public static func addonCatalog(from rows: [SitePricingRow]) -> [PricingAddonOption] {
+    nonisolated public static func addonCatalog(from rows: [SitePricingRow]) -> [PricingAddonOption] {
         var byKey: [String: String] = [:]
         for row in rows {
             guard let data = row.configJSON,
@@ -2051,76 +1609,32 @@ public final class ConvexAPIService {
             .sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
     }
     
-    public func updateSitePricing(siteId: String, configJSON: Data, summary: String) async throws -> Bool {
+    public func updateSitePricing(siteId: String, configJSON: Data, summary: String) async throws {
         if useMockData {
             try? await Task.sleep(nanoseconds: 400_000_000)
-            return true
+            return
         }
-        await ensureAuthenticated()
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        guard let configObj = try? JSONSerialization.jsonObject(with: configJSON) else { return false }
-        
-        let body: [String: Any] = [
-            "path": "pricing:updateConfig",
-            "args": [
-                "siteId": siteId,
-                "config": configObj,
-                "summary": summary
-            ]
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
-                .flatMap { $0["errorMessage"] as? String ?? $0["message"] as? String }
-                ?? "Failed to update pricing"
-            throw NSError(domain: "ConvexAPI", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: message])
+        guard let configObj = try? JSONSerialization.jsonObject(with: configJSON) else {
+            throw ConvexError.server("Pricing config is not valid JSON.")
         }
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let status = json["status"] as? String, status == "error" {
-            throw NSError(domain: "ConvexAPI", code: -2, userInfo: [NSLocalizedDescriptionKey: json["errorMessage"] as? String ?? "Failed to update pricing"])
-        }
-        return true
+        try await mutation("pricing:updateConfig", args: [
+            "siteId": siteId,
+            "config": configObj,
+            "summary": summary
+        ])
     }
     
     // MARK: - APNs push tokens (BookingBroomSwift)
     
-    public func saveApnsPushToken(
-        token: String,
-        platform: String,
-        environment: String
-    ) async -> Bool {
+    public func saveApnsPushToken(token: String, platform: String, environment: String) async -> Bool {
         if useMockData { return true }
-        await ensureAuthenticated()
         guard authToken != nil else { return false }
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "push:saveApnsPushToken",
-            "args": [
+        do {
+            try await mutation("push:saveApnsPushToken", args: [
                 "token": token,
                 "platform": platform,
                 "environment": environment,
-            ],
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                return false
-            }
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let status = json["status"] as? String,
-               status == "error" {
-                return false
-            }
+            ])
             return true
         } catch {
             return false
@@ -2129,21 +1643,10 @@ public final class ConvexAPIService {
     
     public func removeApnsPushToken(token: String) async -> Bool {
         if useMockData { return true }
-        await ensureAuthenticated()
         guard authToken != nil else { return false }
-        guard let url = URL(string: "\(baseURLString)/api/mutation") else { return false }
-        let body: [String: Any] = [
-            "path": "push:removeApnsPushToken",
-            "args": ["token": token],
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
+            try await mutation("push:removeApnsPushToken", args: ["token": token])
+            return true
         } catch {
             return false
         }

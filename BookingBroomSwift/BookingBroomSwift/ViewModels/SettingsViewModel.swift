@@ -1,36 +1,48 @@
 import Foundation
-import Combine
+import Observation
 
 @MainActor
-public final class SettingsViewModel: ObservableObject {
-    @Published public var sites: [CleaningSite] = []
-    @Published public var isPushEnabled: Bool = NotificationManager.shared.isPushPreferenceEnabled
-    @Published public var isPushBusy: Bool = false
-    @Published public var pushError: String?
-    @Published public var apiModeIsMock: Bool = false {
+@Observable
+public final class SettingsViewModel {
+    public var sites: [CleaningSite] = []
+    public var isPushEnabled: Bool = NotificationManager.shared.isPushPreferenceEnabled
+    public var isPushBusy: Bool = false
+    public var pushError: String?
+    public var apiModeIsMock: Bool = false {
         didSet {
-            ConvexAPIService.shared.useMockData = apiModeIsMock
+            guard oldValue != apiModeIsMock else { return }
+            let enabled = apiModeIsMock
+            Task { await ConvexAPIService.shared.setMockMode(enabled) }
         }
     }
-    @Published     public var convexURL: String = "https://dynamic-gnu-491.convex.cloud" {
+    public var convexURL: String = ConvexAPIService.defaultBaseURL {
         didSet {
-            ConvexAPIService.shared.baseURLString = convexURL
+            guard oldValue != convexURL else { return }
+            let url = convexURL
+            Task { await ConvexAPIService.shared.setBaseURL(url) }
         }
     }
     
-    private var didLoad = false
+    @ObservationIgnored private var didLoad = false
+    @ObservationIgnored private var lastLoadedAt: Date?
+    @ObservationIgnored private let staleAfter: TimeInterval = 5 * 60
     
     public init() {}
     
     public func ensureLoaded() {
-        guard !didLoad else { return }
-        didLoad = true
         isPushEnabled = NotificationManager.shared.isPushPreferenceEnabled
+        if didLoad,
+           let last = lastLoadedAt,
+           Date().timeIntervalSince(last) < staleAfter {
+            return
+        }
+        didLoad = true
         loadSites()
     }
     
     public func resetForNewSession() {
         didLoad = false
+        lastLoadedAt = nil
         sites = []
         pushError = nil
         isPushBusy = false
@@ -41,9 +53,10 @@ public final class SettingsViewModel: ObservableObject {
         Task {
             do {
                 let fetched = try await ConvexAPIService.shared.fetchSites()
-                self.sites = fetched
+                if fetched != self.sites { self.sites = fetched }
+                self.lastLoadedAt = Date()
             } catch {
-                self.sites = []
+                // Keep whatever is shown.
             }
         }
     }

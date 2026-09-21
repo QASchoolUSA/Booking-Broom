@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct MailboxChipsView: View {
-    @ObservedObject var emailVM: EmailViewModel
+    @Bindable var emailVM: EmailViewModel
     
     public init(emailVM: EmailViewModel) {
         self.emailVM = emailVM

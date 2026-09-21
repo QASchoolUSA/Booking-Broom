@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct LoginView: View {
-    @ObservedObject var authVM: AuthViewModel
+    @Bindable var authVM: AuthViewModel
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedField: Field?

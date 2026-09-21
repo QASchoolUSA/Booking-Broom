@@ -3,8 +3,8 @@ import UserNotifications
 
 @main
 struct BookingBroomApp: App {
-    @StateObject private var authVM = AuthViewModel()
-    @StateObject private var appController = AppController()
+    @State private var authVM = AuthViewModel()
+    @State private var appController = AppController()
     @Environment(\.scenePhase) private var scenePhase
     
     #if os(iOS)
@@ -23,7 +23,7 @@ struct BookingBroomApp: App {
                     LoginView(authVM: authVM)
                 }
             }
-            .environmentObject(appController)
+            .environment(appController)
             .tint(AppColors.primary)
             #if os(macOS)
             .frame(minWidth: 900, minHeight: 600)
@@ -35,10 +35,9 @@ struct BookingBroomApp: App {
                 NotificationManager.shared.onForegroundNotification = {
                     appController.refreshOnForeground()
                 }
+                // Permission prompt only after authentication — never on the login screen.
                 if authVM.session.isAuthenticated {
                     await NotificationManager.shared.syncAfterAuthentication()
-                } else if NotificationManager.shared.isPushPreferenceEnabled {
-                    _ = await NotificationManager.shared.requestAuthorization()
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
@@ -109,6 +108,7 @@ struct BookingBroomApp: App {
             if let threadId,
                let thread = appController.messagesVM.threads.first(where: { $0.id == threadId }) {
                 ChatThreadView(thread: thread, messagesVM: appController.messagesVM)
+                    .environment(appController)
                     .frame(minWidth: 420, minHeight: 560)
             } else {
                 ContentUnavailableView("Conversation", systemImage: "bubble.left.and.bubble.right", description: Text("Select a thread from Messages."))
@@ -176,8 +176,8 @@ class MacAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterD
 }
 
 struct BookingBroomCommands: Commands {
-    @ObservedObject var authVM: AuthViewModel
-    @ObservedObject var appController: AppController
+    @Bindable var authVM: AuthViewModel
+    @Bindable var appController: AppController
     
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {

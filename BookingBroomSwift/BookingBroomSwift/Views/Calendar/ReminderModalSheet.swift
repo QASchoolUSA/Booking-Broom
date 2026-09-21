@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct ReminderModalSheet: View {
-    @ObservedObject var bookingsVM: BookingsViewModel
+    @Bindable var bookingsVM: BookingsViewModel
     public var initialDate: Date?
     public var initialBookingId: String?
     

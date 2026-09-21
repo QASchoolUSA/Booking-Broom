@@ -1,40 +1,32 @@
 import Foundation
-import Combine
+import Observation
 
 @MainActor
-public final class AuthViewModel: ObservableObject {
-    @Published public var session: UserSession = UserSession(isAuthenticated: false)
-    @Published public var emailInput: String = ""
-    @Published public var passwordInput: String = ""
-    @Published public var isLoading: Bool = false
-    @Published public var errorMessage: String? = nil
-    @Published public var showBiometricPromptAfterLogin: Bool = false
-    @Published public var prefersPasswordForm: Bool = false
-    @Published public var isUnlockingBiometrics: Bool = false
+@Observable
+public final class AuthViewModel {
+    public var session: UserSession = UserSession(isAuthenticated: false)
+    public var emailInput: String = ""
+    public var passwordInput: String = ""
+    public var isLoading: Bool = false
+    public var errorMessage: String? = nil
+    public var showBiometricPromptAfterLogin: Bool = false
+    public var prefersPasswordForm: Bool = false
+    public var isUnlockingBiometrics: Bool = false
     /// false = sign in, true = create manager account
-    @Published public var isSignUpMode: Bool = false
+    public var isSignUpMode: Bool = false
+    /// True while a stored session is being installed at launch (no login screen flash).
+    public private(set) var isRestoringSession: Bool = false
     
-    @Published public var isBiometricsEnabled: Bool = UserDefaults.standard.bool(forKey: "bb.isBiometricsEnabled") {
+    public var isBiometricsEnabled: Bool = UserDefaults.standard.bool(forKey: "bb.isBiometricsEnabled") {
         didSet {
             UserDefaults.standard.set(isBiometricsEnabled, forKey: "bb.isBiometricsEnabled")
+            refreshBiometricsAvailability()
         }
     }
     
-    public var canUseBiometrics: Bool {
-        BiometricAuthManager.shared.canEvaluatePolicy()
-            && isBiometricsEnabled
-            && {
-                if let token = KeychainStore.string(forKey: KeychainStore.Key.authToken),
-                   KeychainStore.isRealAuthToken(token) {
-                    return true
-                }
-                if let refresh = KeychainStore.string(forKey: KeychainStore.Key.refreshToken),
-                   !refresh.isEmpty {
-                    return true
-                }
-                return false
-            }()
-    }
+    /// Stored (not computed) so view bodies never hit the Keychain. Refreshed
+    /// after every Keychain write via `refreshBiometricsAvailability()`.
+    public private(set) var canUseBiometrics: Bool = false
     
     /// Device has Face ID / Touch ID hardware (may still need enrollment).
     public var deviceSupportsBiometrics: Bool {
@@ -66,9 +58,7 @@ public final class AuthViewModel: ObservableObject {
         if !isBiometricsEnabled {
             return "Sign in once, then enable when prompted"
         }
-        let hasAuth = KeychainStore.string(forKey: KeychainStore.Key.authToken).map(KeychainStore.isRealAuthToken) == true
-        let hasRefresh = !(KeychainStore.string(forKey: KeychainStore.Key.refreshToken) ?? "").isEmpty
-        if !hasAuth && !hasRefresh {
+        if !hasStoredCredentials() {
             return "Sign in once to save your session"
         }
         return "Available after setup"
@@ -83,7 +73,7 @@ public final class AuthViewModel: ObservableObject {
     }
     
     public var convexBaseURL: String {
-        ConvexAPIService.shared.baseURLString
+        ConvexAPIService.defaultBaseURL
     }
     
     public init() {
@@ -96,8 +86,91 @@ public final class AuthViewModel: ObservableObject {
             KeychainStore.delete(KeychainStore.Key.authToken)
             KeychainStore.delete(KeychainStore.Key.refreshToken)
         }
+        refreshBiometricsAvailability()
         prefersPasswordForm = !canUseBiometrics
+        installServiceHandlers()
+        restoreSessionIfPossible()
     }
+    
+    // MARK: - Service wiring
+    
+    private func installServiceHandlers() {
+        Task { [weak self] in
+            await ConvexAPIService.shared.setSessionExpiredHandler { [weak self] in
+                Task { @MainActor in self?.handleSessionExpired() }
+            }
+            await ConvexAPIService.shared.setTokensRotatedHandler { [weak self] token, _ in
+                Task { @MainActor in
+                    guard let self, self.session.isAuthenticated else { return }
+                    self.session.token = token
+                    self.refreshBiometricsAvailability()
+                }
+            }
+        }
+    }
+    
+    /// Launch restore: when the user has not opted into biometric lock, install the
+    /// stored tokens and enter the app immediately. The service refreshes the JWT
+    /// lazily on the first call, so this costs zero Convex requests up front.
+    private func restoreSessionIfPossible() {
+        let biometricLock = isBiometricsEnabled && BiometricAuthManager.shared.hasBiometricHardware
+        guard !biometricLock else { return }
+        
+        let storedToken = KeychainStore.string(forKey: KeychainStore.Key.authToken)
+        let storedRefresh = KeychainStore.string(forKey: KeychainStore.Key.refreshToken)
+        let token = storedToken.flatMap { KeychainStore.isRealAuthToken($0) ? $0 : nil }
+        let refresh = storedRefresh.flatMap { $0.isEmpty ? nil : $0 }
+        guard token != nil || refresh != nil else { return }
+        
+        let email = KeychainStore.string(forKey: KeychainStore.Key.email) ?? emailInput
+        let name = KeychainStore.string(forKey: KeychainStore.Key.managerName) ?? managerName(from: email)
+        
+        isRestoringSession = true
+        Task {
+            // A refresh token alone is enough: the pipeline exchanges it before the first request.
+            await ConvexAPIService.shared.setSession(token: token, refreshToken: refresh)
+            self.session = UserSession(
+                isAuthenticated: true,
+                email: email,
+                managerName: name,
+                token: token,
+                isFaceIDEnabled: false
+            )
+            self.isRestoringSession = false
+        }
+    }
+    
+    private func handleSessionExpired() {
+        guard session.isAuthenticated || isRestoringSession else { return }
+        let rememberedEmail = session.email ?? emailInput
+        KeychainStore.delete(KeychainStore.Key.authToken)
+        KeychainStore.delete(KeychainStore.Key.refreshToken)
+        session = UserSession(isAuthenticated: false, email: rememberedEmail)
+        isRestoringSession = false
+        refreshBiometricsAvailability()
+        prefersPasswordForm = true
+        errorMessage = ConvexAPIService.AuthError.sessionExpired.errorDescription
+        if !rememberedEmail.isEmpty { emailInput = rememberedEmail }
+    }
+    
+    private func hasStoredCredentials() -> Bool {
+        if let token = KeychainStore.string(forKey: KeychainStore.Key.authToken),
+           KeychainStore.isRealAuthToken(token) {
+            return true
+        }
+        if let refresh = KeychainStore.string(forKey: KeychainStore.Key.refreshToken), !refresh.isEmpty {
+            return true
+        }
+        return false
+    }
+    
+    private func refreshBiometricsAvailability() {
+        canUseBiometrics = BiometricAuthManager.shared.canEvaluatePolicy()
+            && isBiometricsEnabled
+            && hasStoredCredentials()
+    }
+    
+    // MARK: - Password flow
     
     public func submit() {
         if isSignUpMode {
@@ -131,15 +204,9 @@ public final class AuthViewModel: ObservableObject {
             do {
                 let (token, userEmail): (String, String)
                 if flowSignUp {
-                    (token, userEmail) = try await ConvexAPIService.shared.signUp(
-                        email: email,
-                        password: password
-                    )
+                    (token, userEmail) = try await ConvexAPIService.shared.signUp(email: email, password: password)
                 } else {
-                    (token, userEmail) = try await ConvexAPIService.shared.login(
-                        email: email,
-                        password: password
-                    )
+                    (token, userEmail) = try await ConvexAPIService.shared.login(email: email, password: password)
                 }
                 
                 guard KeychainStore.isRealAuthToken(token) || token.hasPrefix("mock_token_") else {
@@ -151,7 +218,7 @@ public final class AuthViewModel: ObservableObject {
                 
                 let name = managerName(from: userEmail)
                 KeychainStore.saveSession(token: token, email: userEmail, managerName: name)
-                ConvexAPIService.shared.authToken = token
+                refreshBiometricsAvailability()
                 session = UserSession(
                     isAuthenticated: true,
                     email: userEmail,
@@ -179,7 +246,10 @@ public final class AuthViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Biometric unlock
+    
     public func unlockWithBiometrics() {
+        refreshBiometricsAvailability()
         guard canUseBiometrics else {
             prefersPasswordForm = true
             return
@@ -208,7 +278,7 @@ public final class AuthViewModel: ObservableObject {
             do {
                 let token = try await restoreSessionTokenAfterBiometrics()
                 KeychainStore.saveSession(token: token, email: email, managerName: name)
-                ConvexAPIService.shared.authToken = token
+                refreshBiometricsAvailability()
                 session = UserSession(
                     isAuthenticated: true,
                     email: email,
@@ -232,7 +302,8 @@ public final class AuthViewModel: ObservableObject {
                 if isSessionDead {
                     KeychainStore.delete(KeychainStore.Key.authToken)
                     KeychainStore.delete(KeychainStore.Key.refreshToken)
-                    ConvexAPIService.shared.authToken = nil
+                    await ConvexAPIService.shared.clearSession()
+                    refreshBiometricsAvailability()
                     prefersPasswordForm = true
                 }
                 errorMessage = friendlyAuthError(error)
@@ -242,19 +313,16 @@ public final class AuthViewModel: ObservableObject {
         }
     }
     
-    /// Prefer refresh-token exchange; fall back to validating the stored access token.
+    /// Prefer refresh-token exchange (one call; a success is proof of a live session).
+    /// Fall back to validating the stored access token only when no refresh token exists.
     private func restoreSessionTokenAfterBiometrics() async throws -> String {
         if let refresh = KeychainStore.string(forKey: KeychainStore.Key.refreshToken),
            !refresh.isEmpty {
             do {
-                let (token, newRefresh) = try await ConvexAPIService.shared.refreshSession(using: refresh)
-                if let newRefresh, !newRefresh.isEmpty {
-                    KeychainStore.set(newRefresh, forKey: KeychainStore.Key.refreshToken)
-                }
+                let (token, _) = try await ConvexAPIService.shared.refreshSession(using: refresh)
                 guard KeychainStore.isRealAuthToken(token) || token.hasPrefix("mock_token_") else {
                     throw ConvexAPIService.AuthError.sessionExpired
                 }
-                try await ConvexAPIService.shared.validateAuthenticatedSession()
                 return token
             } catch {
                 // Fall through to access-token validation when refresh is unavailable/expired.
@@ -269,7 +337,7 @@ public final class AuthViewModel: ObservableObject {
             throw ConvexAPIService.AuthError.sessionExpired
         }
         
-        ConvexAPIService.shared.authToken = token
+        await ConvexAPIService.shared.setSession(token: token, refreshToken: nil)
         try await ConvexAPIService.shared.validateAuthenticatedSession()
         return token
     }
@@ -293,10 +361,7 @@ public final class AuthViewModel: ObservableObject {
     public func setBiometricsEnabled(_ enabled: Bool) async -> Bool {
         if enabled {
             guard BiometricAuthManager.shared.canEvaluatePolicy() else { return false }
-            guard let token = KeychainStore.string(forKey: KeychainStore.Key.authToken),
-                  KeychainStore.isRealAuthToken(token) else {
-                return false
-            }
+            guard hasStoredCredentials() else { return false }
             let ok = await BiometricAuthManager.shared.authenticateWithBiometrics(
                 reason: "Enable \(biometryName) unlock"
             )
@@ -310,35 +375,26 @@ public final class AuthViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Logout
+    
     public func logout() {
         let rememberedEmail = session.email ?? emailInput
         let keepSessionForBiometrics =
             isBiometricsEnabled
             && BiometricAuthManager.shared.hasBiometricHardware
-            && (
-                KeychainStore.string(forKey: KeychainStore.Key.authToken).map(KeychainStore.isRealAuthToken) == true
-                || !(KeychainStore.string(forKey: KeychainStore.Key.refreshToken) ?? "").isEmpty
-            )
+            && hasStoredCredentials()
         
-        if !keepSessionForBiometrics {
-            let deviceToken = NotificationManager.shared.storedDeviceToken
-            let authSnapshot = ConvexAPIService.shared.authToken
-            Task {
-                if let deviceToken, let authSnapshot {
-                    ConvexAPIService.shared.authToken = authSnapshot
-                    _ = await ConvexAPIService.shared.removeApnsPushToken(token: deviceToken)
-                    if ConvexAPIService.shared.authToken == authSnapshot {
-                        ConvexAPIService.shared.authToken = nil
-                    }
-                }
-                await MainActor.run {
-                    NotificationManager.shared.storedDeviceToken = nil
-                }
+        let deviceToken = keepSessionForBiometrics ? nil : NotificationManager.shared.storedDeviceToken
+        Task {
+            if let deviceToken {
+                _ = await ConvexAPIService.shared.removeApnsPushToken(token: deviceToken)
+                NotificationManager.shared.storedDeviceToken = nil
+                NotificationManager.shared.clearUploadedTokenRecord()
             }
+            await ConvexAPIService.shared.clearSession()
         }
         
         session = UserSession(isAuthenticated: false, email: rememberedEmail)
-        ConvexAPIService.shared.authToken = nil
         
         if keepSessionForBiometrics {
             // Keep access + refresh tokens + email so Face ID can unlock and revalidate.
@@ -353,6 +409,7 @@ public final class AuthViewModel: ObservableObject {
             KeychainStore.set(rememberedEmail, forKey: KeychainStore.Key.email)
         }
         passwordInput = ""
+        refreshBiometricsAvailability()
         prefersPasswordForm = !canUseBiometrics
         HapticFeedback.impact(.light)
     }
@@ -360,6 +417,9 @@ public final class AuthViewModel: ObservableObject {
     private func friendlyAuthError(_ error: Error) -> String {
         if let auth = error as? ConvexAPIService.AuthError {
             return auth.errorDescription ?? "Sign-in failed."
+        }
+        if let convex = error as? ConvexError {
+            return convex.errorDescription ?? "Sign-in failed."
         }
         return error.localizedDescription
     }

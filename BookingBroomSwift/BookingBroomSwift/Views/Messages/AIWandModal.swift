@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct AIWandModal: View {
-    @ObservedObject var messagesVM: MessagesViewModel
+    @Bindable var messagesVM: MessagesViewModel
     public let siteName: String
     @Environment(\.dismiss) private var dismiss
     @FocusState private var editorFocused: Bool

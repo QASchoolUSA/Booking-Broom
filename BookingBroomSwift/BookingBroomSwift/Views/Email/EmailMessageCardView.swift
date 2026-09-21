@@ -14,16 +14,13 @@ public struct EmailMessageCardView: View {
         return html
     }
     
+    /// Uses the parse-time `plainText`; only falls back to conversion for
+    /// messages constructed without it (e.g. optimistic local inserts).
     private var plainBody: String? {
-        if let text = message.textBody?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !text.isEmpty {
-            return text
+        if let cached = message.plainText, !cached.isEmpty {
+            return cached
         }
-        if let html = htmlBody {
-            let cleaned = Self.htmlToPlainText(html)
-            return cleaned.isEmpty ? nil : cleaned
-        }
-        return nil
+        return EmailMessage.derivePlainText(text: message.textBody, html: message.htmlBody)
     }
     
     private var plainPreview: String {
@@ -146,62 +143,5 @@ public struct EmailMessageCardView: View {
             return name.isEmpty ? String(value[value.index(after: start)..<end]) : name
         }
         return value
-    }
-    
-    /// Plain-text fallback when HTML is missing or unusable (previews / empty edge cases).
-    public static func htmlToPlainText(_ html: String) -> String {
-        var s = html
-        let blockPatterns = [
-            "(?is)<style[^>]*>.*?</style>",
-            "(?is)<script[^>]*>.*?</script>",
-            "(?is)<head[^>]*>.*?</head>",
-            "(?is)<!--.*?-->"
-        ]
-        for pattern in blockPatterns {
-            s = s.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
-        }
-        s = s.replacingOccurrences(of: "(?i)<br\\s*/?>", with: "\n", options: .regularExpression)
-        s = s.replacingOccurrences(of: "(?i)</p>", with: "\n\n", options: .regularExpression)
-        s = s.replacingOccurrences(of: "(?i)</div>", with: "\n", options: .regularExpression)
-        s = s.replacingOccurrences(of: "(?i)</tr>", with: "\n", options: .regularExpression)
-        s = s.replacingOccurrences(of: "(?i)</li>", with: "\n", options: .regularExpression)
-        s = s.replacingOccurrences(of: "(?i)</h[1-6]>", with: "\n\n", options: .regularExpression)
-        s = s.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-        let entities: [(String, String)] = [
-            ("&nbsp;", " "),
-            ("&amp;", "&"),
-            ("&lt;", "<"),
-            ("&gt;", ">"),
-            ("&quot;", "\""),
-            ("&#39;", "'"),
-            ("&apos;", "'"),
-            ("&mdash;", "—"),
-            ("&ndash;", "–"),
-            ("&rsquo;", "'"),
-            ("&lsquo;", "'"),
-            ("&rdquo;", "\""),
-            ("&ldquo;", "\"")
-        ]
-        for (entity, replacement) in entities {
-            s = s.replacingOccurrences(of: entity, with: replacement)
-        }
-        if let regex = try? NSRegularExpression(pattern: "&#(\\d+);") {
-            let ns = s as NSString
-            let matches = regex.matches(in: s, range: NSRange(location: 0, length: ns.length)).reversed()
-            var mutable = s
-            for match in matches {
-                if match.numberOfRanges >= 2,
-                   let full = Range(match.range, in: mutable),
-                   let numRange = Range(match.range(at: 1), in: mutable),
-                   let code = UInt32(mutable[numRange]),
-                   let scalar = UnicodeScalar(code) {
-                    mutable.replaceSubrange(full, with: String(Character(scalar)))
-                }
-            }
-            s = mutable
-        }
-        s = s.replacingOccurrences(of: "[ \\t\\x0B\\f\\r]+", with: " ", options: .regularExpression)
-        s = s.replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
-        return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

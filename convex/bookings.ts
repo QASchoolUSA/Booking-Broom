@@ -141,22 +141,26 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
 export const list = query({
   args: {
     includeArchived: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
     const includeArchived = args.includeArchived === true;
-    // Read only what we return — avoid take(400) then discard half.
-    const bookings = await ctx.db
+    const limit = Math.min(Math.max(Math.floor(args.limit ?? 200), 1), 500);
+    // Filter archived/active *before* the cap so the Archived tab is never
+    // truncated by a large active set (and vice versa).
+    const filtered = await ctx.db
       .query("bookings")
       .withIndex("by_created")
       .order("desc")
-      .take(200);
-
-    const filtered = includeArchived
-      ? bookings.filter((b) => b.archivedAt != null)
-      : bookings.filter((b) => b.archivedAt == null);
+      .filter((q) =>
+        includeArchived
+          ? q.neq(q.field("archivedAt"), undefined)
+          : q.eq(q.field("archivedAt"), undefined),
+      )
+      .take(limit);
 
     const siteIds = [...new Set(filtered.map((b) => b.siteId))];
     const siteEntries = await Promise.all(
@@ -571,6 +575,65 @@ export const createPublic = mutation({
     }
 
     return { id };
+  },
+});
+
+/**
+ * Manager-created booking (BookingBroomSwift / dashboard). Authenticated via
+ * Convex Auth — no site API key. Intentionally does NOT send customer email,
+ * SMS or Telegram: the manager is entering data on the customer's behalf.
+ * Returns the full mapped booking so clients can replace an optimistic row.
+ */
+export const createManual = mutation({
+  args: {
+    siteId: v.id("sites"),
+    customerName: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    address: v.optional(v.string()),
+    serviceType: v.string(),
+    preferredDate: v.optional(v.string()),
+    preferredTime: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    internalNotes: v.optional(v.string()),
+    status: v.optional(bookingStatus),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const site = await ctx.db.get(args.siteId);
+    if (!site) throw new Error("Invalid site");
+
+    const customerName = args.customerName.trim();
+    if (!customerName) throw new Error("Customer name is required");
+
+    const clean = (value: string | undefined) => {
+      const trimmed = value?.trim();
+      return trimmed ? trimmed : undefined;
+    };
+
+    const now = Date.now();
+    const id = await ctx.db.insert("bookings", {
+      siteId: site._id,
+      status: args.status ?? "new",
+      customerName,
+      email: clean(args.email),
+      phone: clean(args.phone),
+      address: clean(args.address),
+      serviceType: clean(args.serviceType) ?? "Standard Clean",
+      preferredDate: clean(args.preferredDate),
+      preferredTime: clean(args.preferredTime),
+      notes: clean(args.notes),
+      internalNotes: clean(args.internalNotes),
+      intent: "book",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const doc = await ctx.db.get(id);
+    if (!doc) throw new Error("Booking insert failed");
+    return mapBooking(doc, site);
   },
 });
 

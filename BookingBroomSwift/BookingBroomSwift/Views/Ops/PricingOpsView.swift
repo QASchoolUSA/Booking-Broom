@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct PricingOpsView: View {
-    @ObservedObject var opsVM: OpsViewModel
+    @Bindable var opsVM: OpsViewModel
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var selectedSlug: String?
     @State private var mode: PricingMode = .calculator
@@ -53,8 +53,8 @@ public struct PricingOpsView: View {
         .background(AppColors.groupedBackground.ignoresSafeArea())
         .navigationTitle("Live Pricing")
         .refreshable {
-            opsVM.loadPricing()
-            opsVM.refreshCompare()
+            // loadPricingAndWait re-fires the compare only when none is already in flight.
+            await opsVM.loadPricingAndWait()
         }
         .onAppear {
             opsVM.ensurePricingLoaded()
@@ -202,7 +202,7 @@ private struct PricingSiteCard: View {
 }
 
 public struct PricingEditView: View {
-    @ObservedObject var opsVM: OpsViewModel
+    @Bindable var opsVM: OpsViewModel
     public let row: SitePricingRow
     public var embedsInSplit: Bool = false
     @Environment(\.dismiss) private var dismiss

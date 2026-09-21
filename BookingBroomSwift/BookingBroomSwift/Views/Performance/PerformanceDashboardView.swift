@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct PerformanceDashboardView: View {
-    @ObservedObject var perfVM: PerformanceViewModel
+    @Bindable var perfVM: PerformanceViewModel
     
     public init(perfVM: PerformanceViewModel) {
         self.perfVM = perfVM

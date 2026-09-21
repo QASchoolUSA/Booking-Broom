@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct QuickStatsGrid: View {
-    @ObservedObject var bookingsVM: BookingsViewModel
+    @Bindable var bookingsVM: BookingsViewModel
     var siteCount: Int
     
     public init(bookingsVM: BookingsViewModel, siteCount: Int) {

@@ -2,8 +2,9 @@ import SwiftUI
 
 public struct ChatThreadView: View {
     public let thread: ChatThread
-    @ObservedObject var messagesVM: MessagesViewModel
+    @Bindable var messagesVM: MessagesViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppController.self) private var appController: AppController?
     @State private var showingAIWand = false
     @State private var showingDeleteAlert = false
     
@@ -76,11 +77,24 @@ public struct ChatThreadView: View {
             Text("All messages in this thread will be permanently removed from Booking Broom.")
         }
         .sheet(isPresented: $showingAIWand) {
-            AIWandModal(messagesVM: messagesVM, siteName: "Sanford Cleaning")
+            AIWandModal(messagesVM: messagesVM, siteName: siteName)
         }
         .onAppear {
+            // Cached 60 s — push/pop of this screen doesn't refetch history.
             messagesVM.loadThreadMessages(did: thread.did, contact: thread.contact)
         }
+    }
+    
+    /// Site that owns this DID (via `sms:listDids.site_id` → bookings' sites), else a neutral name.
+    private var siteName: String {
+        if let siteId = messagesVM.siteId(forDid: thread.did),
+           let site = appController?.bookingsVM.sites.first(where: { $0.id == siteId }) {
+            return site.name
+        }
+        if let did = messagesVM.dids.first(where: { $0.did == thread.did }), !did.description.isEmpty {
+            return did.description
+        }
+        return "our team"
     }
     
     private func scrollToBottom(proxy: ScrollViewProxy) {

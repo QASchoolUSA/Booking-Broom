@@ -5,7 +5,7 @@ import UIKit
 #endif
 
 public struct DeploymentsView: View {
-    @ObservedObject var deploymentsVM: DeploymentsViewModel
+    @Bindable var deploymentsVM: DeploymentsViewModel
 
     public init(deploymentsVM: DeploymentsViewModel) {
         self.deploymentsVM = deploymentsVM
@@ -73,7 +73,7 @@ public struct DeploymentsView: View {
         }
         .background(AppColors.groupedBackground.ignoresSafeArea())
         .navigationTitle("Deployments")
-        .refreshable { deploymentsVM.load() }
+        .refreshable { await deploymentsVM.loadAndWait() }
         .onAppear { deploymentsVM.ensureLoaded() }
         .onChange(of: deploymentsVM.lastError) { _, newValue in
             guard let newValue, !newValue.isEmpty else { return }

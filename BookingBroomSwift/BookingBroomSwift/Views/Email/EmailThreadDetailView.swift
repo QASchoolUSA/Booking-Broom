@@ -2,7 +2,7 @@ import SwiftUI
 
 public struct EmailThreadDetailView: View {
     public let thread: EmailThread
-    @ObservedObject var emailVM: EmailViewModel
+    @Bindable var emailVM: EmailViewModel
     public var embedsInSplit: Bool = false
     @Environment(\.dismiss) private var dismiss
     @State private var showingDeleteAlert = false
@@ -68,10 +68,8 @@ public struct EmailThreadDetailView: View {
         } message: {
             Text("Removes this conversation from Booking Broom and deletes it from SpaceMail.")
         }
-        .onAppear {
-            emailVM.openThread(thread)
-        }
-        .onChange(of: thread.id) { _, _ in
+        // One entry point for both first appearance and thread switches in the split view.
+        .task(id: thread.id) {
             emailVM.openThread(thread)
         }
     }

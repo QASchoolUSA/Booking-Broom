@@ -46,8 +46,8 @@ public enum AppSidebarItem: String, Hashable, CaseIterable, Identifiable {
 }
 
 public struct MainTabView: View {
-    @ObservedObject var authVM: AuthViewModel
-    @ObservedObject var appController: AppController
+    @Bindable var authVM: AuthViewModel
+    @Bindable var appController: AppController
     @Environment(\.horizontalSizeClass) private var sizeClass
     
     @State private var selectedTab = 0
@@ -275,12 +275,12 @@ public struct MainTabView: View {
 
 /// Compact “More” hub for iPhone tab bar.
 public struct MoreHubView: View {
-    @ObservedObject var opsVM: OpsViewModel
-    @ObservedObject var seoVM: SEOViewModel
-    @ObservedObject var perfVM: PerformanceViewModel
-    @ObservedObject var deploymentsVM: DeploymentsViewModel
-    @ObservedObject var settingsVM: SettingsViewModel
-    @ObservedObject var authVM: AuthViewModel
+    @Bindable var opsVM: OpsViewModel
+    @Bindable var seoVM: SEOViewModel
+    @Bindable var perfVM: PerformanceViewModel
+    @Bindable var deploymentsVM: DeploymentsViewModel
+    @Bindable var settingsVM: SettingsViewModel
+    @Bindable var authVM: AuthViewModel
     
     public var body: some View {
         List {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct SitesHealthView: View {
-    @ObservedObject var opsVM: OpsViewModel
+    @Bindable var opsVM: OpsViewModel
     
     public init(opsVM: OpsViewModel) {
         self.opsVM = opsVM
@@ -107,7 +107,7 @@ public struct SitesHealthView: View {
         .background(AppColors.groupedBackground.ignoresSafeArea())
         .navigationTitle("Sites Health & Ops")
         .refreshable {
-            opsVM.loadHealth()
+            await opsVM.loadHealthAndWait()
         }
         .onAppear {
             opsVM.ensureHealthLoaded()

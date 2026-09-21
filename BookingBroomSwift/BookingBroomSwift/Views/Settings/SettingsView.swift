@@ -1,9 +1,9 @@
 import SwiftUI
 
 public struct SettingsView: View {
-    @ObservedObject var settingsVM: SettingsViewModel
-    @ObservedObject var authVM: AuthViewModel
-    @ObservedObject var opsVM: OpsViewModel
+    @Bindable var settingsVM: SettingsViewModel
+    @Bindable var authVM: AuthViewModel
+    @Bindable var opsVM: OpsViewModel
     
     public init(
         settingsVM: SettingsViewModel,
@@ -91,10 +91,8 @@ public struct SettingsView: View {
             }
             
             Section("Backend Connection") {
+                // SettingsViewModel.apiModeIsMock.didSet forwards to the service actor.
                 Toggle("Demo / Offline Mock Data Mode", isOn: $settingsVM.apiModeIsMock)
-                    .onChange(of: settingsVM.apiModeIsMock) { _, newValue in
-                        ConvexAPIService.shared.useMockData = newValue
-                    }
                 
                 HStack {
                     Text("Convex URL")

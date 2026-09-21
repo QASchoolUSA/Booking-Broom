@@ -1,8 +1,8 @@
 import SwiftUI
 
 public struct BookingsListView: View {
-    @ObservedObject var bookingsVM: BookingsViewModel
-    @ObservedObject var messagesVM: MessagesViewModel
+    @Bindable var bookingsVM: BookingsViewModel
+    @Bindable var messagesVM: MessagesViewModel
     @State private var showingCreateSheet = false
     @State private var selectedBookingId: String?
     #if os(macOS)
@@ -122,11 +122,10 @@ public struct BookingsListView: View {
             PartialLeadDetailView(lead: lead)
         }
         .refreshable {
-            bookingsVM.loadBookings()
-            bookingsVM.loadSites()
-            if bookingsVM.viewMode == .calendar && bookingsVM.filterMode != .abandoned {
-                bookingsVM.loadCalendarEvents()
-            }
+            // Sites ride along inside loadBookingsAndWait (cached in the service); no separate probe.
+            await bookingsVM.refreshBookingsScreenAndWait(
+                includeCalendar: bookingsVM.viewMode == .calendar && bookingsVM.filterMode != .abandoned
+            )
         }
     }
 

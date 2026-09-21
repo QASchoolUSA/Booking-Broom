@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+import Observation
 
 public struct SeoPeriodOption: Identifiable {
     public var id: Int { days }
@@ -9,7 +9,8 @@ public struct SeoPeriodOption: Identifiable {
 }
 
 @MainActor
-public final class SEOViewModel: ObservableObject {
+@Observable
+public final class SEOViewModel {
     public static let periodOptions: [SeoPeriodOption] = [
         SeoPeriodOption(days: 1, label: "24 hours", short: "24h"),
         SeoPeriodOption(days: 7, label: "7 days", short: "7d"),
@@ -17,84 +18,107 @@ public final class SEOViewModel: ObservableObject {
         SeoPeriodOption(days: 90, label: "3 months", short: "3mo")
     ]
     
-    @Published public var seoMetricsList: [SEOMetrics] = []
-    @Published public var selectedSource: String = "google" { // "google" or "bing"
-        didSet { loadMetrics() }
+    public var seoMetricsList: [SEOMetrics] = [] { didSet { recomputeTotals() } }
+    public var selectedSource: String = "google" { // "google" or "bing"
+        didSet { if oldValue != selectedSource { loadMetrics() } }
     }
-    @Published public var selectedPeriodDays: Int = 28 {
-        didSet { loadMetrics() }
+    public var selectedPeriodDays: Int = 28 {
+        didSet { if oldValue != selectedPeriodDays { loadMetrics() } }
     }
-    @Published public var isSyncing: Bool = false
-    @Published public var syncError: String? = nil
-    @Published public var loadError: String? = nil
+    public var isLoading: Bool = false
+    public var isSyncing: Bool = false
+    public var syncError: String? = nil
+    public var loadError: String? = nil
     
-    private var didLoad = false
+    public private(set) var totalClicks: Int = 0
+    public private(set) var totalImpressions: Int = 0
+    public private(set) var averageCTR: Double = 0
+    public private(set) var averagePosition: Double = 0
+    
+    @ObservationIgnored private var didLoad = false
+    @ObservationIgnored private var lastLoadedAt: Date?
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private var loadGeneration: UInt = 0
+    @ObservationIgnored private let staleAfter: TimeInterval = 5 * 60
     
     public init() {}
     
     public func ensureLoaded() {
-        guard !didLoad else { return }
+        if didLoad,
+           let last = lastLoadedAt,
+           Date().timeIntervalSince(last) < staleAfter {
+            return
+        }
         didLoad = true
         loadMetrics()
     }
     
     public func resetForNewSession() {
+        loadGeneration &+= 1
+        loadTask?.cancel()
+        loadTask = nil
         didLoad = false
+        lastLoadedAt = nil
         seoMetricsList = []
         syncError = nil
         loadError = nil
+        isLoading = false
         isSyncing = false
     }
     
+    /// Read from Convex only. Cancels the prior in-flight load (source/period toggles).
     public func loadMetrics() {
-        isSyncing = true
-        syncError = nil
+        loadTask?.cancel()
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let source = selectedSource
+        let period = selectedPeriodDays
         loadError = nil
-        Task {
-            do {
-                let fetched = try await ConvexAPIService.shared.fetchSEOMetrics(
-                    source: self.selectedSource,
-                    periodDays: self.selectedPeriodDays
-                )
-                self.seoMetricsList = Self.ranked(fetched)
-            } catch {
-                self.seoMetricsList = []
-                self.loadError = error.localizedDescription
+        if seoMetricsList.isEmpty { isLoading = true }
+        
+        loadTask = Task {
+            defer {
+                if generation == self.loadGeneration { self.isLoading = false }
             }
-            self.isSyncing = false
+            do {
+                let fetched = try await ConvexAPIService.shared.fetchSEOMetrics(source: source, periodDays: period)
+                guard generation == self.loadGeneration, !Task.isCancelled else { return }
+                let ranked = Self.ranked(fetched)
+                if ranked != self.seoMetricsList { self.seoMetricsList = ranked }
+                self.lastLoadedAt = Date()
+            } catch let error as ConvexError where error.isCancelled {
+                return
+            } catch {
+                guard generation == self.loadGeneration, !Task.isCancelled else { return }
+                if self.seoMetricsList.isEmpty {
+                    self.loadError = error.localizedDescription
+                }
+            }
         }
     }
     
-    public var totalClicks: Int {
-        seoMetricsList.reduce(0) { $0 + $1.clicks }
+    public func loadMetricsAndWait() async {
+        loadMetrics()
+        await loadTask?.value
     }
     
-    public var totalImpressions: Int {
-        seoMetricsList.reduce(0) { $0 + $1.impressions }
-    }
-    
-    public var averageCTR: Double {
-        guard !seoMetricsList.isEmpty else { return 0 }
-        let totalCtr = seoMetricsList.reduce(0.0) { $0 + $1.ctr }
-        return totalCtr / Double(seoMetricsList.count)
-    }
-    
-    public var averagePosition: Double {
-        guard !seoMetricsList.isEmpty else { return 0 }
-        let totalPos = seoMetricsList.reduce(0.0) { $0 + $1.position }
-        return totalPos / Double(seoMetricsList.count)
-    }
-    
+    /// Pull fresh data from Google / Bing (external) then reload. Toolbar / ⌘R only.
     public func syncMetrics() {
+        guard !isSyncing else { return }
         isSyncing = true
         syncError = nil
+        loadTask?.cancel()
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let source = selectedSource
+        let period = selectedPeriodDays
         Task {
             do {
-                let fetched = try await ConvexAPIService.shared.syncSEOMetrics(
-                    source: self.selectedSource,
-                    periodDays: self.selectedPeriodDays
-                )
-                self.seoMetricsList = Self.ranked(fetched)
+                let fetched = try await ConvexAPIService.shared.syncSEOMetrics(source: source, periodDays: period)
+                guard generation == self.loadGeneration else { return }
+                let ranked = Self.ranked(fetched)
+                if ranked != self.seoMetricsList { self.seoMetricsList = ranked }
+                self.lastLoadedAt = Date()
                 self.loadError = nil
                 HapticFeedback.notification(.success)
             } catch {
@@ -107,6 +131,18 @@ public final class SEOViewModel: ObservableObject {
     
     public func clearSyncError() {
         syncError = nil
+    }
+    
+    private func recomputeTotals() {
+        totalClicks = seoMetricsList.reduce(0) { $0 + $1.clicks }
+        totalImpressions = seoMetricsList.reduce(0) { $0 + $1.impressions }
+        guard !seoMetricsList.isEmpty else {
+            averageCTR = 0
+            averagePosition = 0
+            return
+        }
+        averageCTR = seoMetricsList.reduce(0.0) { $0 + $1.ctr } / Double(seoMetricsList.count)
+        averagePosition = seoMetricsList.reduce(0.0) { $0 + $1.position } / Double(seoMetricsList.count)
     }
 
     /// Sites by impressions then clicks (desc); keywords within each site the same way.

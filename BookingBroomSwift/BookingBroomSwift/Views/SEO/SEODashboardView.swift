@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct SEODashboardView: View {
-    @ObservedObject var seoVM: SEOViewModel
+    @Bindable var seoVM: SEOViewModel
     
     public init(seoVM: SEOViewModel) {
         self.seoVM = seoVM
@@ -100,7 +100,8 @@ public struct SEODashboardView: View {
             }
         }
         .refreshable {
-            seoVM.syncMetrics()
+            // Convex-only reload; GSC/Bing sync stays on the toolbar Sync button.
+            await seoVM.loadMetricsAndWait()
         }
         .onAppear {
             seoVM.ensureLoaded()

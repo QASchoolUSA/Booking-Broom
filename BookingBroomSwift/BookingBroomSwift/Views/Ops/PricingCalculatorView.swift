@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct PricingCalculatorView: View {
-    @ObservedObject var opsVM: OpsViewModel
+    @Bindable var opsVM: OpsViewModel
     
     public init(opsVM: OpsViewModel) {
         self.opsVM = opsVM

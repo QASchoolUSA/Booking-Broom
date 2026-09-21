@@ -77,6 +77,30 @@ export const listByBooking = query({
   },
 });
 
+/**
+ * Upcoming (and recently due) pending reminders across all bookings.
+ * Used by BookingBroomSwift for the calendar/reminders list.
+ */
+export const listPending = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const limit = Math.min(Math.max(Math.floor(args.limit ?? 200), 1), 500);
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    const rows = await ctx.db
+      .query("reminders")
+      .withIndex("by_status_due", (q) =>
+        q.eq("status", "pending").gte("dueAt", since),
+      )
+      .order("asc")
+      .take(limit);
+
+    return rows.map(mapReminder);
+  },
+});
+
 export const get = query({
   args: { reminderId: v.id("reminders") },
   handler: async (ctx, args) => {

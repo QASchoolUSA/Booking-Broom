@@ -225,11 +225,11 @@ public struct Booking: Identifiable, Codable, Hashable {
         archivedAt != nil
     }
     
-    public var coordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(
-            latitude: latitude ?? 28.8029,
-            longitude: longitude ?? -81.2695
-        )
+    /// Known coordinate only — no hardcoded fallback. Views geocode `address`
+    /// via `GeocodeCache` when this is nil.
+    public var coordinate: CLLocationCoordinate2D? {
+        guard let latitude, let longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
     
     /// Google search that surfaces the Zillow /homedetails listing for this address (no API/ZPID).

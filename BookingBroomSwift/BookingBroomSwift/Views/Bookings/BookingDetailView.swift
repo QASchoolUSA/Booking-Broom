@@ -5,8 +5,8 @@ public struct BookingDetailView: View {
     public let booking: Booking
     public var onStatusChange: ((BookingStatus) -> Void)?
     
-    @ObservedObject var bookingsVM: BookingsViewModel
-    @ObservedObject var messagesVM: MessagesViewModel
+    @Bindable var bookingsVM: BookingsViewModel
+    @Bindable var messagesVM: MessagesViewModel
     
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -33,6 +33,13 @@ public struct BookingDetailView: View {
     @State private var showingDeleteConfirm: Bool = false
     @State private var showingComposeSMS: Bool = false
     @State private var selectedStatus: BookingStatus
+    
+    // Map pin: geocoded from the address (no hardcoded fallback)
+    @State private var mapCoordinate: CLLocationCoordinate2D?
+    @State private var geocodeFailed: Bool = false
+    
+    /// Optimistic row whose Convex id is not yet known — server actions are disabled.
+    private var isPendingCreate: Bool { bookingsVM.isPending(liveBooking.id) }
     
     public init(
         booking: Booking,
@@ -91,12 +98,43 @@ public struct BookingDetailView: View {
                         .bbSecondaryButton(expand: true)
                     }
                     
+                    if isPendingCreate {
+                        HStack(spacing: AppSpacing.xs) {
+                            ProgressView().controlSize(.small)
+                            Text("Saving to Booking Broom… actions unlock once the booking is created.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(AppSpacing.sm)
+                        .appSurface()
+                    }
+                    
                     // Location Map Preview
                     if let address = liveBooking.address {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Property Location")
                                 .font(.headline)
-                            MapPreview(address: address, coordinate: liveBooking.coordinate)
+                            if let coordinate = mapCoordinate ?? liveBooking.coordinate {
+                                MapPreview(address: address, coordinate: coordinate)
+                            } else {
+                                HStack(spacing: AppSpacing.xs) {
+                                    if geocodeFailed {
+                                        Image(systemName: "mappin.slash")
+                                            .foregroundColor(.secondary)
+                                        Text(address)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(2)
+                                    } else {
+                                        ProgressView().controlSize(.small)
+                                        Text("Locating address…")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                                .frame(height: 44)
+                            }
                             
                             if liveBooking.zillowSearchURL != nil {
                                 Button {
@@ -292,6 +330,7 @@ public struct BookingDetailView: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .bbPrimaryButton(expand: true)
+                            .disabled(isPendingCreate)
                         }
                     }
                     .padding(16)
@@ -306,7 +345,7 @@ public struct BookingDetailView: View {
                                 .font(.headline)
                         }
                         
-                        let linkedReminders = bookingsVM.reminders.filter { $0.bookingId == liveBooking.id }
+                        let linkedReminders = bookingsVM.reminders(forBooking: liveBooking.id)
                         if linkedReminders.isEmpty {
                             Text("No reminders linked to this job yet.")
                                 .font(.caption)
@@ -386,13 +425,25 @@ public struct BookingDetailView: View {
                             .bbComposerField()
                         
                         Button {
+                            guard !isSavingNotes else { return }
                             isSavingNotes = true
-                            bookingsVM.saveNotes(booking: liveBooking, notes: internalNotesDraft)
-                            isSavingNotes = false
+                            let draft = internalNotesDraft
+                            Task {
+                                let ok = await bookingsVM.saveNotes(booking: liveBooking, notes: draft)
+                                if ok { liveBooking.internalNotes = draft }
+                                isSavingNotes = false
+                            }
                         } label: {
                             Text(isSavingNotes ? "Saving..." : "Save Notes")
                         }
                         .bbPrimaryButton(isLoading: isSavingNotes, expand: false)
+                        .disabled(isSavingNotes || isPendingCreate || internalNotesDraft == (liveBooking.internalNotes ?? ""))
+                        
+                        if let actionError = bookingsVM.actionError {
+                            Text(actionError)
+                                .font(.caption)
+                                .foregroundColor(AppColors.rose)
+                        }
                     }
                     .padding(AppSpacing.md)
                     .glassCard()
@@ -428,6 +479,7 @@ public struct BookingDetailView: View {
                         .bbDestructiveButton(expand: true)
                     }
                     .padding(.top, AppSpacing.xs)
+                    .disabled(isPendingCreate)
                 }
                 .padding(16)
             }
@@ -478,8 +530,32 @@ public struct BookingDetailView: View {
                     self.scheduledEndTime = scheduledDate.addingTimeInterval(3600 * 3)
                 }
                 self.internalNotesDraft = liveBooking.internalNotes ?? ""
-                bookingsVM.loadReminders(bookingId: liveBooking.id)
-                messagesVM.loadDids()
+                bookingsVM.actionError = nil
+                // Both are cached — re-opening this sheet costs zero Convex calls.
+                if !isPendingCreate {
+                    bookingsVM.ensureReminders(forBooking: liveBooking.id)
+                }
+                messagesVM.ensureDidsLoaded()
+            }
+            .task(id: liveBooking.address) {
+                guard mapCoordinate == nil, liveBooking.coordinate == nil,
+                      let address = liveBooking.address, !address.isEmpty else { return }
+                geocodeFailed = false
+                let resolved = await GeocodeCache.shared.coordinate(for: address)
+                guard !Task.isCancelled else { return }
+                if let resolved {
+                    mapCoordinate = resolved
+                } else {
+                    geocodeFailed = true
+                }
+            }
+            .onChange(of: bookingsVM.bookings) { _, updated in
+                // Adopt the server row once an optimistic create resolves (temp → Convex id swap).
+                let currentId = bookingsVM.resolvedBookingIds[liveBooking.id] ?? liveBooking.id
+                if let fresh = updated.first(where: { $0.id == currentId }), fresh != liveBooking {
+                    liveBooking = fresh
+                    selectedStatus = fresh.status
+                }
             }
         }
     }

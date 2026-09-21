@@ -17,15 +17,52 @@ public final class NotificationManager: NSObject {
     
     public static let pushEnabledDefaultsKey = "bb.isPushNotificationsEnabled"
     public static let deviceTokenDefaultsKey = "bb.apnsDeviceToken"
+    /// Last token successfully saved to Convex, and the environment/platform it was saved with.
+    public static let uploadedTokenDefaultsKey = "bb.apnsUploadedToken"
+    public static let uploadedTokenContextDefaultsKey = "bb.apnsUploadedTokenContext"
     
     public var onNotificationOpen: ((String?) -> Void)?
     /// Fired when a notification arrives while the app is in the foreground (banner still shown).
     public var onForegroundNotification: (() -> Void)?
     
     private var pendingDeviceToken: String?
+    private var uploadInFlight = false
     
     private override init() {
         super.init()
+    }
+    
+    private var uploadedToken: String? {
+        get { UserDefaults.standard.string(forKey: Self.uploadedTokenDefaultsKey) }
+        set {
+            if let newValue {
+                UserDefaults.standard.set(newValue, forKey: Self.uploadedTokenDefaultsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.uploadedTokenDefaultsKey)
+            }
+        }
+    }
+    
+    private var uploadedTokenContext: String? {
+        get { UserDefaults.standard.string(forKey: Self.uploadedTokenContextDefaultsKey) }
+        set {
+            if let newValue {
+                UserDefaults.standard.set(newValue, forKey: Self.uploadedTokenContextDefaultsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.uploadedTokenContextDefaultsKey)
+            }
+        }
+    }
+    
+    private var currentUploadContext: String {
+        "\(currentPlatform.rawValue)/\(apnsEnvironment)"
+    }
+    
+    /// Forget the "already uploaded" record (logout / token removal) so the next
+    /// sign-in re-associates the device token with the new user.
+    public func clearUploadedTokenRecord() {
+        uploadedToken = nil
+        uploadedTokenContext = nil
     }
     
     public var isPushPreferenceEnabled: Bool {
@@ -113,21 +150,34 @@ public final class NotificationManager: NSObject {
         print("[APNs] registration failed: \(error.localizedDescription)")
     }
     
-    public func uploadPendingTokenIfPossible() async {
+    /// Uploads the device token once per (token, platform/environment). APNs calls
+    /// back with the same token on every launch; without this check each session
+    /// start cost two `push:saveApnsPushToken` mutations.
+    public func uploadPendingTokenIfPossible(force: Bool = false) async {
         guard isPushPreferenceEnabled else { return }
-        guard ConvexAPIService.shared.authToken != nil else { return }
+        guard await ConvexAPIService.shared.hasAuthToken else { return }
         guard let token = pendingDeviceToken ?? storedDeviceToken else { return }
+        
+        let context = currentUploadContext
+        if !force, uploadedToken == token, uploadedTokenContext == context {
+            return
+        }
+        guard !uploadInFlight else { return }
+        uploadInFlight = true
+        defer { uploadInFlight = false }
+        
         let ok = await ConvexAPIService.shared.saveApnsPushToken(
             token: token,
             platform: currentPlatform.rawValue,
             environment: apnsEnvironment
         )
         if ok {
-            pendingDeviceToken = token
-            print("[APNs] device token saved (\(currentPlatform.rawValue)/\(apnsEnvironment))")
+            uploadedToken = token
+            uploadedTokenContext = context
+            print("[APNs] device token saved (\(context))")
         } else {
             // Usually: not signed in yet, Convex push mutation missing, or backend rejected the token.
-            print("[APNs] failed to save device token (\(currentPlatform.rawValue)/\(apnsEnvironment)); will retry after auth")
+            print("[APNs] failed to save device token (\(context)); will retry after auth")
         }
     }
     
@@ -141,7 +191,7 @@ public final class NotificationManager: NSObject {
         await MainActor.run {
             registerForRemoteNotificationsIfNeeded()
         }
-        await uploadPendingTokenIfPossible()
+        await uploadPendingTokenIfPossible(force: true)
         return true
     }
     
@@ -152,6 +202,7 @@ public final class NotificationManager: NSObject {
         }
         storedDeviceToken = nil
         pendingDeviceToken = nil
+        clearUploadedTokenRecord()
         await MainActor.run {
             unregisterFromRemoteNotifications()
         }

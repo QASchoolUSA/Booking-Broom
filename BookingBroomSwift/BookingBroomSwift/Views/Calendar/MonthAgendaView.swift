@@ -1,8 +1,8 @@
 import SwiftUI
 
 public struct MonthAgendaView: View {
-    @ObservedObject var bookingsVM: BookingsViewModel
-    @ObservedObject var messagesVM: MessagesViewModel
+    @Bindable var bookingsVM: BookingsViewModel
+    @Bindable var messagesVM: MessagesViewModel
     @State private var selectedBookingForSheet: Booking? = nil
     
     public init(bookingsVM: BookingsViewModel, messagesVM: MessagesViewModel) {

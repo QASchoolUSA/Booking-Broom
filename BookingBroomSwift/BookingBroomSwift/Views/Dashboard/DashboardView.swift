@@ -1,13 +1,13 @@
 import SwiftUI
 
 public struct DashboardView: View {
-    @ObservedObject var bookingsVM: BookingsViewModel
-    @ObservedObject var messagesVM: MessagesViewModel
-    @ObservedObject var opsVM: OpsViewModel
-    @ObservedObject var perfVM: PerformanceViewModel
-    @ObservedObject var settingsVM: SettingsViewModel
-    @ObservedObject var authVM: AuthViewModel
-    @EnvironmentObject private var appController: AppController
+    @Bindable var bookingsVM: BookingsViewModel
+    @Bindable var messagesVM: MessagesViewModel
+    @Bindable var opsVM: OpsViewModel
+    @Bindable var perfVM: PerformanceViewModel
+    @Bindable var settingsVM: SettingsViewModel
+    @Bindable var authVM: AuthViewModel
+    @Environment(AppController.self) private var appController
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showingCreateBookingSheet = false
     
@@ -214,13 +214,16 @@ public struct DashboardView: View {
             }
             #endif
             .refreshable {
-                bookingsVM.loadBookings()
-                messagesVM.loadMessages()
-                opsVM.loadHealth()
+                // Convex reads only — spinner tracks the real round-trips.
+                async let bookings: Void = bookingsVM.loadBookingsAndWait()
+                async let messages: Void = messagesVM.loadMessagesAndWait()
+                async let health: Void = opsVM.loadHealthAndWait()
+                _ = await (bookings, messages, health)
             }
             .onAppear {
+                // Sites ride along with ensureBookingsLoaded(); every ensure* is
+                // staleness-gated (5 min) so re-appearing costs nothing.
                 bookingsVM.ensureBookingsLoaded()
-                bookingsVM.loadSites()
                 messagesVM.ensureLoaded()
                 opsVM.ensureHealthLoaded()
             }

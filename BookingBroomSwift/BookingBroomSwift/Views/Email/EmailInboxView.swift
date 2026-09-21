@@ -1,7 +1,7 @@
 import SwiftUI
 
 public struct EmailInboxView: View {
-    @ObservedObject var emailVM: EmailViewModel
+    @Bindable var emailVM: EmailViewModel
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var selectedThreadId: String?
     
@@ -48,7 +48,8 @@ public struct EmailInboxView: View {
             #endif
             .searchable(text: $emailVM.searchText, prompt: "Search mail")
             .refreshable {
-                emailVM.syncCurrentMailbox()
+                // Pull-to-refresh reloads from Convex only; IMAP sync stays on the toolbar button / ⌘R.
+                await emailVM.refreshCurrentMailboxAndWait()
             }
             .onAppear {
                 emailVM.ensureLoaded()

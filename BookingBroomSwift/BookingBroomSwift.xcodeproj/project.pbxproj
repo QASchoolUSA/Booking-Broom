@@ -81,6 +81,7 @@
 		EEC4A7CFB0664921A0998EC7 /* MockDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3612547984144FE9BCA8B026 /* MockDataService.swift */; };
 		F16F59E756B749008EB4283D /* PerformanceDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48A129A7C32F43FE9A848EF2 /* PerformanceDashboardView.swift */; };
 		F308C6317BF5463EAD26715B /* AIWandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F53D666EFA480A8880CF89 /* AIWandService.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* GeocodeCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718293A4B5C6D /* GeocodeCache.swift */; };
 		F3CE93212B694F5E9B913DC9 /* StatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FCFFE82BE04C9FBF35DE7D /* StatCard.swift */; };
 		F3ECB9E3FC024AE9A0B18E72 /* BookingDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89246AE5A84547DEB8E49A75 /* BookingDetailView.swift */; };
 		FBB04DC6C56440148939BC73 /* SEOViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AC67311EA874A0BB98071BD /* SEOViewModel.swift */; };
@@ -146,6 +147,7 @@
 		B9CEE615222A497087140B31 /* Booking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Booking.swift; path = Models/Booking.swift; sourceTree = "<group>"; };
 		BBE036F10F3F48FB8D5DD805 /* Site.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Site.swift; path = Models/Site.swift; sourceTree = "<group>"; };
 		C0F53D666EFA480A8880CF89 /* AIWandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AIWandService.swift; path = Services/AIWandService.swift; sourceTree = "<group>"; };
+		B2C3D4E5F60718293A4B5C6D /* GeocodeCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GeocodeCache.swift; path = Services/GeocodeCache.swift; sourceTree = "<group>"; };
 		C7736B1CF7454A06BF4BED5F /* BookingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BookingsViewModel.swift; path = ViewModels/BookingsViewModel.swift; sourceTree = "<group>"; };
 		C8FA776BF3374C6FAD45879D /* BiometricAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BiometricAuthManager.swift; path = Services/BiometricAuthManager.swift; sourceTree = "<group>"; };
 		CB859A8CEB6D4DEDBE39C564 /* BookingBroomSwift.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BookingBroomSwift.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -274,6 +276,7 @@
 				C8FA776BF3374C6FAD45879D /* BiometricAuthManager.swift */,
 				A10100170000000000000017 /* KeychainStore.swift */,
 				C0F53D666EFA480A8880CF89 /* AIWandService.swift */,
+				B2C3D4E5F60718293A4B5C6D /* GeocodeCache.swift */,
 				3612547984144FE9BCA8B026 /* MockDataService.swift */,
 				F279182D45BF48E4967D0B91 /* ConvexAPIService.swift */,
 				713A7D88172E452E86BDC57A /* HapticFeedback.swift */,
@@ -405,6 +408,7 @@
 				DE46B330B6E84D90B7C6F05E /* BiometricAuthManager.swift in Sources */,
 				B10100170000000000000017 /* KeychainStore.swift in Sources */,
 				F308C6317BF5463EAD26715B /* AIWandService.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* GeocodeCache.swift in Sources */,
 				EEC4A7CFB0664921A0998EC7 /* MockDataService.swift in Sources */,
 				99631DDB1CB147798075DFCA /* ConvexAPIService.swift in Sources */,
 				E4F1BE7BA592464185E63C84 /* HapticFeedback.swift in Sources */,
