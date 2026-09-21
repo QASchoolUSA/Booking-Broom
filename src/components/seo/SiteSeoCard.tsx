@@ -21,7 +21,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import type { SeoTopQuery } from "@/lib/types";
+
+const KEYWORD_PREVIEW = 5;
 
 interface SiteSeoCardProps {
   row: SiteSeoRow;
@@ -54,6 +64,7 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
   const [scanning, setScanning] = useState(false);
   const [showCrawl, setShowCrawl] = useState(false);
   const [showScan, setShowScan] = useState(false);
+  const [keywordsOpen, setKeywordsOpen] = useState(false);
 
   useEffect(() => {
     setPropertyUrl(site.bing_property_url ?? "");
@@ -209,26 +220,41 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
             Top keywords
           </p>
           {top_queries && top_queries.length > 0 ? (
-            <ol className="mt-1.5 space-y-1">
-              {top_queries.map((q, i) => (
-                <li
-                  key={`${q.query}-${i}`}
-                  className="flex items-baseline justify-between gap-3 text-sm"
+            <>
+              <KeywordList
+                queries={top_queries.slice(0, KEYWORD_PREVIEW)}
+                startIndex={0}
+                compact
+              />
+              {top_queries.length > KEYWORD_PREVIEW ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1.5 h-auto px-0 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => setKeywordsOpen(true)}
                 >
-                  <span className="min-w-0 truncate">
-                    <span className="mr-2 tabular-nums text-muted-foreground">
-                      {i + 1}.
-                    </span>
-                    <span className="text-foreground">{q.query}</span>
-                  </span>
-                  <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
-                    {formatNumber(q.clicks)} clk
-                    <span className="mx-1 text-muted-foreground/50">·</span>
-                    {formatNumber(q.impressions)} imp
-                  </span>
-                </li>
-              ))}
-            </ol>
+                  View all {top_queries.length} keywords
+                </Button>
+              ) : null}
+              <Sheet open={keywordsOpen} onOpenChange={setKeywordsOpen}>
+                <SheetContent
+                  side="right"
+                  className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
+                >
+                  <SheetHeader className="border-b">
+                    <SheetTitle>{site.name} · Top keywords</SheetTitle>
+                    <SheetDescription>
+                      {top_queries.length} queries · clicks, impressions, CTR,
+                      and average position
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                    <KeywordList queries={top_queries} startIndex={0} />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </>
           ) : (
             <p className="mt-1.5 text-xs text-muted-foreground">
               No keyword data yet — Sync now
@@ -398,5 +424,59 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
         </div>
       )}
     </div>
+  );
+}
+
+function KeywordList({
+  queries,
+  startIndex = 0,
+  compact = false,
+}: {
+  queries: SeoTopQuery[];
+  startIndex?: number;
+  compact?: boolean;
+}) {
+  return (
+    <ol className={cn("mt-1.5 space-y-1", !compact && "mt-0 space-y-2")}>
+      {queries.map((q, i) => {
+        const rank = startIndex + i + 1;
+        return (
+          <li
+            key={`${q.query}-${rank}`}
+            className={cn(
+              "flex gap-3 text-sm",
+              compact ? "items-baseline justify-between" : "items-start"
+            )}
+          >
+            <span className="min-w-0 flex-1">
+              <span className="mr-2 tabular-nums text-muted-foreground">
+                {rank}.
+              </span>
+              <span className="text-foreground">{q.query}</span>
+            </span>
+            {compact ? (
+              <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                {formatNumber(q.clicks)} clk
+                <span className="mx-1 text-muted-foreground/50">·</span>
+                {formatNumber(q.impressions)} imp
+              </span>
+            ) : (
+              <span className="shrink-0 space-y-0.5 text-right tabular-nums text-xs text-muted-foreground">
+                <span className="block">
+                  {formatNumber(q.clicks)} clk
+                  <span className="mx-1 text-muted-foreground/50">·</span>
+                  {formatNumber(q.impressions)} imp
+                </span>
+                <span className="block">
+                  {formatCtr(q.ctr)} CTR
+                  <span className="mx-1 text-muted-foreground/50">·</span>
+                  pos {formatPosition(q.position)}
+                </span>
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
