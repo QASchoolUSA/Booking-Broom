@@ -867,7 +867,11 @@ async function inspectOneUrl(
 async function fetchSitemapUrls(domain: string): Promise<string[]> {
   const feedUrl = sitemapFeedUrl(domain);
   const res = await fetch(feedUrl, {
-    headers: { Accept: "application/xml,text/xml,*/*" },
+    headers: {
+      Accept: "application/xml,text/xml,*/*",
+      // Some hosts (e.g. cleaningweekly.com) 403 bare Convex fetches.
+      "User-Agent": "BookingBroom-GSC/1.0 (+https://app.bookingbroom.com)",
+    },
   });
   if (!res.ok) {
     throw new Error(`Failed to fetch sitemap ${feedUrl} (${res.status})`);
@@ -883,7 +887,10 @@ async function fetchSitemapUrls(domain: string): Promise<string[]> {
   const childUrls: string[] = [];
   for (const child of locs) {
     const childRes = await fetch(child, {
-      headers: { Accept: "application/xml,text/xml,*/*" },
+      headers: {
+        Accept: "application/xml,text/xml,*/*",
+        "User-Agent": "BookingBroom-GSC/1.0 (+https://app.bookingbroom.com)",
+      },
     });
     if (!childRes.ok) continue;
     childUrls.push(...parseSitemapLocs(await childRes.text()));
