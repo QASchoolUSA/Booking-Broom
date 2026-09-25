@@ -200,3 +200,71 @@ export const syncSeedPricing = internalMutation({
     return { added, updated, skipped, missingSites, total: SEED_PRICING.length };
   },
 });
+
+/**
+ * Force-apply every SEED_PRICING row onto matching sites, even when the engine
+ * is unchanged. Use after rate-table edits so live `/api/pricing` picks up new
+ * numbers without per-site dashboard resets.
+ *
+ * Existing rows are patched (version bumped) and a history snapshot is kept.
+ */
+export const forceSyncSeedPricing = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    let added = 0;
+    let updated = 0;
+    const missingSites: string[] = [];
+
+    for (const seed of SEED_PRICING) {
+      const site = await ctx.db
+        .query("sites")
+        .withIndex("by_slug", (q) => q.eq("slug", seed.slug))
+        .unique();
+
+      if (!site) {
+        missingSites.push(seed.slug);
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("sitePricing")
+        .withIndex("by_site", (q) => q.eq("siteId", site._id))
+        .unique();
+
+      if (!existing) {
+        await ctx.db.insert("sitePricing", {
+          siteId: site._id,
+          engine: seed.engine,
+          currency: seed.currency,
+          config: seed.config,
+          version: 1,
+          updatedAt: now,
+        });
+        added += 1;
+        continue;
+      }
+
+      await ctx.db.insert("sitePricingHistory", {
+        siteId: site._id,
+        version: existing.version,
+        engine: existing.engine,
+        currency: existing.currency,
+        config: existing.config,
+        summary: "Force-synced from SEED_PRICING defaults",
+        changedAt: now,
+      });
+
+      await ctx.db.patch(existing._id, {
+        engine: seed.engine,
+        currency: seed.currency,
+        config: seed.config,
+        version: existing.version + 1,
+        updatedAt: now,
+      });
+      updated += 1;
+    }
+
+    return { added, updated, missingSites, total: SEED_PRICING.length };
+  },
+});
