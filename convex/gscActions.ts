@@ -691,6 +691,69 @@ export type PageAnalyticsRow = {
   position: number;
 };
 
+type SiteSlugDomain = { slug: string; domain: string };
+
+export type InspectUrlsResult =
+  | {
+      ok: false;
+      error: string;
+      results: UrlInspectionResult[];
+      skipped: string[];
+      reconnectHint: string | null;
+      propertyStatus?: "not_in_console";
+    }
+  | {
+      ok: true;
+      property: string;
+      results: UrlInspectionResult[];
+      skipped: string[];
+      intentionalNoindexSkipped: number;
+      quotaSkipped: number;
+      reconnectHint: string | null;
+      propertyStatus: "matched";
+    };
+
+export type InspectSitemapsSiteReport = {
+  slug: string;
+  domain: string;
+  status: string;
+  detail?: string;
+  property?: string;
+  results: UrlInspectionResult[];
+  sitemapUrlCount: number;
+  inspectedCount: number;
+  intentionalNoindexSkipped: number;
+};
+
+export type InspectSitemapsResult =
+  | {
+      ok: false;
+      error: string;
+      sites: InspectSitemapsSiteReport[];
+      reconnectHint: string | null;
+    }
+  | {
+      ok: true;
+      sites: InspectSitemapsSiteReport[];
+      reconnectHint: string | null;
+      inspectedTotal: number;
+    };
+
+export type QueryPages28dResult =
+  | {
+      ok: false;
+      error: string;
+      rows: PageAnalyticsRow[];
+      propertyStatus?: "not_in_console";
+    }
+  | {
+      ok: true;
+      property: string;
+      startDate: string;
+      endDate: string;
+      rows: PageAnalyticsRow[];
+    };
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -843,15 +906,15 @@ export const inspectUrlsInternal = internalAction({
     /** Cap inspections in this call (remaining URLs returned as skipped). */
     maxUrls: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<InspectUrlsResult> => {
     const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
     if (!connection) {
       return {
-        ok: false as const,
+        ok: false,
         error: "Google Search Console is not connected",
-        results: [] as UrlInspectionResult[],
-        skipped: [] as string[],
-        reconnectHint: null as string | null,
+        results: [],
+        skipped: [],
+        reconnectHint: null,
       };
     }
 
@@ -860,16 +923,19 @@ export const inspectUrlsInternal = internalAction({
       accessToken = await ensureAccessToken(ctx, connection);
     } catch (e) {
       return {
-        ok: false as const,
+        ok: false,
         error: e instanceof Error ? e.message : "Token refresh failed",
-        results: [] as UrlInspectionResult[],
-        skipped: [] as string[],
-        reconnectHint: null as string | null,
+        results: [],
+        skipped: [],
+        reconnectHint: null,
       };
     }
 
     const properties = await listGscSites(accessToken);
-    const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+    const sites = (await ctx.runQuery(
+      internal.gsc.listSitesInternal,
+      {}
+    )) as SiteSlugDomain[];
     const site = args.siteSlug
       ? sites.find((s) => s.slug === args.siteSlug)
       : undefined;
@@ -888,24 +954,25 @@ export const inspectUrlsInternal = internalAction({
 
     if (!property) {
       return {
-        ok: false as const,
+        ok: false,
         error: args.siteSlug
           ? `Site "${args.siteSlug}" not verified in Search Console (not_in_console)`
           : "Could not resolve a GSC property for these URLs",
-        results: [] as UrlInspectionResult[],
+        results: [],
         skipped: args.urls,
-        reconnectHint: null as string | null,
-        propertyStatus: "not_in_console" as const,
+        reconnectHint: null,
+        propertyStatus: "not_in_console",
       };
     }
 
     const delayMs = Math.max(0, args.delayMs ?? DEFAULT_INSPECT_DELAY_MS);
     const languageCode = args.languageCode ?? "en-US";
+    const siteSlugForFilter = args.siteSlug ?? site?.slug;
     const filtered = args.urls.filter(
-      (u) => !isIntentionalNoindexUrl(u, args.siteSlug ?? site?.slug)
+      (u) => !isIntentionalNoindexUrl(u, siteSlugForFilter)
     );
-    const intentionalSkipped = args.urls.filter((u) =>
-      isIntentionalNoindexUrl(u, args.siteSlug ?? site?.slug)
+    const intentionalSkipped: string[] = args.urls.filter((u) =>
+      isIntentionalNoindexUrl(u, siteSlugForFilter)
     );
     const maxUrls = args.maxUrls ?? filtered.length;
     const toInspect = filtered.slice(0, maxUrls);
@@ -922,7 +989,7 @@ export const inspectUrlsInternal = internalAction({
         property,
         languageCode
       );
-      result.siteSlug = args.siteSlug ?? site?.slug;
+      result.siteSlug = siteSlugForFilter;
       results.push(result);
       if (result.insufficientScope) {
         reconnectHint =
@@ -935,18 +1002,17 @@ export const inspectUrlsInternal = internalAction({
     }
 
     return {
-      ok: true as const,
+      ok: true,
       property,
       results,
       skipped: [...intentionalSkipped, ...quotaSkipped],
       intentionalNoindexSkipped: intentionalSkipped.length,
       quotaSkipped: quotaSkipped.length,
       reconnectHint,
-      propertyStatus: "matched" as const,
+      propertyStatus: "matched",
     };
   },
 });
-
 /**
  * Fetch live sitemap.xml for one or more site slugs, filter intentional noindex
  * URLs, and run URL Inspection under an optional daily quota cap.
@@ -959,22 +1025,14 @@ export const inspectSitemapsInternal = internalAction({
     /** Hard cap across all sites in this invocation (default: no cap). */
     maxUrls: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<InspectSitemapsResult> => {
     const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
     if (!connection) {
       return {
-        ok: false as const,
+        ok: false,
         error: "Google Search Console is not connected",
-        sites: [] as Array<{
-          slug: string;
-          domain: string;
-          status: string;
-          detail?: string;
-          results: UrlInspectionResult[];
-          sitemapUrlCount: number;
-          inspectedCount: number;
-        }>,
-        reconnectHint: null as string | null,
+        sites: [],
+        reconnectHint: null,
       };
     }
 
@@ -983,31 +1041,24 @@ export const inspectSitemapsInternal = internalAction({
       accessToken = await ensureAccessToken(ctx, connection);
     } catch (e) {
       return {
-        ok: false as const,
+        ok: false,
         error: e instanceof Error ? e.message : "Token refresh failed",
         sites: [],
-        reconnectHint: null as string | null,
+        reconnectHint: null,
       };
     }
 
     const properties = await listGscSites(accessToken);
-    const allSites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+    const allSites = (await ctx.runQuery(
+      internal.gsc.listSitesInternal,
+      {}
+    )) as SiteSlugDomain[];
     const delayMs = Math.max(0, args.delayMs ?? DEFAULT_INSPECT_DELAY_MS);
     const languageCode = args.languageCode ?? "en-US";
     let remaining = args.maxUrls ?? Number.POSITIVE_INFINITY;
     let reconnectHint: string | null = null;
 
-    const siteReports: Array<{
-      slug: string;
-      domain: string;
-      status: string;
-      detail?: string;
-      property?: string;
-      results: UrlInspectionResult[];
-      sitemapUrlCount: number;
-      inspectedCount: number;
-      intentionalNoindexSkipped: number;
-    }> = [];
+    const siteReports: InspectSitemapsSiteReport[] = [];
 
     for (const slug of args.slugs) {
       const site = allSites.find((s) => s.slug === slug);
@@ -1122,7 +1173,7 @@ export const inspectSitemapsInternal = internalAction({
     }
 
     return {
-      ok: true as const,
+      ok: true,
       sites: siteReports,
       reconnectHint,
       inspectedTotal: siteReports.reduce((n, s) => n + s.inspectedCount, 0),
@@ -1140,14 +1191,17 @@ export const inspectUrls = action({
     languageCode: v.optional(v.string()),
     maxUrls: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<InspectUrlsResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
     const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
     if (!connection) throw new Error("Google Search Console is not connected");
 
-    return await ctx.runAction(internal.gscActions.inspectUrlsInternal, args);
+    return (await ctx.runAction(
+      internal.gscActions.inspectUrlsInternal,
+      args
+    )) as InspectUrlsResult;
   },
 });
 
@@ -1159,14 +1213,17 @@ export const inspectSitemaps = action({
     languageCode: v.optional(v.string()),
     maxUrls: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<InspectSitemapsResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
     const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
     if (!connection) throw new Error("Google Search Console is not connected");
 
-    return await ctx.runAction(internal.gscActions.inspectSitemapsInternal, args);
+    return (await ctx.runAction(
+      internal.gscActions.inspectSitemapsInternal,
+      args
+    )) as InspectSitemapsResult;
   },
 });
 
@@ -1179,10 +1236,10 @@ export const queryPages28dInternal = internalAction({
     siteSlug: v.string(),
     rowLimit: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<QueryPages28dResult> => {
     const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
     if (!connection) {
-      return { ok: false as const, error: "Not connected", rows: [] as PageAnalyticsRow[] };
+      return { ok: false, error: "Not connected", rows: [] };
     }
 
     let accessToken: string;
@@ -1190,26 +1247,29 @@ export const queryPages28dInternal = internalAction({
       accessToken = await ensureAccessToken(ctx, connection);
     } catch (e) {
       return {
-        ok: false as const,
+        ok: false,
         error: e instanceof Error ? e.message : "Token refresh failed",
-        rows: [] as PageAnalyticsRow[],
+        rows: [],
       };
     }
 
     const properties = await listGscSites(accessToken);
-    const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+    const sites = (await ctx.runQuery(
+      internal.gsc.listSitesInternal,
+      {}
+    )) as SiteSlugDomain[];
     const site = sites.find((s) => s.slug === args.siteSlug);
     if (!site) {
-      return { ok: false as const, error: `Unknown slug ${args.siteSlug}`, rows: [] };
+      return { ok: false, error: `Unknown slug ${args.siteSlug}`, rows: [] };
     }
 
     const property = matchGscProperty(site.domain, properties);
     if (!property) {
       return {
-        ok: false as const,
+        ok: false,
         error: "not_in_console",
-        rows: [] as PageAnalyticsRow[],
-        propertyStatus: "not_in_console" as const,
+        rows: [],
+        propertyStatus: "not_in_console",
       };
     }
 
@@ -1241,9 +1301,9 @@ export const queryPages28dInternal = internalAction({
     };
     if (!res.ok) {
       return {
-        ok: false as const,
+        ok: false,
         error: data.error?.message || `Page analytics failed for ${property}`,
-        rows: [] as PageAnalyticsRow[],
+        rows: [],
       };
     }
 
@@ -1264,7 +1324,7 @@ export const queryPages28dInternal = internalAction({
       );
 
     return {
-      ok: true as const,
+      ok: true,
       property,
       startDate,
       endDate,

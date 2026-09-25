@@ -358,7 +358,9 @@ export const deleteThread = action({
     const messages = await ctx.runQuery(internal.email.listMessagesInternal, {
       threadId: args.threadId,
     });
-    const uids = messages.map((m) => m.uid).filter((u) => u > 0);
+    const uids = messages
+      .map((m: { uid: number }) => m.uid)
+      .filter((u: number) => u > 0);
 
     let imapError: string | null = null;
     if (uids.length > 0) {

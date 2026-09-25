@@ -546,7 +546,9 @@ export const deleteConversation = action({
     for (let i = 0; i < messages.length; i += chunk) {
       const batch = messages.slice(i, i + chunk);
       await Promise.all(
-        batch.map((msg) => bestEffortVoipmsDelete(msg.voipmsId, msg.type))
+        batch.map((msg: { voipmsId: string; type: "sms" | "mms" }) =>
+          bestEffortVoipmsDelete(msg.voipmsId, msg.type)
+        )
       );
     }
 
