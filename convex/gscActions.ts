@@ -13,7 +13,12 @@ import {
   aggregateQueryHourlyRows,
   type GscAnalyticsRow,
 } from "./lib/gscAggregate";
+import {
+  isIntentionalNoindexUrl,
+  parseSitemapLocs,
+} from "./lib/gscInspection";
 
+export { isIntentionalNoindexUrl, parseSitemapLocs } from "./lib/gscInspection";
 const GSC_SCOPE =
   "https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/userinfo.email";
 
@@ -642,5 +647,628 @@ export const submitSitemaps = action({
     }
 
     return { results };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// URL Inspection API (index coverage discovery)
+// Scope: existing `webmasters` — reconnect if Google returns insufficient scope.
+// Quota: ~2,000 inspections/day per project; callers should rate-limit.
+// ---------------------------------------------------------------------------
+
+const URL_INSPECTION_ENDPOINT =
+  "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect";
+
+/** Default polite delay between inspections (ms). */
+const DEFAULT_INSPECT_DELAY_MS = 250;
+
+export type UrlInspectionResult = {
+  inspectionUrl: string;
+  siteSlug?: string;
+  siteUrl?: string;
+  ok: boolean;
+  verdict?: string;
+  coverageState?: string;
+  indexingState?: string;
+  robotsTxtState?: string;
+  pageFetchState?: string;
+  lastCrawlTime?: string;
+  referringUrls?: string[];
+  sitemap?: string[];
+  googleCanonical?: string;
+  userCanonical?: string;
+  crawledAs?: string;
+  error?: string;
+  /** True when OAuth scope cannot call URL Inspection — reconnect Google. */
+  insufficientScope?: boolean;
+};
+
+export type PageAnalyticsRow = {
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type TokenConnection = {
+  _id: Id<"gscConnections">;
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: number;
+};
+
+async function ensureAccessToken(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- action ctx runMutation
+  ctx: { runMutation: (ref: any, args: any) => Promise<any> },
+  connection: TokenConnection
+): Promise<string> {
+  if (connection.accessTokenExpiresAt > Date.now() + 60_000) {
+    return connection.accessToken;
+  }
+  const refreshed = await refreshAccessToken(connection.refreshToken);
+  await ctx.runMutation(internal.gsc.updateTokens, {
+    connectionId: connection._id,
+    accessToken: refreshed.accessToken,
+    accessTokenExpiresAt: Date.now() + refreshed.expiresIn * 1000,
+    refreshToken: refreshed.refreshToken,
+  });
+  return refreshed.accessToken;
+}
+
+function isInsufficientScopeError(status: number, message: string): boolean {
+  if (status === 403 && /insufficient|scope|ACCESS_TOKEN_SCOPE/i.test(message)) {
+    return true;
+  }
+  return /insufficient.?scope|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(message);
+}
+
+async function inspectOneUrl(
+  accessToken: string,
+  inspectionUrl: string,
+  siteUrl: string,
+  languageCode: string
+): Promise<UrlInspectionResult> {
+  const res = await fetch(URL_INSPECTION_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      inspectionUrl,
+      siteUrl,
+      languageCode,
+    }),
+  });
+
+  const data = (await res.json()) as {
+    inspectionResult?: {
+      indexStatusResult?: {
+        verdict?: string;
+        coverageState?: string;
+        robotsTxtState?: string;
+        indexingState?: string;
+        lastCrawlTime?: string;
+        pageFetchState?: string;
+        googleCanonical?: string;
+        userCanonical?: string;
+        crawledAs?: string;
+        referringUrls?: string[];
+        sitemap?: string[];
+      };
+    };
+    error?: {
+      code?: number;
+      message?: string;
+      status?: string;
+    };
+  };
+
+  if (!res.ok) {
+    const message =
+      data.error?.message ||
+      `URL Inspection failed (${res.status}) for ${inspectionUrl}`;
+    return {
+      inspectionUrl,
+      siteUrl,
+      ok: false,
+      error: message,
+      insufficientScope: isInsufficientScopeError(res.status, message),
+    };
+  }
+
+  const index = data.inspectionResult?.indexStatusResult ?? {};
+  return {
+    inspectionUrl,
+    siteUrl,
+    ok: true,
+    verdict: index.verdict,
+    coverageState: index.coverageState,
+    indexingState: index.indexingState,
+    robotsTxtState: index.robotsTxtState,
+    pageFetchState: index.pageFetchState,
+    lastCrawlTime: index.lastCrawlTime,
+    referringUrls: index.referringUrls,
+    sitemap: index.sitemap,
+    googleCanonical: index.googleCanonical,
+    userCanonical: index.userCanonical,
+    crawledAs: index.crawledAs,
+  };
+}
+
+async function fetchSitemapUrls(domain: string): Promise<string[]> {
+  const feedUrl = sitemapFeedUrl(domain);
+  const res = await fetch(feedUrl, {
+    headers: { Accept: "application/xml,text/xml,*/*" },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch sitemap ${feedUrl} (${res.status})`);
+  }
+  const xml = await res.text();
+  const locs = parseSitemapLocs(xml);
+  const isIndex =
+    /<sitemapindex[\s>]/i.test(xml) ||
+    locs.some((u) => /sitemap/i.test(u) && u.endsWith(".xml"));
+
+  if (!isIndex) return locs;
+
+  const childUrls: string[] = [];
+  for (const child of locs) {
+    const childRes = await fetch(child, {
+      headers: { Accept: "application/xml,text/xml,*/*" },
+    });
+    if (!childRes.ok) continue;
+    childUrls.push(...parseSitemapLocs(await childRes.text()));
+  }
+  return childUrls;
+}
+
+/**
+ * Inspect a list of URLs against a GSC property (from site slug or explicit siteUrl).
+ * Rate-limits between calls. Skips intentional noindex URLs when siteSlug is set.
+ */
+export const inspectUrlsInternal = internalAction({
+  args: {
+    urls: v.array(v.string()),
+    siteSlug: v.optional(v.string()),
+    /** GSC property URL override (e.g. sc-domain:example.com or https://…). */
+    siteUrl: v.optional(v.string()),
+    delayMs: v.optional(v.number()),
+    languageCode: v.optional(v.string()),
+    /** Cap inspections in this call (remaining URLs returned as skipped). */
+    maxUrls: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) {
+      return {
+        ok: false as const,
+        error: "Google Search Console is not connected",
+        results: [] as UrlInspectionResult[],
+        skipped: [] as string[],
+        reconnectHint: null as string | null,
+      };
+    }
+
+    let accessToken: string;
+    try {
+      accessToken = await ensureAccessToken(ctx, connection);
+    } catch (e) {
+      return {
+        ok: false as const,
+        error: e instanceof Error ? e.message : "Token refresh failed",
+        results: [] as UrlInspectionResult[],
+        skipped: [] as string[],
+        reconnectHint: null as string | null,
+      };
+    }
+
+    const properties = await listGscSites(accessToken);
+    const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+    const site = args.siteSlug
+      ? sites.find((s) => s.slug === args.siteSlug)
+      : undefined;
+
+    let property = args.siteUrl?.trim() || null;
+    if (!property && site) {
+      property = matchGscProperty(site.domain, properties);
+    }
+    if (!property && args.urls[0]) {
+      try {
+        property = matchGscProperty(new URL(args.urls[0]).hostname, properties);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (!property) {
+      return {
+        ok: false as const,
+        error: args.siteSlug
+          ? `Site "${args.siteSlug}" not verified in Search Console (not_in_console)`
+          : "Could not resolve a GSC property for these URLs",
+        results: [] as UrlInspectionResult[],
+        skipped: args.urls,
+        reconnectHint: null as string | null,
+        propertyStatus: "not_in_console" as const,
+      };
+    }
+
+    const delayMs = Math.max(0, args.delayMs ?? DEFAULT_INSPECT_DELAY_MS);
+    const languageCode = args.languageCode ?? "en-US";
+    const filtered = args.urls.filter(
+      (u) => !isIntentionalNoindexUrl(u, args.siteSlug ?? site?.slug)
+    );
+    const intentionalSkipped = args.urls.filter((u) =>
+      isIntentionalNoindexUrl(u, args.siteSlug ?? site?.slug)
+    );
+    const maxUrls = args.maxUrls ?? filtered.length;
+    const toInspect = filtered.slice(0, maxUrls);
+    const quotaSkipped = filtered.slice(maxUrls);
+
+    const results: UrlInspectionResult[] = [];
+    let reconnectHint: string | null = null;
+
+    for (let i = 0; i < toInspect.length; i++) {
+      const url = toInspect[i]!;
+      const result = await inspectOneUrl(
+        accessToken,
+        url,
+        property,
+        languageCode
+      );
+      result.siteSlug = args.siteSlug ?? site?.slug;
+      results.push(result);
+      if (result.insufficientScope) {
+        reconnectHint =
+          "URL Inspection requires the full webmasters OAuth scope. Disconnect Google in Booking Broom SEO settings, revoke the app at https://myaccount.google.com/permissions if needed, then reconnect with consent.";
+        break;
+      }
+      if (i < toInspect.length - 1 && delayMs > 0) {
+        await sleep(delayMs);
+      }
+    }
+
+    return {
+      ok: true as const,
+      property,
+      results,
+      skipped: [...intentionalSkipped, ...quotaSkipped],
+      intentionalNoindexSkipped: intentionalSkipped.length,
+      quotaSkipped: quotaSkipped.length,
+      reconnectHint,
+      propertyStatus: "matched" as const,
+    };
+  },
+});
+
+/**
+ * Fetch live sitemap.xml for one or more site slugs, filter intentional noindex
+ * URLs, and run URL Inspection under an optional daily quota cap.
+ */
+export const inspectSitemapsInternal = internalAction({
+  args: {
+    slugs: v.array(v.string()),
+    delayMs: v.optional(v.number()),
+    languageCode: v.optional(v.string()),
+    /** Hard cap across all sites in this invocation (default: no cap). */
+    maxUrls: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) {
+      return {
+        ok: false as const,
+        error: "Google Search Console is not connected",
+        sites: [] as Array<{
+          slug: string;
+          domain: string;
+          status: string;
+          detail?: string;
+          results: UrlInspectionResult[];
+          sitemapUrlCount: number;
+          inspectedCount: number;
+        }>,
+        reconnectHint: null as string | null,
+      };
+    }
+
+    let accessToken: string;
+    try {
+      accessToken = await ensureAccessToken(ctx, connection);
+    } catch (e) {
+      return {
+        ok: false as const,
+        error: e instanceof Error ? e.message : "Token refresh failed",
+        sites: [],
+        reconnectHint: null as string | null,
+      };
+    }
+
+    const properties = await listGscSites(accessToken);
+    const allSites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+    const delayMs = Math.max(0, args.delayMs ?? DEFAULT_INSPECT_DELAY_MS);
+    const languageCode = args.languageCode ?? "en-US";
+    let remaining = args.maxUrls ?? Number.POSITIVE_INFINITY;
+    let reconnectHint: string | null = null;
+
+    const siteReports: Array<{
+      slug: string;
+      domain: string;
+      status: string;
+      detail?: string;
+      property?: string;
+      results: UrlInspectionResult[];
+      sitemapUrlCount: number;
+      inspectedCount: number;
+      intentionalNoindexSkipped: number;
+    }> = [];
+
+    for (const slug of args.slugs) {
+      const site = allSites.find((s) => s.slug === slug);
+      if (!site) {
+        siteReports.push({
+          slug,
+          domain: "",
+          status: "unknown_slug",
+          detail: "Slug not found in seeded sites",
+          results: [],
+          sitemapUrlCount: 0,
+          inspectedCount: 0,
+          intentionalNoindexSkipped: 0,
+        });
+        continue;
+      }
+
+      const property = matchGscProperty(site.domain, properties);
+      if (!property) {
+        siteReports.push({
+          slug,
+          domain: site.domain,
+          status: "not_in_console",
+          detail: "Skip URL Inspection until the property is verified in GSC",
+          results: [],
+          sitemapUrlCount: 0,
+          inspectedCount: 0,
+          intentionalNoindexSkipped: 0,
+        });
+        continue;
+      }
+
+      if (remaining <= 0) {
+        siteReports.push({
+          slug,
+          domain: site.domain,
+          status: "quota_exhausted",
+          detail: "Daily inspection quota cap reached for this run",
+          property,
+          results: [],
+          sitemapUrlCount: 0,
+          inspectedCount: 0,
+          intentionalNoindexSkipped: 0,
+        });
+        continue;
+      }
+
+      let sitemapUrls: string[];
+      try {
+        sitemapUrls = await fetchSitemapUrls(site.domain);
+      } catch (e) {
+        siteReports.push({
+          slug,
+          domain: site.domain,
+          status: "sitemap_error",
+          detail: e instanceof Error ? e.message : "Sitemap fetch failed",
+          property,
+          results: [],
+          sitemapUrlCount: 0,
+          inspectedCount: 0,
+          intentionalNoindexSkipped: 0,
+        });
+        continue;
+      }
+
+      const intentional = sitemapUrls.filter((u) =>
+        isIntentionalNoindexUrl(u, slug)
+      );
+      const eligible = sitemapUrls.filter(
+        (u) => !isIntentionalNoindexUrl(u, slug)
+      );
+      const toInspect = eligible.slice(0, remaining);
+      remaining -= toInspect.length;
+
+      const results: UrlInspectionResult[] = [];
+      for (let i = 0; i < toInspect.length; i++) {
+        const url = toInspect[i]!;
+        const result = await inspectOneUrl(
+          accessToken,
+          url,
+          property,
+          languageCode
+        );
+        result.siteSlug = slug;
+        results.push(result);
+        if (result.insufficientScope) {
+          reconnectHint =
+            "URL Inspection requires the full webmasters OAuth scope. Disconnect Google in Booking Broom SEO settings, revoke the app at https://myaccount.google.com/permissions if needed, then reconnect with consent.";
+          break;
+        }
+        if (i < toInspect.length - 1 && delayMs > 0) {
+          await sleep(delayMs);
+        }
+      }
+
+      siteReports.push({
+        slug,
+        domain: site.domain,
+        status: reconnectHint ? "insufficient_scope" : "inspected",
+        property,
+        results,
+        sitemapUrlCount: sitemapUrls.length,
+        inspectedCount: results.length,
+        intentionalNoindexSkipped: intentional.length,
+        detail:
+          eligible.length > toInspect.length
+            ? `Prioritized ${toInspect.length} of ${eligible.length} eligible URLs (quota)`
+            : undefined,
+      });
+
+      if (reconnectHint) break;
+    }
+
+    return {
+      ok: true as const,
+      sites: siteReports,
+      reconnectHint,
+      inspectedTotal: siteReports.reduce((n, s) => n + s.inspectedCount, 0),
+    };
+  },
+});
+
+/** Manager-facing wrapper around inspectUrlsInternal. */
+export const inspectUrls = action({
+  args: {
+    urls: v.array(v.string()),
+    siteSlug: v.optional(v.string()),
+    siteUrl: v.optional(v.string()),
+    delayMs: v.optional(v.number()),
+    languageCode: v.optional(v.string()),
+    maxUrls: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) throw new Error("Google Search Console is not connected");
+
+    return await ctx.runAction(internal.gscActions.inspectUrlsInternal, args);
+  },
+});
+
+/** Manager-facing sitemap inspection for one or more slugs. */
+export const inspectSitemaps = action({
+  args: {
+    slugs: v.array(v.string()),
+    delayMs: v.optional(v.number()),
+    languageCode: v.optional(v.string()),
+    maxUrls: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) throw new Error("Google Search Console is not connected");
+
+    return await ctx.runAction(internal.gscActions.inspectSitemapsInternal, args);
+  },
+});
+
+/**
+ * Secondary signal: Search Analytics with `page` dimension for the last 28 days.
+ * Pages with impressions are almost certainly indexed (weak positive only).
+ */
+export const queryPages28dInternal = internalAction({
+  args: {
+    siteSlug: v.string(),
+    rowLimit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) {
+      return { ok: false as const, error: "Not connected", rows: [] as PageAnalyticsRow[] };
+    }
+
+    let accessToken: string;
+    try {
+      accessToken = await ensureAccessToken(ctx, connection);
+    } catch (e) {
+      return {
+        ok: false as const,
+        error: e instanceof Error ? e.message : "Token refresh failed",
+        rows: [] as PageAnalyticsRow[],
+      };
+    }
+
+    const properties = await listGscSites(accessToken);
+    const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+    const site = sites.find((s) => s.slug === args.siteSlug);
+    if (!site) {
+      return { ok: false as const, error: `Unknown slug ${args.siteSlug}`, rows: [] };
+    }
+
+    const property = matchGscProperty(site.domain, properties);
+    if (!property) {
+      return {
+        ok: false as const,
+        error: "not_in_console",
+        rows: [] as PageAnalyticsRow[],
+        propertyStatus: "not_in_console" as const,
+      };
+    }
+
+    const { startDate, endDate } = dateRangeForPeriod(28, new Date());
+    const encoded = encodeURIComponent(property);
+    const res = await fetch(
+      `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          startDate,
+          endDate,
+          type: "web",
+          aggregationType: "byPage",
+          dimensions: ["page"],
+          rowLimit: args.rowLimit ?? 25000,
+          dataState: "all",
+        }),
+      }
+    );
+
+    const data = (await res.json()) as {
+      rows?: GscAnalyticsRow[];
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      return {
+        ok: false as const,
+        error: data.error?.message || `Page analytics failed for ${property}`,
+        rows: [] as PageAnalyticsRow[],
+      };
+    }
+
+    const rows: PageAnalyticsRow[] = (data.rows ?? [])
+      .map((row) => ({
+        page: row.keys?.[0] ?? "",
+        clicks: row.clicks ?? 0,
+        impressions: row.impressions ?? 0,
+        ctr: row.ctr ?? 0,
+        position: row.position ?? 0,
+      }))
+      .filter((r) => r.page.length > 0)
+      .sort(
+        (a, b) =>
+          b.impressions - a.impressions ||
+          b.clicks - a.clicks ||
+          a.page.localeCompare(b.page)
+      );
+
+    return {
+      ok: true as const,
+      property,
+      startDate,
+      endDate,
+      rows,
+    };
   },
 });
