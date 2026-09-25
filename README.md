@@ -355,6 +355,7 @@ Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Cloudflare Worker 
 
 7. In the app: open **SEO** → **Connect Google** → approve Search Console access (read + submit sitemaps). Metrics sync daily at 06:00 UTC and on demand via **Sync now**. Use **Submit sitemaps** to push each site’s `sitemap.xml` to Search Console for every verified property. If you previously connected with read-only access, **Disconnect** and **Connect Google** again so the new scope is granted. Sites that are not in the connected Search Console account show a **Not in Google Search Console** badge.
 
+8. **URL Inspection** (indexing recovery): internal actions `gscActions.inspectUrlsInternal` / `inspectSitemapsInternal` call Google’s URL Inspection API with the stored `webmasters` refresh token (same scope as sitemap submit). Optional `queryPages28dInternal` pulls Search Analytics with the `page` dimension as a secondary indexed signal. Rate-limit under Google’s ~2,000 inspections/day quota. If Inspection returns insufficient scope, Disconnect → reconnect with consent.
 ## Bing Webmaster (SEO page)
 
 The same **SEO** page (`/seo`) can show Bing traffic (clicks, impressions, CTR), crawl issues, and property match status. Use the **Google / Bing** toggle at the top of the page.
