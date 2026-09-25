@@ -583,8 +583,7 @@ export type SitemapSubmitResult = {
 };
 
 /**
- * Submit each cleaning site's sitemap.xml to Google Search Console for every
- * property that matches a seeded site domain.
+ * Manager-facing wrapper around submitSitemapsInternal.
  * Requires full `webmasters` scope — reconnect Google after upgrading from readonly.
  */
 export const submitSitemaps = action({
@@ -596,57 +595,10 @@ export const submitSitemaps = action({
     const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
     if (!connection) throw new Error("Google Search Console is not connected");
 
-    let accessToken = connection.accessToken;
-    if (connection.accessTokenExpiresAt <= Date.now() + 60_000) {
-      const refreshed = await refreshAccessToken(connection.refreshToken);
-      await ctx.runMutation(internal.gsc.updateTokens, {
-        connectionId: connection._id,
-        accessToken: refreshed.accessToken,
-        accessTokenExpiresAt: Date.now() + refreshed.expiresIn * 1000,
-        refreshToken: refreshed.refreshToken,
-      });
-      accessToken = refreshed.accessToken;
-    }
-
-    const properties = await listGscSites(accessToken);
-    const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
-    const results: SitemapSubmitResult[] = [];
-
-    for (const site of sites) {
-      const feedUrl = sitemapFeedUrl(site.domain);
-      const property = matchGscProperty(site.domain, properties);
-      if (!property) {
-        results.push({
-          slug: site.slug,
-          domain: site.domain,
-          feedUrl,
-          status: "skipped",
-          detail: "Site not verified in Search Console for this Google account",
-        });
-        continue;
-      }
-
-      try {
-        await putSitemap(accessToken, property, feedUrl);
-        results.push({
-          slug: site.slug,
-          domain: site.domain,
-          feedUrl,
-          status: "submitted",
-          detail: property,
-        });
-      } catch (e) {
-        results.push({
-          slug: site.slug,
-          domain: site.domain,
-          feedUrl,
-          status: "error",
-          detail: e instanceof Error ? e.message : "Submit failed",
-        });
-      }
-    }
-
-    return { results };
+    return (await ctx.runAction(
+      internal.gscActions.submitSitemapsInternal,
+      {}
+    )) as { results: SitemapSubmitResult[] };
   },
 });
 
@@ -782,6 +734,60 @@ async function ensureAccessToken(
   });
   return refreshed.accessToken;
 }
+
+/**
+ * CLI: submit each seeded site's sitemap.xml to matching GSC properties.
+ * `pnpm exec convex run internal.gscActions.submitSitemapsInternal`
+ * (use CONVEX_DEPLOY_KEY for Dev `dynamic-gnu-491`).
+ */
+export const submitSitemapsInternal = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ results: SitemapSubmitResult[] }> => {
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) throw new Error("Google Search Console is not connected");
+
+    const accessToken = await ensureAccessToken(ctx, connection);
+    const properties = await listGscSites(accessToken);
+    const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
+    const results: SitemapSubmitResult[] = [];
+
+    for (const site of sites) {
+      const feedUrl = sitemapFeedUrl(site.domain);
+      const property = matchGscProperty(site.domain, properties);
+      if (!property) {
+        results.push({
+          slug: site.slug,
+          domain: site.domain,
+          feedUrl,
+          status: "skipped",
+          detail: "Site not verified in Search Console for this Google account",
+        });
+        continue;
+      }
+
+      try {
+        await putSitemap(accessToken, property, feedUrl);
+        results.push({
+          slug: site.slug,
+          domain: site.domain,
+          feedUrl,
+          status: "submitted",
+          detail: property,
+        });
+      } catch (e) {
+        results.push({
+          slug: site.slug,
+          domain: site.domain,
+          feedUrl,
+          status: "error",
+          detail: e instanceof Error ? e.message : "Submit failed",
+        });
+      }
+    }
+
+    return { results };
+  },
+});
 
 function isInsufficientScopeError(status: number, message: string): boolean {
   if (status === 403 && /insufficient|scope|ACCESS_TOKEN_SCOPE/i.test(message)) {
