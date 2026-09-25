@@ -30,6 +30,7 @@ import type * as lib_calendarTime from "../lib/calendarTime.js";
 import type * as lib_emailSync from "../lib/emailSync.js";
 import type * as lib_gscAggregate from "../lib/gscAggregate.js";
 import type * as lib_gscDates from "../lib/gscDates.js";
+import type * as lib_gscInspection from "../lib/gscInspection.js";
 import type * as lib_gscMatch from "../lib/gscMatch.js";
 import type * as lib_phone from "../lib/phone.js";
 import type * as lib_pricingConfigs from "../lib/pricingConfigs.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   "lib/emailSync": typeof lib_emailSync;
   "lib/gscAggregate": typeof lib_gscAggregate;
   "lib/gscDates": typeof lib_gscDates;
+  "lib/gscInspection": typeof lib_gscInspection;
   "lib/gscMatch": typeof lib_gscMatch;
   "lib/phone": typeof lib_phone;
   "lib/pricingConfigs": typeof lib_pricingConfigs;
