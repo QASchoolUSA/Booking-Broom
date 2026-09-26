@@ -158,6 +158,7 @@ public struct Booking: Identifiable, Codable, Hashable {
     public var property: PropertyDetails?
     public var quote: BookingQuote?
     public var archivedAt: Date?
+    public var telegramNotifiedAt: Date?
     public var createdAt: Date
     public var updatedAt: Date
     
@@ -188,6 +189,7 @@ public struct Booking: Identifiable, Codable, Hashable {
         property: PropertyDetails? = nil,
         quote: BookingQuote? = nil,
         archivedAt: Date? = nil,
+        telegramNotifiedAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         latitude: Double? = nil,
@@ -215,6 +217,7 @@ public struct Booking: Identifiable, Codable, Hashable {
         self.property = property
         self.quote = quote
         self.archivedAt = archivedAt
+        self.telegramNotifiedAt = telegramNotifiedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.latitude = latitude

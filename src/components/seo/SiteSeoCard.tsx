@@ -182,32 +182,66 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
           </p>
         </div>
       ) : metricCells ? (
-        <div
-          className={cn(
-            "mt-4 grid gap-3",
-            showPosition ? "grid-cols-2" : "grid-cols-3"
-          )}
-        >
-          {metricCells.map((cell) => (
-            <div key={cell.label} className="rounded-lg bg-muted/40 px-3 py-2.5">
-              <p className="text-lg font-bold tabular-nums leading-none tracking-tight">
-                {cell.value}
-              </p>
-              {cell.deltaText && (
-                <p
-                  className={cn(
-                    "mt-1",
-                    deltaClassName(cell.deltaValue, cell.direction)
-                  )}
+        <div className="mt-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            {metricCells
+              .filter((c) => c.label === "Clicks" || c.label === "Impressions")
+              .map((cell) => (
+                <div
+                  key={cell.label}
+                  className="rounded-xl border border-border/60 bg-gradient-to-b from-muted/50 to-muted/20 px-3.5 py-3"
                 >
-                  {cell.deltaText}
-                </p>
-              )}
-              <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                {cell.label}
-              </p>
-            </div>
-          ))}
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {cell.label}
+                  </p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-foreground">
+                    {cell.value}
+                  </p>
+                  {cell.deltaText && (
+                    <p
+                      className={cn(
+                        "mt-1 text-xs font-medium",
+                        deltaClassName(cell.deltaValue, cell.direction)
+                      )}
+                    >
+                      {cell.deltaText}
+                    </p>
+                  )}
+                </div>
+              ))}
+          </div>
+          <div
+            className={cn(
+              "grid gap-3",
+              showPosition ? "grid-cols-2" : "grid-cols-1"
+            )}
+          >
+            {metricCells
+              .filter((c) => c.label !== "Clicks" && c.label !== "Impressions")
+              .map((cell) => (
+                <div
+                  key={cell.label}
+                  className="rounded-lg bg-muted/40 px-3 py-2.5"
+                >
+                  <p className="text-lg font-bold tabular-nums leading-none tracking-tight">
+                    {cell.value}
+                  </p>
+                  {cell.deltaText && (
+                    <p
+                      className={cn(
+                        "mt-1",
+                        deltaClassName(cell.deltaValue, cell.direction)
+                      )}
+                    >
+                      {cell.deltaText}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                    {cell.label}
+                  </p>
+                </div>
+              ))}
+          </div>
         </div>
       ) : (
         <div className="mt-4 rounded-lg border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
@@ -441,46 +475,64 @@ function KeywordList({
   compact?: boolean;
 }) {
   return (
-    <ol className={cn("mt-1.5 space-y-1", !compact && "mt-0 space-y-2")}>
-      {queries.map((q, i) => {
-        const rank = startIndex + i + 1;
-        return (
-          <li
-            key={`${q.query}-${rank}`}
-            className={cn(
-              "flex gap-3 text-sm",
-              compact ? "items-baseline justify-between" : "items-start"
-            )}
-          >
-            <span className="min-w-0 flex-1">
-              <span className="mr-2 tabular-nums text-muted-foreground">
-                {rank}.
-              </span>
-              <span className="text-foreground">{q.query}</span>
-            </span>
-            {compact ? (
-              <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
-                {formatNumber(q.clicks)} clk
-                <span className="mx-1 text-muted-foreground/50">·</span>
-                {formatNumber(q.impressions)} imp
-              </span>
-            ) : (
-              <span className="shrink-0 space-y-0.5 text-right tabular-nums text-xs text-muted-foreground">
-                <span className="block">
-                  {formatNumber(q.clicks)} clk
-                  <span className="mx-1 text-muted-foreground/50">·</span>
-                  {formatNumber(q.impressions)} imp
+    <div className={cn("mt-1.5", !compact && "mt-0")}>
+      <div
+        className={cn(
+          "grid gap-2 border-b border-border/60 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
+          compact
+            ? "grid-cols-[minmax(0,1fr)_auto_auto]"
+            : "grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_3.5rem_3rem]"
+        )}
+      >
+        <span>Keyword</span>
+        <span className="text-right">Clicks</span>
+        <span className="text-right">Impr.</span>
+        {!compact && (
+          <>
+            <span className="text-right">CTR</span>
+            <span className="text-right">Pos</span>
+          </>
+        )}
+      </div>
+      <ol className={cn("space-y-0", !compact && "space-y-0")}>
+        {queries.map((q, i) => {
+          const rank = startIndex + i + 1;
+          return (
+            <li
+              key={`${q.query}-${rank}`}
+              className={cn(
+                "grid items-baseline gap-2 border-b border-border/40 py-2 text-sm last:border-0",
+                compact
+                  ? "grid-cols-[minmax(0,1fr)_auto_auto]"
+                  : "grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_3.5rem_3rem]"
+              )}
+            >
+              <span className="min-w-0 truncate text-foreground">
+                <span className="mr-1.5 tabular-nums text-muted-foreground">
+                  {rank}.
                 </span>
-                <span className="block">
-                  {formatCtr(q.ctr)} CTR
-                  <span className="mx-1 text-muted-foreground/50">·</span>
-                  pos {formatPosition(q.position)}
-                </span>
+                {q.query}
               </span>
-            )}
-          </li>
-        );
-      })}
-    </ol>
+              <span className="text-right tabular-nums text-xs font-semibold text-foreground">
+                {formatNumber(q.clicks)}
+              </span>
+              <span className="text-right tabular-nums text-xs text-muted-foreground">
+                {formatNumber(q.impressions)}
+              </span>
+              {!compact && (
+                <>
+                  <span className="text-right tabular-nums text-xs text-muted-foreground">
+                    {formatCtr(q.ctr)}
+                  </span>
+                  <span className="text-right tabular-nums text-xs text-muted-foreground">
+                    {formatPosition(q.position)}
+                  </span>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }

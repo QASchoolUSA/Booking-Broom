@@ -120,6 +120,9 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
         }
       : null,
     intent: doc.intent ?? null,
+    telegram_notified_at: doc.telegramNotifiedAt
+      ? new Date(doc.telegramNotifiedAt).toISOString()
+      : null,
     scheduled_start_at: doc.scheduledStartAt
       ? new Date(doc.scheduledStartAt).toISOString()
       : null,
@@ -692,6 +695,48 @@ export const claimTelegramNotifyInternal = internalMutation({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
     return await claimNotifyField(ctx, args.bookingId, "telegramNotifiedAt");
+  },
+});
+
+/** Always stamp telegramNotifiedAt (manager manual send / resend). */
+export const markTelegramNotifiedInternal = internalMutation({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) return { ok: false as const };
+    const now = Date.now();
+    await ctx.db.patch(args.bookingId, {
+      telegramNotifiedAt: now,
+      updatedAt: now,
+    });
+    return { ok: true as const };
+  },
+});
+
+/** Payload for Telegram notifyBooking action. */
+export const getForTelegramInternal = internalQuery({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) return null;
+    const site = await ctx.db.get(booking.siteId);
+    if (!site) return null;
+    return {
+      siteSlug: site.slug,
+      customerName: booking.customerName,
+      email: booking.email,
+      phone: booking.phone,
+      address: booking.address,
+      serviceType: booking.serviceType,
+      preferredDate: booking.preferredDate,
+      preferredTime: booking.preferredTime,
+      notes: booking.notes,
+      intent: booking.intent,
+      quoteEstimate: booking.quote?.estimate,
+      quoteCurrency: booking.quote?.currency,
+      quoteFrequency: booking.quote?.frequency,
+      telegramNotifiedAt: booking.telegramNotifiedAt ?? null,
+    };
   },
 });
 

@@ -1,4 +1,4 @@
-import { internalAction, type ActionCtx } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -206,6 +206,8 @@ async function notifyNewBookingHandler(
     bookingId?: string;
     leadId?: string;
     kind?: "quote" | "book" | "abandoned";
+    /** Skip once-only claim (manager “Send to Telegram” / resend). */
+    force?: boolean;
   },
 ): Promise<NotifyResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -222,7 +224,7 @@ async function notifyNewBookingHandler(
     return { sent: false, skipped: "telegram_skip_phone" };
   }
 
-  if (args.bookingId) {
+  if (args.bookingId && !args.force) {
     try {
       const claim = await ctx.runMutation(
         internal.bookings.claimTelegramNotifyInternal,
@@ -306,6 +308,19 @@ async function notifyNewBookingHandler(
       return { sent: false, skipped: `http_${response.status}` };
     }
 
+    if (args.bookingId && args.force) {
+      try {
+        await ctx.runMutation(internal.bookings.markTelegramNotifiedInternal, {
+          bookingId: args.bookingId as Id<"bookings">,
+        });
+      } catch (error) {
+        console.error(
+          "[telegram] mark notified failed:",
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
     return { sent: true };
   } catch (error) {
     const message =
@@ -336,11 +351,13 @@ const notifyArgs = {
   kind: v.optional(
     v.union(v.literal("quote"), v.literal("book"), v.literal("abandoned")),
   ),
+  force: v.optional(v.boolean()),
 };
 
 /**
  * Best-effort Telegram alert for managers (booking, quote, or abandoned lead).
  * Scheduled from createPublic / partialLeads so marketing sites never wait.
+ * Manager-created bookings (`createManual`) do not auto-notify — use `notifyBooking`.
  */
 export const notifyNewBookingInternal = internalAction({
   args: notifyArgs,
@@ -350,6 +367,56 @@ export const notifyNewBookingInternal = internalAction({
     } catch (error) {
       console.error(
         "[telegram] unexpected failure:",
+        error instanceof Error ? error.message : error,
+      );
+      return { sent: false, skipped: "unexpected" };
+    }
+  },
+});
+
+/**
+ * Authenticated one-shot: send (or resend) a booking alert to the Telegram chat.
+ * Used for in-app bookings that intentionally skip auto-Telegram.
+ */
+export const notifyBooking = action({
+  args: {
+    bookingId: v.id("bookings"),
+    /** Resend even if already notified (default true for explicit button taps). */
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<NotifyResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const booking = await ctx.runQuery(internal.bookings.getForTelegramInternal, {
+      bookingId: args.bookingId,
+    });
+    if (!booking) {
+      return { sent: false, skipped: "missing" };
+    }
+
+    try {
+      return await notifyNewBookingHandler(ctx, {
+        siteSlug: booking.siteSlug,
+        customerName: booking.customerName,
+        email: booking.email,
+        phone: booking.phone,
+        address: booking.address,
+        serviceType: booking.serviceType,
+        preferredDate: booking.preferredDate,
+        preferredTime: booking.preferredTime,
+        notes: booking.notes,
+        intent: booking.intent,
+        quoteEstimate: booking.quoteEstimate,
+        quoteCurrency: booking.quoteCurrency,
+        quoteFrequency: booking.quoteFrequency,
+        bookingId: args.bookingId,
+        kind: booking.intent === "quote" ? "quote" : "book",
+        force: args.force !== false,
+      });
+    } catch (error) {
+      console.error(
+        "[telegram] notifyBooking failed:",
         error instanceof Error ? error.message : error,
       );
       return { sent: false, skipped: "unexpected" };

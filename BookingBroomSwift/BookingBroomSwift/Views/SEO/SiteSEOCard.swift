@@ -18,9 +18,19 @@ public struct SiteSEOCard: View {
         }
     }
 
+    private static let intFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 0
+        return f
+    }()
+
+    private func formatInt(_ value: Int) -> String {
+        Self.intFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Header: Site Name & Source Pill
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(seo.siteName)
@@ -39,38 +49,30 @@ public struct SiteSEOCard: View {
                     .clipShape(Capsule())
             }
 
-            // Metrics Bar
+            HStack(spacing: 10) {
+                heroMetric(label: "Clicks", value: formatInt(seo.clicks), accent: AppColors.primary)
+                heroMetric(label: "Impressions", value: formatInt(seo.impressions), accent: AppColors.violet)
+            }
+
             HStack(spacing: 16) {
-                MetricItem(label: "Clicks", value: "\(seo.clicks)")
-                MetricItem(label: "Impressions", value: "\(seo.impressions)")
                 MetricItem(label: "Avg CTR", value: String(format: "%.1f%%", seo.ctr))
                 MetricItem(label: "Avg Pos", value: String(format: "%.1f", seo.position))
             }
 
-            // Swift Charts Visualization
             if !seo.history.isEmpty {
                 ChartCard(title: "Traffic Trend", trendPoints: seo.history)
             }
 
-            // Top Keywords
             if !rankedKeywords.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Top Search Keywords")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Keywords")
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
 
-                    ForEach(Array(rankedKeywords.prefix(keywordPreviewCount))) { q in
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(q.query)
-                                .font(.caption.weight(.medium))
-                                .lineLimit(2)
-                            Spacer(minLength: 8)
-                            Text("\(q.clicks) clk · \(q.impressions) imp")
-                                .font(.caption2.bold())
-                                .foregroundColor(AppColors.primary)
-                                .fixedSize(horizontal: true, vertical: false)
-                        }
-                        .padding(.vertical, 2)
+                    keywordHeader
+
+                    ForEach(Array(rankedKeywords.prefix(keywordPreviewCount).enumerated()), id: \.element.id) { index, q in
+                        keywordRow(rank: index + 1, query: q, compact: true)
                     }
 
                     if rankedKeywords.count > keywordPreviewCount {
@@ -85,6 +87,10 @@ public struct SiteSEOCard: View {
                         .padding(.top, 2)
                     }
                 }
+            } else {
+                Text("No keyword data yet — Sync to pull queries for this site.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .padding(16)
@@ -93,6 +99,57 @@ public struct SiteSEOCard: View {
             SEOKeywordsSheet(siteName: seo.siteName, queries: rankedKeywords)
         }
     }
+
+    private var keywordHeader: some View {
+        HStack(spacing: 8) {
+            Text("Keyword")
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Clicks")
+                .frame(width: 52, alignment: .trailing)
+            Text("Impr.")
+                .frame(width: 64, alignment: .trailing)
+        }
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundColor(.secondary)
+        .textCase(.uppercase)
+    }
+
+    private func keywordRow(rank: Int, query: SEOQuery, compact: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("\(rank).")
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 22, alignment: .trailing)
+            Text(query.query)
+                .font(.caption.weight(.medium))
+                .lineLimit(compact ? 2 : 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(formatInt(query.clicks))
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundColor(.primary)
+                .frame(width: 52, alignment: .trailing)
+            Text(formatInt(query.impressions))
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 64, alignment: .trailing)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func heroMetric(label: String, value: String, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.title2.bold().monospacedDigit())
+                .foregroundColor(accent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(accent.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
 }
 
 private struct SEOKeywordsSheet: View {
@@ -100,28 +157,59 @@ private struct SEOKeywordsSheet: View {
     let queries: [SEOQuery]
     @Environment(\.dismiss) private var dismiss
 
+    private static let intFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 0
+        return f
+    }()
+
+    private func formatInt(_ value: Int) -> String {
+        Self.intFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 8) {
+                        Text("#").frame(width: 28, alignment: .trailing)
+                        Text("Keyword").frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Clicks").frame(width: 52, alignment: .trailing)
+                        Text("Impr.").frame(width: 64, alignment: .trailing)
+                        Text("CTR").frame(width: 48, alignment: .trailing)
+                        Text("Pos").frame(width: 40, alignment: .trailing)
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+
                     ForEach(Array(queries.enumerated()), id: \.element.id) { index, q in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text("\(index + 1).")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 28, alignment: .trailing)
-                                Text(q.query)
-                                    .font(.subheadline.weight(.medium))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            HStack(spacing: 12) {
-                                Spacer().frame(width: 28)
-                                metricLabel("\(q.clicks) clk")
-                                metricLabel("\(q.impressions) imp")
-                                metricLabel(String(format: "%.1f%% CTR", q.ctr))
-                                metricLabel(String(format: "pos %.1f", q.position))
-                            }
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("\(index + 1).")
+                                .font(.caption.monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 28, alignment: .trailing)
+                            Text(q.query)
+                                .font(.subheadline.weight(.medium))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(formatInt(q.clicks))
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .frame(width: 52, alignment: .trailing)
+                            Text(formatInt(q.impressions))
+                                .font(.caption.monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 64, alignment: .trailing)
+                            Text(String(format: "%.1f%%", q.ctr))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 48, alignment: .trailing)
+                            Text(String(format: "%.1f", q.position))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundColor(.secondary)
+                                .frame(width: 40, alignment: .trailing)
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
@@ -148,12 +236,6 @@ private struct SEOKeywordsSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         #endif
-    }
-
-    private func metricLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2.monospacedDigit())
-            .foregroundColor(.secondary)
     }
 }
 

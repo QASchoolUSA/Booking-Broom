@@ -698,6 +698,7 @@ public actor ConvexAPIService {
         let schedStart = schedStartMs.map { Date(timeIntervalSince1970: $0 / 1000.0) }
         let schedEnd = schedEndMs.map { Date(timeIntervalSince1970: $0 / 1000.0) }
         let archivedAt = (item["archived_at"] as? String).flatMap(parseISO8601)
+        let telegramNotifiedAt = (item["telegram_notified_at"] as? String).flatMap(parseISO8601)
         let createdAt = (item["created_at"] as? String).flatMap(parseISO8601) ?? Date()
         let updatedAt = (item["updated_at"] as? String).flatMap(parseISO8601) ?? createdAt
         
@@ -724,6 +725,7 @@ public actor ConvexAPIService {
             property: propObj,
             quote: quoteObj,
             archivedAt: archivedAt,
+            telegramNotifiedAt: telegramNotifiedAt,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -893,6 +895,18 @@ public actor ConvexAPIService {
             throw ConvexError.server("bookings:createManual returned an unexpected payload.")
         }
         return booking
+    }
+    
+    /// Manager one-shot Telegram chat alert (`telegramActions:notifyBooking`).
+    @discardableResult
+    public func sendBookingTelegram(bookingId: String, force: Bool = true) async throws -> Bool {
+        if useMockData { return true }
+        let raw = try await action(
+            "telegramActions:notifyBooking",
+            args: ["bookingId": bookingId, "force": force]
+        )
+        guard let dict = raw as? [String: Any] else { return false }
+        return dict["sent"] as? Bool ?? false
     }
     
     // MARK: - Calendar & Reminders

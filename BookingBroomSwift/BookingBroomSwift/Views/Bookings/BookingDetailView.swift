@@ -33,6 +33,8 @@ public struct BookingDetailView: View {
     @State private var showingDeleteConfirm: Bool = false
     @State private var showingComposeSMS: Bool = false
     @State private var selectedStatus: BookingStatus
+    @State private var isSendingTelegram: Bool = false
+    @State private var telegramBanner: String? = nil
     
     // Map pin: geocoded from the address (no hardcoded fallback)
     @State private var mapCoordinate: CLLocationCoordinate2D?
@@ -96,6 +98,54 @@ public struct BookingDetailView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .bbSecondaryButton(expand: true)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button {
+                            guard !isPendingCreate, !isSendingTelegram else { return }
+                            isSendingTelegram = true
+                            telegramBanner = nil
+                            Task {
+                                let sent = await bookingsVM.sendTelegram(for: liveBooking.id)
+                                isSendingTelegram = false
+                                if sent {
+                                    liveBooking.telegramNotifiedAt = Date()
+                                    telegramBanner = "Sent to Telegram chat"
+                                } else {
+                                    telegramBanner = "Telegram not sent — check Convex TELEGRAM_* env"
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                if isSendingTelegram {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "paperplane.fill")
+                                }
+                                Text(
+                                    liveBooking.telegramNotifiedAt == nil
+                                        ? "Send to Telegram"
+                                        : "Send again to Telegram"
+                                )
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .bbSecondaryButton(expand: true)
+                        .disabled(isPendingCreate || isSendingTelegram)
+                        
+                        Text("In-app bookings skip automatic Telegram; public site quotes still notify on create.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        
+                        if let telegramBanner {
+                            Text(telegramBanner)
+                                .font(.caption)
+                                .foregroundColor(
+                                    telegramBanner.hasPrefix("Sent")
+                                        ? AppColors.emerald
+                                        : AppColors.rose
+                                )
+                        }
                     }
                     
                     if isPendingCreate {
