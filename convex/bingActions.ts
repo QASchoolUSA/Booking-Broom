@@ -214,8 +214,8 @@ function topQueriesForPeriod(
     }))
     .sort(
       (a, b) =>
-        b.impressions - a.impressions ||
         b.clicks - a.clicks ||
+        b.impressions - a.impressions ||
         a.query.localeCompare(b.query)
     )
     .slice(0, limit);

@@ -37,7 +37,7 @@ public enum SEOSortKey: String, CaseIterable, Identifiable {
     }
     
     public static let siteKeys: [SEOSortKey] = [.impressions, .clicks, .name]
-    public static let keywordKeys: [SEOSortKey] = [.impressions, .clicks, .ctr, .position]
+    public static let keywordKeys: [SEOSortKey] = [.clicks, .impressions, .ctr, .position]
 }
 
 public enum SEOSortDir: String {
@@ -54,7 +54,7 @@ public struct SEOSort: Equatable {
     public var dir: SEOSortDir
     
     public static let defaultSites = SEOSort(key: .impressions, dir: .desc)
-    public static let defaultKeywords = SEOSort(key: .impressions, dir: .desc)
+    public static let defaultKeywords = SEOSort(key: .clicks, dir: .desc)
     
     public init(key: SEOSortKey, dir: SEOSortDir) {
         self.key = key

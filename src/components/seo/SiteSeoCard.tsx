@@ -340,9 +340,21 @@ export function SiteSeoCard({
                         impressions
                       </>
                     ) : null}
-                    . Remaining traffic is from queries outside this list —
-                    Sync again after deploy to pull up to 500 keywords, or sort
-                    by Clicks to surface clicky queries.
+                    .{" "}
+                    {sortedKeywords.length >= 500 ? (
+                      <>
+                        Stored list is capped at 500 (clicks-first) — Sync now
+                        after deploy if this looks stale.
+                      </>
+                    ) : (
+                      <>
+                        The rest is usually{" "}
+                        {source === "bing" ? "Bing" : "Google"} privacy
+                        anonymization: rare queries count toward site totals but
+                        are omitted from the keyword dimension. Sync now after
+                        deploy to refresh the full list.
+                      </>
+                    )}
                   </>
                 ) : sortedKeywords.length > KEYWORD_PREVIEW &&
                   previewClickTotal < keywordClickTotal ? (

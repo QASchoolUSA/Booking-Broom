@@ -13,7 +13,12 @@ import {
   aggregateQueryHourlyRows,
   type GscAnalyticsRow,
 } from "./lib/gscAggregate";
-import { SEO_TOP_QUERY_LIMIT } from "./lib/seoSort";
+import {
+  GSC_API_PAGE_SIZE,
+  GSC_QUERY_FETCH_CAP,
+  SEO_TOP_QUERY_LIMIT,
+  compareSeoQueries,
+} from "./lib/seoSort";
 import {
   isIntentionalNoindexUrl,
   parseSitemapLocs,
@@ -385,6 +390,54 @@ type TopQueryRow = {
   position: number;
 };
 
+/**
+ * Fetch every Search Analytics page for the given body (paginates via startRow).
+ * GSC caps each response at 25k rows; without pagination, query×HOUR and large
+ * properties silently drop keywords that still count toward site totals.
+ */
+async function fetchAllSearchAnalyticsRows(
+  accessToken: string,
+  siteUrl: string,
+  baseBody: Record<string, unknown>
+): Promise<GscAnalyticsRow[]> {
+  const encoded = encodeURIComponent(siteUrl);
+  const all: GscAnalyticsRow[] = [];
+  let startRow = 0;
+
+  while (startRow < GSC_QUERY_FETCH_CAP) {
+    const res = await fetch(
+      `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...baseBody,
+          rowLimit: GSC_API_PAGE_SIZE,
+          startRow,
+        }),
+      }
+    );
+    const data = (await res.json()) as {
+      rows?: GscAnalyticsRow[];
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      throw new Error(
+        data.error?.message || `Search query analytics failed for ${siteUrl}`
+      );
+    }
+    const page = data.rows ?? [];
+    all.push(...page);
+    if (page.length < GSC_API_PAGE_SIZE) break;
+    startRow += page.length;
+  }
+
+  return all;
+}
+
 async function queryTopQueries(
   accessToken: string,
   siteUrl: string,
@@ -393,48 +446,27 @@ async function queryTopQueries(
   hourly = false,
   now = new Date()
 ): Promise<TopQueryRow[]> {
-  const encoded = encodeURIComponent(siteUrl);
-  const res = await fetch(
-    `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(
-        hourly
-          ? {
-              startDate,
-              endDate,
-              type: "web",
-              aggregationType: "byProperty",
-              dimensions: ["query", "HOUR"],
-              rowLimit: 25000,
-              dataState: "hourly_all",
-            }
-          : {
-              startDate,
-              endDate,
-              type: "web",
-              aggregationType: "byProperty",
-              dimensions: ["query"],
-              rowLimit: SEO_TOP_QUERY_LIMIT,
-              dataState: "all",
-            }
-      ),
-    }
+  const rows = await fetchAllSearchAnalyticsRows(
+    accessToken,
+    siteUrl,
+    hourly
+      ? {
+          startDate,
+          endDate,
+          type: "web",
+          aggregationType: "byProperty",
+          dimensions: ["query", "HOUR"],
+          dataState: "hourly_all",
+        }
+      : {
+          startDate,
+          endDate,
+          type: "web",
+          aggregationType: "byProperty",
+          dimensions: ["query"],
+          dataState: "all",
+        }
   );
-  const data = (await res.json()) as {
-    rows?: GscAnalyticsRow[];
-    error?: { message?: string };
-  };
-  if (!res.ok) {
-    throw new Error(
-      data.error?.message || `Search query analytics failed for ${siteUrl}`
-    );
-  }
-  const rows = data.rows ?? [];
 
   if (hourly) {
     return aggregateQueryHourlyRows(rows, SEO_TOP_QUERY_LIMIT, now);
@@ -449,12 +481,7 @@ async function queryTopQueries(
       position: row.position ?? 0,
     }))
     .filter((row) => row.query.length > 0)
-    .sort(
-      (a, b) =>
-        b.impressions - a.impressions ||
-        b.clicks - a.clicks ||
-        a.query.localeCompare(b.query)
-    )
+    .sort(compareSeoQueries)
     .slice(0, SEO_TOP_QUERY_LIMIT);
 }
 

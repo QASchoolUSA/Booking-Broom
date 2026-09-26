@@ -36,7 +36,10 @@ public struct SiteSEOCard: View {
 
     private var coverageLine: String {
         if uncoveredClicks > 0 {
-            return "Keywords cover \(formatInt(keywordClickTotal)) of \(formatInt(seo.clicks)) clicks. Sync again to pull more keywords, or sort by Clicks."
+            if seo.topQueries.count >= 500 {
+                return "Keywords cover \(formatInt(keywordClickTotal)) of \(formatInt(seo.clicks)) clicks. List capped at 500 (clicks-first) — Sync now after deploy if stale."
+            }
+            return "Keywords cover \(formatInt(keywordClickTotal)) of \(formatInt(seo.clicks)) clicks. Remaining is usually \(seo.source == "bing" ? "Bing" : "Google") privacy anonymization of rare queries. Sync now after deploy to refresh."
         }
         if seo.topQueries.count > keywordPreviewCount, previewClickTotal < keywordClickTotal {
             return "Preview shows \(formatInt(previewClickTotal)) of \(formatInt(keywordClickTotal)) keyword clicks — open all or sort by Clicks."

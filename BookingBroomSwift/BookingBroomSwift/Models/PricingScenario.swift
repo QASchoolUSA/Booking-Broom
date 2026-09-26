@@ -133,6 +133,11 @@ public enum PricingCanonicalService: String, CaseIterable, Identifiable {
     case hourly
     
     public var id: String { rawValue }
+
+    /// Services shown in Live Pricing “Compare service” (hourly omitted).
+    public static var compareCases: [PricingCanonicalService] {
+        allCases.filter { $0 != .hourly }
+    }
     
     public var label: String {
         switch self {

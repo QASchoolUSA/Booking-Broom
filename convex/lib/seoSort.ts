@@ -1,11 +1,14 @@
-/** Compare search queries: impressions (views) desc, then clicks desc. */
+/**
+ * Rank keywords for storage / default API order: clicks first so truncated
+ * lists retain the traffic that reconciles with site-level click totals.
+ */
 export function compareSeoQueries(
   a: { impressions: number; clicks: number; query?: string },
   b: { impressions: number; clicks: number; query?: string }
 ): number {
   return (
-    b.impressions - a.impressions ||
     b.clicks - a.clicks ||
+    b.impressions - a.impressions ||
     (a.query ?? "").localeCompare(b.query ?? "")
   );
 }
@@ -18,11 +21,17 @@ export function sortSeoQueries<T extends { impressions: number; clicks: number }
 
 /**
  * Max keywords stored per site × period after GSC/Bing sync.
- * Site-level clicks/impressions still include all traffic; the keyword list
- * is a ranked sample. Keep this high enough that small properties reconcile,
- * without blowing past Convex document size (~1MB).
+ * Sync paginates GSC until exhausted, then keeps this many (clicks-first).
+ * Remaining gap vs site totals is usually GSC/Bing privacy anonymization of
+ * rare queries (counted in property totals, omitted from the query dimension).
  */
 export const SEO_TOP_QUERY_LIMIT = 500;
+
+/** GSC Search Analytics max rows per request (API hard cap). */
+export const GSC_API_PAGE_SIZE = 25_000;
+
+/** Safety ceiling when paginating query / query×HOUR rows. */
+export const GSC_QUERY_FETCH_CAP = 100_000;
 
 /** Compare sites: impressions desc, then clicks desc; missing metrics last. */
 export function compareSeoSiteMetrics(

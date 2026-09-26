@@ -14,7 +14,7 @@ export const DEFAULT_SEO_SITE_SORT: SeoSort = {
 };
 
 export const DEFAULT_SEO_KEYWORD_SORT: SeoSort = {
-  key: "impressions",
+  key: "clicks",
   dir: "desc",
 };
 
@@ -31,8 +31,8 @@ export const SEO_KEYWORD_SORT_OPTIONS: {
   key: Exclude<SeoSortKey, "name">;
   label: string;
 }[] = [
-  { key: "impressions", label: "Impressions" },
   { key: "clicks", label: "Clicks" },
+  { key: "impressions", label: "Impressions" },
   { key: "ctr", label: "CTR" },
   { key: "position", label: "Position" },
 ];

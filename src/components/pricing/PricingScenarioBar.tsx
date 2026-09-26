@@ -200,13 +200,6 @@ export function PricingScenarioBar({
             ))}
           </select>
         </div>
-        <Stepper
-          label="Hours (hourly)"
-          value={scenario.hours}
-          min={1}
-          max={8}
-          onChange={(hours) => patch({ hours })}
-        />
       </div>
 
       {addonOptions.length > 0 && (

@@ -27,12 +27,14 @@ export function PricingCompareGrid({
 }: PricingCompareGridProps) {
   const priced = rows.filter((row) => row.basket !== null);
 
-  const services = CANONICAL_SERVICES.filter((service) =>
-    priced.some(
-      (row) =>
-        row.basket?.entries[service.key] !== undefined ||
-        row.basket?.gaps.includes(service.key)
-    )
+  const services = CANONICAL_SERVICES.filter(
+    (service) =>
+      service.key !== "hourly" &&
+      priced.some(
+        (row) =>
+          row.basket?.entries[service.key] !== undefined ||
+          row.basket?.gaps.includes(service.key)
+      )
   );
 
   if (priced.length === 0) {
