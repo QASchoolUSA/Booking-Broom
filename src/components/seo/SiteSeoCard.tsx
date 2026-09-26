@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAction, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import { toast } from "sonner";
 import {
+  CaretDown,
+  CaretUp,
   CheckCircle,
   MagnifyingGlass,
   WarningCircle,
@@ -30,13 +32,22 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { SeoTopQuery } from "@/lib/types";
-import { sortSeoKeywords } from "@/lib/seoSort";
+import {
+  DEFAULT_SEO_KEYWORD_SORT,
+  nextSeoSort,
+  sortSeoKeywords,
+  type SeoSort,
+  type SeoSortKey,
+} from "@/lib/seoSort";
 
 const KEYWORD_PREVIEW = 5;
 
 interface SiteSeoCardProps {
   row: SiteSeoRow;
   source: SeoSource;
+  /** Shared keyword sort across all site cards (controlled from SEO page). */
+  keywordSort?: SeoSort;
+  onKeywordSortChange?: (next: SeoSort) => void;
 }
 
 function formatNumber(n: number): string {
@@ -54,7 +65,12 @@ function formatPosition(pos: number): string {
   return pos.toFixed(1);
 }
 
-export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
+export function SiteSeoCard({
+  row,
+  source,
+  keywordSort: keywordSortProp,
+  onKeywordSortChange,
+}: SiteSeoCardProps) {
   const { site, metrics, delta, property_status, crawl_issues, page_scan, top_queries } =
     row;
   const updateBingProperty = useMutation(api.bing.updateBingProperty);
@@ -66,8 +82,20 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
   const [showCrawl, setShowCrawl] = useState(false);
   const [showScan, setShowScan] = useState(false);
   const [keywordsOpen, setKeywordsOpen] = useState(false);
+  const [localKeywordSort, setLocalKeywordSort] = useState<SeoSort>(
+    DEFAULT_SEO_KEYWORD_SORT
+  );
 
-  const sortedKeywords = sortSeoKeywords(top_queries ?? []);
+  const keywordSort = keywordSortProp ?? localKeywordSort;
+  const setKeywordSort = (next: SeoSort) => {
+    if (onKeywordSortChange) onKeywordSortChange(next);
+    else setLocalKeywordSort(next);
+  };
+
+  const sortedKeywords = useMemo(
+    () => sortSeoKeywords(top_queries ?? [], keywordSort),
+    [top_queries, keywordSort]
+  );
   const previewKeywords = sortedKeywords.slice(0, KEYWORD_PREVIEW);
 
   useEffect(() => {
@@ -263,6 +291,9 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
                 queries={previewKeywords}
                 startIndex={0}
                 compact
+                sort={keywordSort}
+                onSortKey={(key) => setKeywordSort(nextSeoSort(keywordSort, key))}
+                showPosition={showPosition}
               />
               {sortedKeywords.length > KEYWORD_PREVIEW ? (
                 <Button
@@ -283,12 +314,19 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
                   <SheetHeader className="border-b">
                     <SheetTitle>{site.name} · Top keywords</SheetTitle>
                     <SheetDescription>
-                      {sortedKeywords.length} queries · clicks, impressions, CTR,
-                      and average position
+                      Tap a column to sort · {sortedKeywords.length} queries
                     </SheetDescription>
                   </SheetHeader>
                   <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-                    <KeywordList queries={sortedKeywords} startIndex={0} />
+                    <KeywordList
+                      queries={sortedKeywords}
+                      startIndex={0}
+                      sort={keywordSort}
+                      onSortKey={(key) =>
+                        setKeywordSort(nextSeoSort(keywordSort, key))
+                      }
+                      showPosition={showPosition}
+                    />
                   </div>
                 </SheetContent>
               </Sheet>
@@ -465,36 +503,114 @@ export function SiteSeoCard({ row, source }: SiteSeoCardProps) {
   );
 }
 
+function SortHeaderButton({
+  label,
+  sortKey,
+  sort,
+  onSortKey,
+  align = "right",
+}: {
+  label: string;
+  sortKey: SeoSortKey;
+  sort: SeoSort;
+  onSortKey: (key: SeoSortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <button
+      type="button"
+      onClick={() => onSortKey(sortKey)}
+      className={cn(
+        "inline-flex items-center gap-0.5 font-semibold uppercase tracking-wide transition-colors",
+        align === "right" ? "justify-self-end" : "justify-self-start",
+        active
+          ? "text-foreground"
+          : "text-muted-foreground hover:text-foreground"
+      )}
+      aria-pressed={active}
+      title={`Sort by ${label}`}
+    >
+      {label}
+      {active ? (
+        sort.dir === "desc" ? (
+          <CaretDown size={10} weight="bold" />
+        ) : (
+          <CaretUp size={10} weight="bold" />
+        )
+      ) : null}
+    </button>
+  );
+}
+
 function KeywordList({
   queries,
   startIndex = 0,
   compact = false,
+  sort,
+  onSortKey,
+  showPosition = true,
 }: {
   queries: SeoTopQuery[];
   startIndex?: number;
   compact?: boolean;
+  sort: SeoSort;
+  onSortKey: (key: SeoSortKey) => void;
+  showPosition?: boolean;
 }) {
+  const cols = compact
+    ? "grid-cols-[minmax(0,1fr)_auto_auto]"
+    : showPosition
+      ? "grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_3.5rem_3rem]"
+      : "grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_3.5rem]";
+
   return (
     <div className={cn("mt-1.5", !compact && "mt-0")}>
       <div
         className={cn(
-          "grid gap-2 border-b border-border/60 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
-          compact
-            ? "grid-cols-[minmax(0,1fr)_auto_auto]"
-            : "grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_3.5rem_3rem]"
+          "grid gap-2 border-b border-border/60 pb-1.5 text-[10px]",
+          cols
         )}
       >
-        <span>Keyword</span>
-        <span className="text-right">Clicks</span>
-        <span className="text-right">Impr.</span>
+        <SortHeaderButton
+          label="Keyword"
+          sortKey="name"
+          sort={sort}
+          onSortKey={onSortKey}
+          align="left"
+        />
+        <SortHeaderButton
+          label="Clicks"
+          sortKey="clicks"
+          sort={sort}
+          onSortKey={onSortKey}
+        />
+        <SortHeaderButton
+          label="Impr."
+          sortKey="impressions"
+          sort={sort}
+          onSortKey={onSortKey}
+        />
         {!compact && (
           <>
-            <span className="text-right">CTR</span>
-            <span className="text-right">Pos</span>
+            <SortHeaderButton
+              label="CTR"
+              sortKey="ctr"
+              sort={sort}
+              onSortKey={onSortKey}
+            />
+            {showPosition && (
+              <SortHeaderButton
+                label="Pos"
+                sortKey="position"
+                sort={sort}
+                onSortKey={onSortKey}
+              />
+            )}
           </>
         )}
       </div>
-      <ol className={cn("space-y-0", !compact && "space-y-0")}>
+      <ol>
         {queries.map((q, i) => {
           const rank = startIndex + i + 1;
           return (
@@ -502,9 +618,7 @@ function KeywordList({
               key={`${q.query}-${rank}`}
               className={cn(
                 "grid items-baseline gap-2 border-b border-border/40 py-2 text-sm last:border-0",
-                compact
-                  ? "grid-cols-[minmax(0,1fr)_auto_auto]"
-                  : "grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_3.5rem_3rem]"
+                cols
               )}
             >
               <span className="min-w-0 truncate text-foreground">
@@ -524,9 +638,11 @@ function KeywordList({
                   <span className="text-right tabular-nums text-xs text-muted-foreground">
                     {formatCtr(q.ctr)}
                   </span>
-                  <span className="text-right tabular-nums text-xs text-muted-foreground">
-                    {formatPosition(q.position)}
-                  </span>
+                  {showPosition && (
+                    <span className="text-right tabular-nums text-xs text-muted-foreground">
+                      {formatPosition(q.position)}
+                    </span>
+                  )}
                 </>
               )}
             </li>
