@@ -296,20 +296,42 @@ export function BookingDetailSheet({
             </section>
           )}
 
+          {details.notes && (
+            <section className="space-y-2">
+              <h4 className={sectionHeading}>Customer request notes</h4>
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3.5">
+                <p className="whitespace-pre-line text-sm leading-relaxed text-foreground">
+                  {details.notes}
+                </p>
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-2 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+            <Label htmlFor="internal-notes" className={sectionHeading}>
+              Internal manager notes
+            </Label>
+            <p className="text-[11px] text-muted-foreground">
+              Private — visible only to managers
+            </p>
+            <Textarea
+              id="internal-notes"
+              value={internalNotes}
+              onChange={(e) => setInternalNotes(e.currentTarget.value)}
+              placeholder="Notes for the crew or managers…"
+              rows={4}
+              className="resize-none border-border/70 bg-muted/20"
+            />
+            <Button onClick={handleSaveNotes} disabled={saving} className="h-11 w-full">
+              Save notes
+            </Button>
+          </section>
+
           <BookingQuoteSection quote={details.quote} />
 
           <BookingPropertySection property={details.property} />
 
           <BookingAttributionSection attribution={details.attribution} />
-
-          {details.notes && (
-            <section>
-              <h4 className={sectionHeading}>Customer notes</h4>
-              <p className="whitespace-pre-line rounded-xl border bg-muted/30 px-4 py-3 text-sm leading-relaxed text-foreground">
-                {details.notes}
-              </p>
-            </section>
-          )}
 
           <ScheduleJobFields booking={booking} />
 
@@ -353,23 +375,6 @@ export function BookingDetailSheet({
                 Cancel booking
               </Button>
             </div>
-          </section>
-
-          <section className="space-y-2">
-            <Label htmlFor="internal-notes" className={sectionHeading}>
-              Internal notes
-            </Label>
-            <Textarea
-              id="internal-notes"
-              value={internalNotes}
-              onChange={(e) => setInternalNotes(e.currentTarget.value)}
-              placeholder="Notes visible only to managers…"
-              rows={4}
-              className="resize-none"
-            />
-            <Button onClick={handleSaveNotes} disabled={saving} className="h-11 w-full">
-              Save notes
-            </Button>
           </section>
 
           <section className="space-y-2">

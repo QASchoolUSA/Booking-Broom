@@ -25,10 +25,6 @@ public struct BookingDetailView: View {
     @State private var internalNotesDraft: String = ""
     @State private var isSavingNotes: Bool = false
     
-    // Inline Reminder State
-    @State private var newReminderTitle: String = ""
-    @State private var isAddingReminder: Bool = false
-    
     // Alert confirmation
     @State private var showingDeleteConfirm: Bool = false
     @State private var showingComposeSMS: Bool = false
@@ -315,6 +311,71 @@ public struct BookingDetailView: View {
                         .glassCard()
                     }
                     
+
+                    // Customer request + manager notes (high in the stack)
+                    if let notes = liveBooking.notes, !notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "text.bubble.fill")
+                                    .foregroundColor(AppColors.primary)
+                                Text("Customer Request Notes")
+                                    .font(.headline)
+                            }
+                            Text(notes)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .background(AppColors.primary.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(AppColors.primary.opacity(0.18), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .padding(16)
+                        .glassCard()
+                    }
+                    
+                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "lock.fill")
+                                .foregroundColor(AppColors.violet)
+                            Text("Internal Manager Notes")
+                                .font(.headline)
+                        }
+                        Text("Private — crew and managers only")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        TextField("Add private notes for the crew…", text: $internalNotesDraft, axis: .vertical)
+                            .lineLimit(3...8)
+                            .bbComposerField()
+                        
+                        Button {
+                            guard !isSavingNotes else { return }
+                            isSavingNotes = true
+                            let draft = internalNotesDraft
+                            Task {
+                                let ok = await bookingsVM.saveNotes(booking: liveBooking, notes: draft)
+                                if ok { liveBooking.internalNotes = draft }
+                                isSavingNotes = false
+                            }
+                        } label: {
+                            Text(isSavingNotes ? "Saving..." : "Save Notes")
+                        }
+                        .bbPrimaryButton(isLoading: isSavingNotes, expand: false)
+                        .disabled(isSavingNotes || isPendingCreate || internalNotesDraft == (liveBooking.internalNotes ?? ""))
+                        
+                        if let actionError = bookingsVM.actionError {
+                            Text(actionError)
+                                .font(.caption)
+                                .foregroundColor(AppColors.rose)
+                        }
+                    }
+                    .padding(AppSpacing.md)
+                    .glassCard()
+                    
                     // Update Booking Status (under quote)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Update Booking Status")
@@ -384,118 +445,6 @@ public struct BookingDetailView: View {
                         }
                     }
                     .padding(16)
-                    .glassCard()
-                    
-                    // Linked Reminders Section
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Image(systemName: "bell.fill")
-                                .foregroundColor(AppColors.amber)
-                            Text("Linked Reminders")
-                                .font(.headline)
-                        }
-                        
-                        let linkedReminders = bookingsVM.reminders(forBooking: liveBooking.id)
-                        if linkedReminders.isEmpty {
-                            Text("No reminders linked to this job yet.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        } else {
-                            ForEach(linkedReminders) { rem in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(rem.title)
-                                            .font(.subheadline.bold())
-                                        Text(rem.dueDate, style: .time)
-                                            .font(.caption2)
-                                            .foregroundColor(AppColors.amber)
-                                    }
-                                    Spacer()
-                                    Button {
-                                        bookingsVM.removeReminder(reminderId: rem.id)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                    }
-                                    .buttonStyle(BBIconButtonStyle(tint: AppColors.rose))
-                                    .help("Remove reminder")
-                                }
-                                .padding(AppSpacing.sm)
-                                .appSurface()
-                            }
-                        }
-                        
-                        // Add reminder inline
-                        HStack(spacing: AppSpacing.xs) {
-                            BBFieldChrome(isFocused: false) {
-                                TextField("Add quick reminder...", text: $newReminderTitle)
-                            }
-                            
-                            Button("Add") {
-                                let title = newReminderTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                                guard !title.isEmpty else { return }
-                                let due = (liveBooking.scheduledStartAt ?? Date()).addingTimeInterval(-3600)
-                                bookingsVM.createReminder(
-                                    title: title,
-                                    notes: nil,
-                                    dueAt: due,
-                                    allDay: false,
-                                    bookingId: liveBooking.id
-                                )
-                                newReminderTitle = ""
-                            }
-                            .bbPrimaryButton(expand: false)
-                            .disabled(newReminderTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                    }
-                    .padding(16)
-                    .glassCard()
-                    
-                    // Customer Notes
-                    if let notes = liveBooking.notes, !notes.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Customer Request Notes")
-                                .font(.headline)
-                            Text(notes)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.secondary.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                    }
-                    
-                    // Internal Manager Notes
-                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        Text("Internal Manager Notes")
-                            .font(.headline)
-                        
-                        TextField("Private crew/manager notes...", text: $internalNotesDraft, axis: .vertical)
-                            .lineLimit(2...4)
-                            .bbComposerField()
-                        
-                        Button {
-                            guard !isSavingNotes else { return }
-                            isSavingNotes = true
-                            let draft = internalNotesDraft
-                            Task {
-                                let ok = await bookingsVM.saveNotes(booking: liveBooking, notes: draft)
-                                if ok { liveBooking.internalNotes = draft }
-                                isSavingNotes = false
-                            }
-                        } label: {
-                            Text(isSavingNotes ? "Saving..." : "Save Notes")
-                        }
-                        .bbPrimaryButton(isLoading: isSavingNotes, expand: false)
-                        .disabled(isSavingNotes || isPendingCreate || internalNotesDraft == (liveBooking.internalNotes ?? ""))
-                        
-                        if let actionError = bookingsVM.actionError {
-                            Text(actionError)
-                                .font(.caption)
-                                .foregroundColor(AppColors.rose)
-                        }
-                    }
-                    .padding(AppSpacing.md)
                     .glassCard()
                     
                     // Lifecycle Actions: Archive, Unarchive, Permanent Delete
@@ -581,10 +530,6 @@ public struct BookingDetailView: View {
                 }
                 self.internalNotesDraft = liveBooking.internalNotes ?? ""
                 bookingsVM.actionError = nil
-                // Both are cached — re-opening this sheet costs zero Convex calls.
-                if !isPendingCreate {
-                    bookingsVM.ensureReminders(forBooking: liveBooking.id)
-                }
                 messagesVM.ensureDidsLoaded()
             }
             .task(id: liveBooking.address) {

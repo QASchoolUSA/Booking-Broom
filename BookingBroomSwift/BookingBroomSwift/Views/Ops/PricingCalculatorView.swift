@@ -81,39 +81,31 @@ public struct PricingCalculatorView: View {
                 }
             }
             
-            HStack(spacing: AppSpacing.sm) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Square feet")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("2000", text: $squareFeetDraft)
-                        .platformKeyboardType(.numberPad)
-                        .focused($squareFeetFocused)
-                        .onChange(of: squareFeetDraft) { _, newValue in
-                            let digits = newValue.filter(\.isNumber)
-                            if digits != newValue {
-                                squareFeetDraft = digits
-                                return
-                            }
-                            commitSquareFeet(draft: digits, clampIncomplete: false)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Square feet")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("2000", text: $squareFeetDraft)
+                    .platformKeyboardType(.numberPad)
+                    .focused($squareFeetFocused)
+                    .onChange(of: squareFeetDraft) { _, newValue in
+                        let digits = newValue.filter(\.isNumber)
+                        if digits != newValue {
+                            squareFeetDraft = digits
+                            return
                         }
-                        .onChange(of: squareFeetFocused) { _, focused in
-                            if !focused {
-                                commitSquareFeet(draft: squareFeetDraft, clampIncomplete: true)
-                            }
+                        commitSquareFeet(draft: digits, clampIncomplete: false)
+                    }
+                    .onChange(of: squareFeetFocused) { _, focused in
+                        if !focused {
+                            commitSquareFeet(draft: squareFeetDraft, clampIncomplete: true)
                         }
-                        .padding(10)
-                        .background(Color.secondary.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                stepperCard(title: "Hours", value: scenario.hours, range: 1...8) { value in
-                    var next = scenario
-                    next.hours = value
-                    opsVM.updateScenario(next)
-                }
+                    }
+                    .padding(10)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             
             HStack(spacing: AppSpacing.sm) {
                 labeledMenu(
@@ -168,7 +160,7 @@ public struct PricingCalculatorView: View {
             Text("Compare service")
                 .font(.subheadline.weight(.semibold))
             Picker("Service", selection: $opsVM.selectedCompareService) {
-                ForEach(PricingCanonicalService.allCases) { service in
+                ForEach(PricingCanonicalService.compareCases) { service in
                     Text(service.label).tag(service)
                 }
             }
