@@ -345,6 +345,8 @@ export interface Booking {
   quote: BookingQuote | null;
   attribution: BookingAttribution | null;
   intent: BookingIntent | null;
+  /** ISO timestamp when a Telegram chat alert was sent (auto or manual). */
+  telegram_notified_at: string | null;
   created_at: string;
   updated_at: string;
   archived_at?: string | null;

@@ -739,4 +739,29 @@ public final class BookingsViewModel {
             }
         }
     }
+    
+    /// Send (or resend) this booking to the Telegram manager chat.
+    public func sendTelegram(for bookingId: String) async -> Bool {
+        guard !isPending(bookingId) else { return false }
+        let id = resolvedBookingIds[bookingId] ?? bookingId
+        do {
+            let sent = try await ConvexAPIService.shared.sendBookingTelegram(bookingId: id, force: true)
+            if sent {
+                let now = Date()
+                if let idx = bookings.firstIndex(where: { $0.id == bookingId || $0.id == id }) {
+                    bookings[idx].telegramNotifiedAt = now
+                    if selectedBooking?.id == bookings[idx].id {
+                        selectedBooking = bookings[idx]
+                    }
+                }
+                HapticFeedback.notification(.success)
+            } else {
+                HapticFeedback.notification(.error)
+            }
+            return sent
+        } catch {
+            reportActionFailure("Couldn’t send Telegram", error)
+            return false
+        }
+    }
 }

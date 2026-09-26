@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAction } from "convex/react";
 import { format, parseISO } from "date-fns";
 import {
   CalendarBlank,
   Envelope,
   MapPin,
+  PaperPlaneTilt,
   Phone,
   Trash,
 } from "@phosphor-icons/react";
+import { api } from "convex/_generated/api";
+import type { Id } from "convex/_generated/dataModel";
 import type { BookingWithSite, BookingStatus } from "@/lib/types";
 import { resolveBookingDetails, zillowSearchUrl } from "@/lib/booking-details";
 import {
@@ -94,6 +98,8 @@ export function BookingDetailSheet({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [internalNotes, setInternalNotes] = useState("");
+  const [sendingTelegram, setSendingTelegram] = useState(false);
+  const notifyTelegram = useAction(api.telegramActions.notifyBooking);
   const isArchived = Boolean(booking?.archived_at);
 
   useEffect(() => {
@@ -158,6 +164,33 @@ export function BookingDetailSheet({
       toast.error(e instanceof Error ? e.message : "Failed to archive");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSendTelegram = async () => {
+    setSendingTelegram(true);
+    try {
+      const result = await notifyTelegram({
+        bookingId: booking.id as Id<"bookings">,
+        force: true,
+      });
+      if (result.sent) {
+        toast.success(
+          booking.telegram_notified_at
+            ? "Sent again to Telegram"
+            : "Sent to Telegram"
+        );
+      } else {
+        toast.error(
+          result.skipped === "env_missing"
+            ? "Telegram not configured (set TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)"
+            : `Telegram not sent (${result.skipped ?? "unknown"})`
+        );
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to send Telegram");
+    } finally {
+      setSendingTelegram(false);
     }
   };
 
@@ -337,6 +370,34 @@ export function BookingDetailSheet({
             <Button onClick={handleSaveNotes} disabled={saving} className="h-11 w-full">
               Save notes
             </Button>
+          </section>
+
+          <section className="space-y-2">
+            <p className={sectionHeading}>Telegram</p>
+            <p className="text-xs text-muted-foreground">
+              In-app bookings are not sent to Telegram automatically. Public
+              site quotes/books still alert the chat on create.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full gap-2"
+              onClick={handleSendTelegram}
+              disabled={saving || sendingTelegram}
+            >
+              <PaperPlaneTilt size={16} weight="fill" />
+              {sendingTelegram
+                ? "Sending…"
+                : booking.telegram_notified_at
+                  ? "Send again to Telegram"
+                  : "Send to Telegram"}
+            </Button>
+            {booking.telegram_notified_at && (
+              <p className="text-[11px] text-muted-foreground">
+                Last sent{" "}
+                {format(parseISO(booking.telegram_notified_at), "MMM d, yyyy · h:mm a")}
+              </p>
+            )}
           </section>
 
           <Separator />
