@@ -16,6 +16,14 @@ export function sortSeoQueries<T extends { impressions: number; clicks: number }
   return [...queries].sort(compareSeoQueries);
 }
 
+/**
+ * Max keywords stored per site × period after GSC/Bing sync.
+ * Site-level clicks/impressions still include all traffic; the keyword list
+ * is a ranked sample. Keep this high enough that small properties reconcile,
+ * without blowing past Convex document size (~1MB).
+ */
+export const SEO_TOP_QUERY_LIMIT = 500;
+
 /** Compare sites: impressions desc, then clicks desc; missing metrics last. */
 export function compareSeoSiteMetrics(
   a: { impressions: number; clicks: number } | null | undefined,

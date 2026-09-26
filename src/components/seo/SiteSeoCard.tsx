@@ -40,7 +40,7 @@ import {
   type SeoSortKey,
 } from "@/lib/seoSort";
 
-const KEYWORD_PREVIEW = 5;
+const KEYWORD_PREVIEW = 10;
 
 interface SiteSeoCardProps {
   row: SiteSeoRow;
@@ -97,6 +97,25 @@ export function SiteSeoCard({
     [top_queries, keywordSort]
   );
   const previewKeywords = sortedKeywords.slice(0, KEYWORD_PREVIEW);
+  const keywordClickTotal = useMemo(
+    () => sortedKeywords.reduce((sum, q) => sum + q.clicks, 0),
+    [sortedKeywords]
+  );
+  const keywordImpressionTotal = useMemo(
+    () => sortedKeywords.reduce((sum, q) => sum + q.impressions, 0),
+    [sortedKeywords]
+  );
+  const previewClickTotal = useMemo(
+    () => previewKeywords.reduce((sum, q) => sum + q.clicks, 0),
+    [previewKeywords]
+  );
+  const siteClicks = metrics?.clicks ?? 0;
+  const siteImpressions = metrics?.impressions ?? 0;
+  const uncoveredClicks = Math.max(0, Math.round(siteClicks) - Math.round(keywordClickTotal));
+  const uncoveredImpressions = Math.max(
+    0,
+    Math.round(siteImpressions) - Math.round(keywordImpressionTotal)
+  );
 
   useEffect(() => {
     setPropertyUrl(site.bing_property_url ?? "");
@@ -295,12 +314,63 @@ export function SiteSeoCard({
                 onSortKey={(key) => setKeywordSort(nextSeoSort(keywordSort, key))}
                 showPosition={showPosition}
               />
+              <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                {uncoveredClicks > 0 || uncoveredImpressions > 0 ? (
+                  <>
+                    Keywords cover{" "}
+                    <span className="font-medium text-foreground">
+                      {formatNumber(keywordClickTotal)}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-medium text-foreground">
+                      {formatNumber(siteClicks)}
+                    </span>{" "}
+                    clicks
+                    {uncoveredImpressions > 0 ? (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <span className="font-medium text-foreground">
+                          {formatNumber(keywordImpressionTotal)}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-medium text-foreground">
+                          {formatNumber(siteImpressions)}
+                        </span>{" "}
+                        impressions
+                      </>
+                    ) : null}
+                    . Remaining traffic is from queries outside this list —
+                    Sync again after deploy to pull up to 500 keywords, or sort
+                    by Clicks to surface clicky queries.
+                  </>
+                ) : sortedKeywords.length > KEYWORD_PREVIEW &&
+                  previewClickTotal < keywordClickTotal ? (
+                  <>
+                    Preview shows{" "}
+                    <span className="font-medium text-foreground">
+                      {formatNumber(previewClickTotal)}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-medium text-foreground">
+                      {formatNumber(keywordClickTotal)}
+                    </span>{" "}
+                    keyword clicks — open all or sort by Clicks.
+                  </>
+                ) : (
+                  <>
+                    {sortedKeywords.length} keywords ·{" "}
+                    {formatNumber(keywordClickTotal)} clicks ·{" "}
+                    {formatNumber(keywordImpressionTotal)} impressions
+                  </>
+                )}
+              </p>
               {sortedKeywords.length > KEYWORD_PREVIEW ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="mt-1.5 h-auto px-0 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  className="mt-1 h-auto px-0 text-xs font-medium text-muted-foreground hover:text-foreground"
                   onClick={() => setKeywordsOpen(true)}
                 >
                   View all {sortedKeywords.length} keywords
@@ -314,7 +384,12 @@ export function SiteSeoCard({
                   <SheetHeader className="border-b">
                     <SheetTitle>{site.name} · Top keywords</SheetTitle>
                     <SheetDescription>
-                      Tap a column to sort · {sortedKeywords.length} queries
+                      Tap a column to sort · {sortedKeywords.length} queries ·{" "}
+                      {formatNumber(keywordClickTotal)} /{" "}
+                      {formatNumber(siteClicks)} site clicks
+                      {uncoveredClicks > 0
+                        ? ` · ${formatNumber(uncoveredClicks)} outside list`
+                        : ""}
                     </SheetDescription>
                   </SheetHeader>
                   <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">

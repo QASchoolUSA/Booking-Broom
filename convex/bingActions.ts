@@ -7,6 +7,7 @@ import {
   parseBingDate,
   SEO_SYNC_PERIODS,
 } from "./lib/gscMatch";
+import { SEO_TOP_QUERY_LIMIT } from "./lib/seoSort";
 
 const PERIODS = SEO_SYNC_PERIODS;
 const CRAWL_ISSUES_CAP = 25;
@@ -179,7 +180,7 @@ function topQueriesForPeriod(
   rows: QueryStatRow[],
   startDate: string,
   endDate: string,
-  limit = 5
+  limit = SEO_TOP_QUERY_LIMIT
 ): TopQueryRow[] {
   const byQuery = new Map<
     string,

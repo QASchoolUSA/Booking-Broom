@@ -104,10 +104,10 @@ export function aggregateHourlyMetrics(
   return sumMetrics(filterRowsInLast24Hours(rows, 0, now), 0);
 }
 
-/** Aggregate query+HOUR rows over the same last-24-hour window; return top N by clicks. */
+/** Aggregate query+HOUR rows over the same last-24-hour window; return top N. */
 export function aggregateQueryHourlyRows(
   rows: GscAnalyticsRow[],
-  limit = 5,
+  limit = 500,
   now = new Date()
 ): GscTopQueryRow[] {
   const filtered = filterRowsInLast24Hours(rows, 1, now);
