@@ -6,7 +6,7 @@ import { useConvexAuth } from "convex/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "convex/_generated/api";
 import { toast } from "sonner";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { CaretDown, CaretUp, MagnifyingGlass } from "@phosphor-icons/react";
 import { useSites } from "@/lib/hooks/useSites";
 import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
@@ -18,7 +18,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageLoader } from "@/components/loading/PageLoader";
-import { sortSeoSiteRows } from "@/lib/seoSort";
+import { cn } from "@/lib/utils";
+import {
+  DEFAULT_SEO_KEYWORD_SORT,
+  DEFAULT_SEO_SITE_SORT,
+  SEO_SITE_SORT_OPTIONS,
+  nextSeoSort,
+  sortSeoSiteRows,
+  type SeoSort,
+} from "@/lib/seoSort";
 import type { SeoPeriodDays, SeoSource, SiteSeoRow } from "@/lib/types";
 
 const PERIODS: { value: SeoPeriodDays; label: string }[] = [
@@ -34,6 +42,10 @@ function SeoPageContent() {
   const [period, setPeriod] = useState<SeoPeriodDays>(28);
   const [source, setSource] = useState<SeoSource>("google");
   const [scanningAll, setScanningAll] = useState(false);
+  const [siteSort, setSiteSort] = useState<SeoSort>(DEFAULT_SEO_SITE_SORT);
+  const [keywordSort, setKeywordSort] = useState<SeoSort>(
+    DEFAULT_SEO_KEYWORD_SORT
+  );
   const searchParams = useSearchParams();
   const router = useRouter();
   const scanAll = useAction(api.seoScanActions.scanAll);
@@ -58,8 +70,8 @@ function SeoPageContent() {
 
   const rowsRaw = source === "google" ? gscRowsRaw : bingRowsRaw;
   const rows = useMemo(
-    () => sortSeoSiteRows((rowsRaw ?? []) as SiteSeoRow[]),
-    [rowsRaw]
+    () => sortSeoSiteRows((rowsRaw ?? []) as SiteSeoRow[], siteSort),
+    [rowsRaw, siteSort]
   );
   const metricsLoading = isAuthenticated && rowsRaw === undefined;
 
@@ -204,9 +216,47 @@ function SeoPageContent() {
             )}
 
             <div>
-              <h3 className="mb-3 text-sm font-semibold text-foreground">
-                By site
-              </h3>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-sm font-semibold text-foreground">
+                  By site
+                </h3>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    Sort sites
+                  </span>
+                  {SEO_SITE_SORT_OPTIONS.map((opt) => {
+                    const active = siteSort.key === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() =>
+                          setSiteSort(nextSeoSort(siteSort, opt.key))
+                        }
+                        className={cn(
+                          "inline-flex h-7 items-center gap-0.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors",
+                          active
+                            ? "border-foreground/20 bg-foreground text-background"
+                            : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        {opt.label}
+                        {active ? (
+                          siteSort.dir === "desc" ? (
+                            <CaretDown size={10} weight="bold" />
+                          ) : (
+                            <CaretUp size={10} weight="bold" />
+                          )
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <p className="mb-3 text-[11px] text-muted-foreground">
+                Keyword tables: tap Clicks or Impr. (and CTR / Pos in the full
+                list) to change order. Same sort applies to every site.
+              </p>
               {metricsLoading ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {Array.from({ length: 6 }).map((_, i) => (
@@ -216,7 +266,13 @@ function SeoPageContent() {
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {rows.map((row) => (
-                    <SiteSeoCard key={row.site.id} row={row} source={source} />
+                    <SiteSeoCard
+                      key={row.site.id}
+                      row={row}
+                      source={source}
+                      keywordSort={keywordSort}
+                      onKeywordSortChange={setKeywordSort}
+                    />
                   ))}
                   {rows.length === 0 && (
                     <p className="col-span-full py-8 text-center text-sm text-muted-foreground">

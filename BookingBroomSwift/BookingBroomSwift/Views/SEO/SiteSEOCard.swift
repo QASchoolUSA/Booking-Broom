@@ -4,18 +4,18 @@ private let keywordPreviewCount = 5
 
 public struct SiteSEOCard: View {
     public let seo: SEOMetrics
+    public var keywordSort: SEOSort = .defaultKeywords
+    public var onSelectKeywordSort: ((SEOSortKey) -> Void)?
     @State private var showAllKeywords = false
 
-    public init(seo: SEOMetrics) {
+    public init(
+        seo: SEOMetrics,
+        keywordSort: SEOSort = .defaultKeywords,
+        onSelectKeywordSort: ((SEOSortKey) -> Void)? = nil
+    ) {
         self.seo = seo
-    }
-
-    private var rankedKeywords: [SEOQuery] {
-        seo.topQueries.sorted { a, b in
-            if a.impressions != b.impressions { return a.impressions > b.impressions }
-            if a.clicks != b.clicks { return a.clicks > b.clicks }
-            return a.query < b.query
-        }
+        self.keywordSort = keywordSort
+        self.onSelectKeywordSort = onSelectKeywordSort
     }
 
     private static let intFormatter: NumberFormatter = {
@@ -63,7 +63,7 @@ public struct SiteSEOCard: View {
                 ChartCard(title: "Traffic Trend", trendPoints: seo.history)
             }
 
-            if !rankedKeywords.isEmpty {
+            if !seo.topQueries.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Keywords")
                         .font(.caption.bold())
@@ -71,15 +71,15 @@ public struct SiteSEOCard: View {
 
                     keywordHeader
 
-                    ForEach(Array(rankedKeywords.prefix(keywordPreviewCount).enumerated()), id: \.element.id) { index, q in
-                        keywordRow(rank: index + 1, query: q, compact: true)
+                    ForEach(Array(seo.topQueries.prefix(keywordPreviewCount).enumerated()), id: \.element.id) { index, q in
+                        keywordRow(rank: index + 1, query: q)
                     }
 
-                    if rankedKeywords.count > keywordPreviewCount {
+                    if seo.topQueries.count > keywordPreviewCount {
                         Button {
                             showAllKeywords = true
                         } label: {
-                            Text("View all \(rankedKeywords.count) keywords")
+                            Text("View all \(seo.topQueries.count) keywords")
                                 .font(.caption.weight(.semibold))
                         }
                         .buttonStyle(.plain)
@@ -96,25 +96,45 @@ public struct SiteSEOCard: View {
         .padding(16)
         .glassCard()
         .sheet(isPresented: $showAllKeywords) {
-            SEOKeywordsSheet(siteName: seo.siteName, queries: rankedKeywords)
+            SEOKeywordsSheet(
+                siteName: seo.siteName,
+                queries: seo.topQueries,
+                keywordSort: keywordSort,
+                onSelectKeywordSort: onSelectKeywordSort
+            )
         }
     }
 
     private var keywordHeader: some View {
         HStack(spacing: 8) {
-            Text("Keyword")
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Clicks")
-                .frame(width: 52, alignment: .trailing)
-            Text("Impr.")
-                .frame(width: 64, alignment: .trailing)
+            sortHeaderButton(.name, width: nil)
+            sortHeaderButton(.clicks, width: 52)
+            sortHeaderButton(.impressions, width: 64)
         }
         .font(.system(size: 10, weight: .semibold))
-        .foregroundColor(.secondary)
         .textCase(.uppercase)
     }
 
-    private func keywordRow(rank: Int, query: SEOQuery, compact: Bool) -> some View {
+    private func sortHeaderButton(_ key: SEOSortKey, width: CGFloat?) -> some View {
+        let active = keywordSort.key == key
+        return Button {
+            onSelectKeywordSort?(key)
+        } label: {
+            HStack(spacing: 2) {
+                Text(key.keywordLabel)
+                if active {
+                    Image(systemName: keywordSort.dir == .desc ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 8, weight: .bold))
+                }
+            }
+            .foregroundColor(active ? .primary : .secondary)
+            .frame(maxWidth: width == nil ? .infinity : nil, alignment: width == nil ? .leading : .trailing)
+            .frame(width: width, alignment: .trailing)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func keywordRow(rank: Int, query: SEOQuery) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("\(rank).")
                 .font(.caption.monospacedDigit())
@@ -122,7 +142,7 @@ public struct SiteSEOCard: View {
                 .frame(width: 22, alignment: .trailing)
             Text(query.query)
                 .font(.caption.weight(.medium))
-                .lineLimit(compact ? 2 : 3)
+                .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(formatInt(query.clicks))
                 .font(.caption.monospacedDigit().weight(.semibold))
@@ -155,6 +175,8 @@ public struct SiteSEOCard: View {
 private struct SEOKeywordsSheet: View {
     let siteName: String
     let queries: [SEOQuery]
+    var keywordSort: SEOSort
+    var onSelectKeywordSort: ((SEOSortKey) -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     private static let intFormatter: NumberFormatter = {
@@ -174,14 +196,13 @@ private struct SEOKeywordsSheet: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
                         Text("#").frame(width: 28, alignment: .trailing)
-                        Text("Keyword").frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Clicks").frame(width: 52, alignment: .trailing)
-                        Text("Impr.").frame(width: 64, alignment: .trailing)
-                        Text("CTR").frame(width: 48, alignment: .trailing)
-                        Text("Pos").frame(width: 40, alignment: .trailing)
+                        sheetSortButton(.name, maxWidth: true)
+                        sheetSortButton(.clicks, width: 52)
+                        sheetSortButton(.impressions, width: 64)
+                        sheetSortButton(.ctr, width: 48)
+                        sheetSortButton(.position, width: 40)
                     }
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary)
                     .textCase(.uppercase)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
@@ -236,6 +257,25 @@ private struct SEOKeywordsSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         #endif
+    }
+
+    private func sheetSortButton(_ key: SEOSortKey, width: CGFloat? = nil, maxWidth: Bool = false) -> some View {
+        let active = keywordSort.key == key
+        return Button {
+            onSelectKeywordSort?(key)
+        } label: {
+            HStack(spacing: 2) {
+                Text(key.keywordLabel)
+                if active {
+                    Image(systemName: keywordSort.dir == .desc ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 8, weight: .bold))
+                }
+            }
+            .foregroundColor(active ? .primary : .secondary)
+            .frame(maxWidth: maxWidth ? .infinity : nil, alignment: maxWidth ? .leading : .trailing)
+            .frame(width: width, alignment: .trailing)
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -79,8 +79,47 @@ public struct SEODashboardView: View {
                     Text("Site Performance & Keywords")
                         .font(.headline)
                     
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            Text("Sort sites")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            ForEach(SEOSortKey.siteKeys) { key in
+                                let active = seoVM.siteSort.key == key
+                                Button {
+                                    seoVM.selectSiteSort(key)
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Text(key.siteLabel)
+                                        if active {
+                                            Image(systemName: seoVM.siteSort.dir == .desc ? "chevron.down" : "chevron.up")
+                                                .font(.system(size: 9, weight: .bold))
+                                        }
+                                    }
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(active ? AppColors.primary : Color.secondary.opacity(0.12))
+                                    .foregroundStyle(active ? Color.white : Color.primary)
+                                    .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    
+                    Text("Tap Clicks / Impr. on a card to reorder keywords.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
                     ForEach(seoVM.seoMetricsList) { seo in
-                        SiteSEOCard(seo: seo)
+                        SiteSEOCard(
+                            seo: seo,
+                            keywordSort: seoVM.keywordSort,
+                            onSelectKeywordSort: { key in
+                                seoVM.selectKeywordSort(key)
+                            }
+                        )
                     }
                 }
             }
