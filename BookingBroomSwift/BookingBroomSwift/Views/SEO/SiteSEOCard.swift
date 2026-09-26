@@ -1,6 +1,6 @@
 import SwiftUI
 
-private let keywordPreviewCount = 5
+private let keywordPreviewCount = 10
 
 public struct SiteSEOCard: View {
     public let seo: SEOMetrics
@@ -16,6 +16,32 @@ public struct SiteSEOCard: View {
         self.seo = seo
         self.keywordSort = keywordSort
         self.onSelectKeywordSort = onSelectKeywordSort
+    }
+
+    private var keywordClickTotal: Int {
+        seo.topQueries.reduce(0) { $0 + $1.clicks }
+    }
+
+    private var keywordImpressionTotal: Int {
+        seo.topQueries.reduce(0) { $0 + $1.impressions }
+    }
+
+    private var previewClickTotal: Int {
+        seo.topQueries.prefix(keywordPreviewCount).reduce(0) { $0 + $1.clicks }
+    }
+
+    private var uncoveredClicks: Int {
+        max(0, seo.clicks - keywordClickTotal)
+    }
+
+    private var coverageLine: String {
+        if uncoveredClicks > 0 {
+            return "Keywords cover \(formatInt(keywordClickTotal)) of \(formatInt(seo.clicks)) clicks. Sync again to pull more keywords, or sort by Clicks."
+        }
+        if seo.topQueries.count > keywordPreviewCount, previewClickTotal < keywordClickTotal {
+            return "Preview shows \(formatInt(previewClickTotal)) of \(formatInt(keywordClickTotal)) keyword clicks — open all or sort by Clicks."
+        }
+        return "\(seo.topQueries.count) keywords · \(formatInt(keywordClickTotal)) clicks · \(formatInt(keywordImpressionTotal)) impressions"
     }
 
     private static let intFormatter: NumberFormatter = {
@@ -74,6 +100,11 @@ public struct SiteSEOCard: View {
                     ForEach(Array(seo.topQueries.prefix(keywordPreviewCount).enumerated()), id: \.element.id) { index, q in
                         keywordRow(rank: index + 1, query: q)
                     }
+
+                    Text(coverageLine)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if seo.topQueries.count > keywordPreviewCount {
                         Button {

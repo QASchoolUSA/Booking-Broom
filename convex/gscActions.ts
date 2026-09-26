@@ -13,6 +13,7 @@ import {
   aggregateQueryHourlyRows,
   type GscAnalyticsRow,
 } from "./lib/gscAggregate";
+import { SEO_TOP_QUERY_LIMIT } from "./lib/seoSort";
 import {
   isIntentionalNoindexUrl,
   parseSitemapLocs,
@@ -418,7 +419,7 @@ async function queryTopQueries(
               type: "web",
               aggregationType: "byProperty",
               dimensions: ["query"],
-              rowLimit: 30,
+              rowLimit: SEO_TOP_QUERY_LIMIT,
               dataState: "all",
             }
       ),
@@ -436,7 +437,7 @@ async function queryTopQueries(
   const rows = data.rows ?? [];
 
   if (hourly) {
-    return aggregateQueryHourlyRows(rows, 30, now);
+    return aggregateQueryHourlyRows(rows, SEO_TOP_QUERY_LIMIT, now);
   }
 
   return rows
@@ -453,7 +454,8 @@ async function queryTopQueries(
         b.impressions - a.impressions ||
         b.clicks - a.clicks ||
         a.query.localeCompare(b.query)
-    );
+    )
+    .slice(0, SEO_TOP_QUERY_LIMIT);
 }
 
 export const syncAllInternal = internalAction({
