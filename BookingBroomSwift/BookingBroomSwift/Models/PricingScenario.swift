@@ -1,5 +1,30 @@
 import Foundation
 
+/// Square-footage draft parsing for Live Pricing.
+/// Keeps partial/empty typing local; clamps only on blur (or when a full in-range value is typed).
+public enum PricingSquareFeetDraft {
+    public static let minimum = 400
+    public static let maximum = 10_000
+    
+    /// - Returns: value to write into the scenario, or `nil` to leave the scenario unchanged.
+    /// - Parameter clampIncomplete: `true` on blur (empty → min, out-of-range → clamp).
+    ///   `false` while typing (only commit when draft is already in `[minimum, maximum]`).
+    public static func resolvedValue(draft: String, clampIncomplete: Bool) -> Int? {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return clampIncomplete ? minimum : nil
+        }
+        guard let value = Int(trimmed) else {
+            return nil
+        }
+        if clampIncomplete {
+            return min(maximum, max(minimum, value))
+        }
+        guard value >= minimum, value <= maximum else { return nil }
+        return value
+    }
+}
+
 public struct PricingScenario: Equatable, Hashable {
     public var bedrooms: Int
     public var bathrooms: Int
