@@ -2,6 +2,8 @@ import SwiftUI
 
 public struct PricingCalculatorView: View {
     @Bindable var opsVM: OpsViewModel
+    @State private var squareFeetDraft: String = ""
+    @FocusState private var squareFeetFocused: Bool
     
     public init(opsVM: OpsViewModel) {
         self.opsVM = opsVM
@@ -18,7 +20,7 @@ public struct PricingCalculatorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.md) {
                 scenarioHeader
-                presetRow
+                resetRow
                 scenarioControls
                 addonSection
                 servicePicker
@@ -28,6 +30,15 @@ public struct PricingCalculatorView: View {
             .padding(AppSpacing.md)
         }
         .background(AppColors.groupedBackground.ignoresSafeArea())
+        .onAppear {
+            squareFeetDraft = String(scenario.squareFeet)
+        }
+        .onChange(of: scenario.squareFeet) { _, newValue in
+            // Keep draft in sync for Reset / external updates while not editing.
+            if !squareFeetFocused {
+                squareFeetDraft = String(newValue)
+            }
+        }
     }
     
     private var scenarioHeader: some View {
@@ -43,27 +54,8 @@ public struct PricingCalculatorView: View {
         }
     }
     
-    private var presetRow: some View {
-        HStack(spacing: AppSpacing.xs) {
-            ForEach(PricingScenarioPreset.allCases) { preset in
-                Button {
-                    opsVM.applyPreset(preset)
-                    HapticFeedback.impact(.light)
-                } label: {
-                    Text(preset.title)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .foregroundStyle(isActivePreset(preset) ? Color.white : Color.primary)
-                        .background(
-                            isActivePreset(preset)
-                                ? AppColors.primary
-                                : Color.secondary.opacity(0.12)
-                        )
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
+    private var resetRow: some View {
+        HStack {
             Spacer()
             Button("Reset") {
                 opsVM.resetScenario()
@@ -94,22 +86,25 @@ public struct PricingCalculatorView: View {
                     Text("Square feet")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    TextField(
-                        "2000",
-                        value: Binding(
-                            get: { scenario.squareFeet },
-                            set: { value in
-                                var next = scenario
-                                next.squareFeet = min(10000, max(400, value))
-                                opsVM.updateScenario(next)
+                    TextField("2000", text: $squareFeetDraft)
+                        .platformKeyboardType(.numberPad)
+                        .focused($squareFeetFocused)
+                        .onChange(of: squareFeetDraft) { _, newValue in
+                            let digits = newValue.filter(\.isNumber)
+                            if digits != newValue {
+                                squareFeetDraft = digits
+                                return
                             }
-                        ),
-                        format: .number
-                    )
-                    .platformKeyboardType(.numberPad)
-                    .padding(10)
-                    .background(Color.secondary.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            commitSquareFeet(draft: digits, clampIncomplete: false)
+                        }
+                        .onChange(of: squareFeetFocused) { _, focused in
+                            if !focused {
+                                commitSquareFeet(draft: squareFeetDraft, clampIncomplete: true)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.secondary.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -381,12 +376,30 @@ public struct PricingCalculatorView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     
-    private func isActivePreset(_ preset: PricingScenarioPreset) -> Bool {
-        let p = preset.scenario
-        return p.bedrooms == scenario.bedrooms
-            && p.bathrooms == scenario.bathrooms
-            && p.squareFeet == scenario.squareFeet
-            && scenario.addonKeys.isEmpty
+    /// Commits square footage from the draft field.
+    /// - While typing (`clampIncomplete == false`): only push when the draft is a full in-range number,
+    ///   so clearing / partial values like "2" or "230" never snap back to the minimum.
+    /// - On blur (`clampIncomplete == true`): empty → min; out-of-range → clamp; invalid → restore.
+    private func commitSquareFeet(draft: String, clampIncomplete: Bool) {
+        guard let value = PricingSquareFeetDraft.resolvedValue(
+            draft: draft,
+            clampIncomplete: clampIncomplete
+        ) else {
+            if clampIncomplete {
+                // Non-numeric blur: restore last committed value into the field.
+                squareFeetDraft = String(scenario.squareFeet)
+            }
+            return
+        }
+        applySquareFeet(value)
+    }
+    
+    private func applySquareFeet(_ value: Int) {
+        squareFeetDraft = String(value)
+        guard value != scenario.squareFeet else { return }
+        var next = scenario
+        next.squareFeet = value
+        opsVM.updateScenario(next)
     }
 }
 
