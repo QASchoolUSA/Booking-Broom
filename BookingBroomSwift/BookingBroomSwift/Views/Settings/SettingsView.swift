@@ -128,6 +128,22 @@ public struct SettingsView: View {
                 }
                 .bbDestructiveButton(expand: true)
             }
+
+            Section("About") {
+                HStack(spacing: 12) {
+                    BBBrandMark(.settings, decorative: true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Booking Broom")
+                            .font(.headline)
+                        Text(appVersionLabel)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 4)
+                .accessibilityElement(children: .combine)
+            }
         }
         .navigationTitle("Settings")
         #if os(iOS)
@@ -145,5 +161,12 @@ public struct SettingsView: View {
             return String(parts[0].prefix(1) + parts[1].prefix(1)).uppercased()
         }
         return String(name.prefix(2)).uppercased()
+    }
+
+    private var appVersionLabel: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "Version \(version) (\(build))"
     }
 }

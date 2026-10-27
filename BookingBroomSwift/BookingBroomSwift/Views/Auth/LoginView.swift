@@ -77,16 +77,7 @@ public struct LoginView: View {
     
     private var brandHeader: some View {
         VStack(spacing: AppSpacing.sm) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppColors.primary)
-                    .frame(width: 64, height: 64)
-                    .accessibilityHidden(true)
-
-                Image(systemName: "broom.fill")
-                    .font(.title.weight(.semibold))
-                    .foregroundStyle(.white)
-            }
+            BBBrandMark(.login, decorative: true)
 
             Text("Booking Broom")
                 .font(AppTypography.pageTitle)
