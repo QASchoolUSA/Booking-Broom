@@ -484,11 +484,12 @@ public struct BookingDetailView: View {
                     .padding(.top, AppSpacing.xs)
                     .disabled(isPendingCreate)
                 }
-                .padding(16)
-                .frame(maxWidth: sizeClass == .regular ? 720 : .infinity, alignment: .leading)
+                .padding(.vertical, AppSpacing.md)
+                .frame(maxWidth: sizeClass == .regular ? AppSpacing.readableContentWidth : .infinity, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, AppSpacing.contentInset)
             }
-            .background(AppColors.groupedBackground.ignoresSafeArea())
+            .bbPageBackground()
             .navigationTitle("Booking")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

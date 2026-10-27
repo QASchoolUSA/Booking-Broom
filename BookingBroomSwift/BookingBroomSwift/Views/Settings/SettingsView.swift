@@ -130,6 +130,9 @@ public struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.large)
+        #endif
         .onAppear {
             settingsVM.ensureLoaded()
         }

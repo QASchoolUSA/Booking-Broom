@@ -13,25 +13,23 @@ public struct DeploymentsView: View {
 
     public var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                Button(action: { deploymentsVM.syncNow() }) {
+            BBWidePage {
+            VStack(spacing: AppSpacing.md) {
+                Button {
+                    deploymentsVM.syncNow()
+                } label: {
                     HStack {
                         if deploymentsVM.isSyncing {
-                            ProgressView()
-                                .tint(.white)
-                            Text("Syncing deployments…")
+                            ProgressView().controlSize(.small)
+                            Text("Syncing…")
                         } else {
                             Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
                             Text("Sync Deployments")
                         }
                     }
-                    .font(.subheadline.bold())
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(AppColors.primary)
-                    .foregroundColor(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .bbPrimaryButton(isLoading: deploymentsVM.isSyncing, expand: true)
                 .disabled(deploymentsVM.isSyncing)
 
                 if let err = deploymentsVM.lastError, !err.isEmpty {
@@ -69,10 +67,14 @@ public struct DeploymentsView: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(.vertical, AppSpacing.md)
+            }
         }
-        .background(AppColors.groupedBackground.ignoresSafeArea())
-        .navigationTitle("Deployments")
+        .bbPageBackground()
+        .navigationTitle("Deploys")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.large)
+        #endif
         .refreshable { await deploymentsVM.loadAndWait() }
         .onAppear { deploymentsVM.ensureLoaded() }
         .onChange(of: deploymentsVM.lastError) { _, newValue in

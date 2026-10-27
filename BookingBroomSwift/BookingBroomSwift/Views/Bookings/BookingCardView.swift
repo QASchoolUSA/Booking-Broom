@@ -100,12 +100,7 @@ public struct BookingCardView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
             }
-            .background(AppColors.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(AppColors.separator.opacity(0.35), lineWidth: 0.5)
-            )
+            .appElevatedSurface()
         }
         .buttonStyle(.plain)
         .contextMenu {

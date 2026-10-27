@@ -24,7 +24,7 @@ public struct SEODashboardView: View {
                 phoneLayout
             }
         }
-        .background(AppColors.groupedBackground.ignoresSafeArea())
+        .bbPageBackground()
         .navigationTitle("SEO")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
@@ -195,10 +195,9 @@ public struct SEODashboardView: View {
     }
 
     private func kpiBlock(columns: Int) -> some View {
-        LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns),
-            spacing: 10
-        ) {
+        // `columns` kept for call-site compatibility; BBMetricGrid adapts by size class.
+        _ = columns
+        return BBMetricGrid {
             StatCard(
                 title: "Clicks",
                 value: "\(seoVM.totalClicks)",
@@ -227,7 +226,8 @@ public struct SEODashboardView: View {
     }
 
     private func indexCoverageBlock(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        _ = compact
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Index coverage")
                     .font(AppTypography.sectionTitle)
@@ -245,10 +245,7 @@ public struct SEODashboardView: View {
                 .disabled(seoVM.isSyncingIndex || seoVM.isSyncing)
             }
 
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: compact ? 2 : 4),
-                spacing: 10
-            ) {
+            BBMetricGrid {
                 StatCard(
                     title: "Indexed",
                     value: seoVM.hasIndexCoverage ? "\(seoVM.totalIndexedPages)" : "—",

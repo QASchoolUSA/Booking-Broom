@@ -73,10 +73,10 @@ public struct BookingsListView: View {
                 bookingsContent
             }
         }
-        .background(AppColors.groupedBackground.ignoresSafeArea())
+        .bbPageBackground()
         .navigationTitle(navigationTitle)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         #endif
         .searchable(text: $bookingsVM.searchText, prompt: searchPrompt)
         .onChange(of: bookingsVM.viewMode) { _, mode in

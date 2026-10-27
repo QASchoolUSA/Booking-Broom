@@ -11,9 +11,9 @@ public enum AppSidebarItem: String, Hashable, CaseIterable, Identifiable {
     case deploys
     case speed
     case settings
-    
+
     public var id: String { rawValue }
-    
+
     var title: String {
         switch self {
         case .dashboard: return "Dashboard"
@@ -28,7 +28,7 @@ public enum AppSidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .settings: return "Settings"
         }
     }
-    
+
     var systemImage: String {
         switch self {
         case .dashboard: return "rectangle.grid.2x2"
@@ -49,10 +49,10 @@ public struct MainTabView: View {
     @Bindable var authVM: AuthViewModel
     @Bindable var appController: AppController
     @Environment(\.horizontalSizeClass) private var sizeClass
-    
+
     @State private var selectedTab = 0
     @SceneStorage("bb.sidebarSelection") private var sidebarSelectionRaw: String = AppSidebarItem.dashboard.rawValue
-    
+
     private var sidebarSelection: Binding<AppSidebarItem?> {
         Binding(
             get: {
@@ -72,12 +72,12 @@ public struct MainTabView: View {
             }
         )
     }
-    
+
     public init(authVM: AuthViewModel, appController: AppController) {
         self.authVM = authVM
         self.appController = appController
     }
-    
+
     public var body: some View {
         Group {
             #if os(macOS)
@@ -95,7 +95,7 @@ public struct MainTabView: View {
             CreateBookingSheet(bookingsVM: appController.bookingsVM)
         }
     }
-    
+
     #if os(iOS)
     private var iPhoneTabShell: some View {
         TabView(selection: $selectedTab) {
@@ -109,23 +109,23 @@ public struct MainTabView: View {
             )
             .tabItem { Label("Dashboard", systemImage: AppSidebarItem.dashboard.systemImage) }
             .tag(0)
-            
+
             NavigationStack {
                 BookingsListView(bookingsVM: appController.bookingsVM, messagesVM: appController.messagesVM)
             }
             .tabItem { Label("Bookings", systemImage: AppSidebarItem.bookings.systemImage) }
             .badge(appController.bookingsVM.newBookingsCount > 0 ? appController.bookingsVM.newBookingsCount : 0)
             .tag(1)
-            
+
             MessagesInboxView(messagesVM: appController.messagesVM)
                 .tabItem { Label("Messages", systemImage: AppSidebarItem.messages.systemImage) }
                 .tag(2)
-            
+
             EmailInboxView(emailVM: appController.emailVM)
                 .tabItem { Label("Email", systemImage: AppSidebarItem.email.systemImage) }
                 .badge(appController.emailVM.totalUnreadCount > 0 ? appController.emailVM.totalUnreadCount : 0)
                 .tag(3)
-            
+
             NavigationStack {
                 MoreHubView(
                     opsVM: appController.opsVM,
@@ -140,7 +140,7 @@ public struct MainTabView: View {
             .tag(4)
         }
     }
-    
+
     private var iPadSplitShell: some View {
         NavigationSplitView {
             sidebarList
@@ -150,9 +150,25 @@ public struct MainTabView: View {
             detailView(for: AppSidebarItem(rawValue: sidebarSelectionRaw) ?? .dashboard)
         }
         .navigationSplitViewStyle(.balanced)
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    appController.syncCurrent()
+                } label: {
+                    Label("Sync", systemImage: "arrow.clockwise")
+                }
+                if sidebarSelection.wrappedValue == .bookings || sidebarSelection.wrappedValue == .dashboard {
+                    Button {
+                        appController.showingNewBooking = true
+                    } label: {
+                        Label("New Booking", systemImage: "plus")
+                    }
+                }
+            }
+        }
     }
     #endif
-    
+
     #if os(macOS)
     private var macSplitShell: some View {
         NavigationSplitView {
@@ -173,7 +189,7 @@ public struct MainTabView: View {
                 }
                 .keyboardShortcut("r", modifiers: .command)
                 .help("Refresh current section")
-                
+
                 if appController.sidebarSelection == .bookings || appController.sidebarSelection == .dashboard {
                     Button {
                         appController.showingNewBooking = true
@@ -186,7 +202,7 @@ public struct MainTabView: View {
         }
     }
     #endif
-    
+
     private var sidebarList: some View {
         List(selection: sidebarSelection) {
             Section("Work") {
@@ -195,7 +211,7 @@ public struct MainTabView: View {
                 sidebarRow(.messages)
                 sidebarRow(.email, badge: appController.emailVM.totalUnreadCount)
             }
-            
+
             Section("Sites") {
                 sidebarRow(.pricing)
                 sidebarRow(.seo)
@@ -203,9 +219,11 @@ public struct MainTabView: View {
                 sidebarRow(.deploys)
                 sidebarRow(.speed)
             }
-            
-            Section("Account") {
+
+            Section {
                 sidebarRow(.settings)
+            } header: {
+                Text("Account")
             }
         }
         .listStyle(.sidebar)
@@ -213,14 +231,14 @@ public struct MainTabView: View {
         .navigationTitle("Booking Broom")
         #endif
     }
-    
+
     @ViewBuilder
     private func sidebarRow(_ item: AppSidebarItem, badge: Int = 0) -> some View {
         Label(item.title, systemImage: item.systemImage)
             .badge(badge > 0 ? badge : 0)
             .tag(item)
     }
-    
+
     @ViewBuilder
     private func detailView(for item: AppSidebarItem) -> some View {
         switch item {
@@ -273,7 +291,7 @@ public struct MainTabView: View {
     }
 }
 
-/// Compact “More” hub for iPhone tab bar.
+/// Compact “More” hub for iPhone tab bar — inset grouped list (HIG).
 public struct MoreHubView: View {
     @Bindable var opsVM: OpsViewModel
     @Bindable var seoVM: SEOViewModel
@@ -281,10 +299,10 @@ public struct MoreHubView: View {
     @Bindable var deploymentsVM: DeploymentsViewModel
     @Bindable var settingsVM: SettingsViewModel
     @Bindable var authVM: AuthViewModel
-    
+
     public var body: some View {
         List {
-            Section("Sites") {
+            Section {
                 NavigationLink {
                     PricingOpsView(opsVM: opsVM)
                 } label: {
@@ -310,16 +328,25 @@ public struct MoreHubView: View {
                 } label: {
                     Label("PageSpeed", systemImage: "gauge.with.needle")
                 }
+            } header: {
+                Text("Sites")
             }
-            
-            Section("Account") {
+
+            Section {
                 NavigationLink {
                     SettingsView(settingsVM: settingsVM, authVM: authVM, opsVM: opsVM)
                 } label: {
                     Label("Settings", systemImage: "gearshape")
                 }
+            } header: {
+                Text("Account")
             }
         }
+        #if os(iOS)
+        .listStyle(.insetGrouped)
+        .navigationBarTitleDisplayMode(.large)
+        #endif
         .navigationTitle("More")
+        .bbPageBackground()
     }
 }

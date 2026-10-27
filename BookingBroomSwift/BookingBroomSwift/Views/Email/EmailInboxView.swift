@@ -27,11 +27,10 @@ public struct EmailInboxView: View {
                 }
                 #endif
             }
-            .background(AppColors.groupedBackground.ignoresSafeArea())
+            .bbPageBackground()
             .navigationTitle("Mail")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.visible, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {

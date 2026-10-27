@@ -34,7 +34,7 @@ public struct ChatThreadView: View {
                     .padding(.vertical, 10)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .background(messagesBackground.ignoresSafeArea())
+                .background(AppColors.groupedBackground.ignoresSafeArea())
                 .onChange(of: liveThread.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
@@ -85,14 +85,6 @@ public struct ChatThreadView: View {
         .onAppear {
             messagesVM.loadThreadMessages(did: thread.did, contact: thread.contact)
         }
-    }
-
-    private var messagesBackground: Color {
-        #if os(iOS)
-        Color(uiColor: .systemBackground)
-        #else
-        AppColors.groupedBackground
-        #endif
     }
 
     /// Site that owns this DID (via `sms:listDids.site_id` → bookings' sites), else a neutral name.

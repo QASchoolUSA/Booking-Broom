@@ -81,22 +81,24 @@ public struct LoginView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(AppColors.primary)
                     .frame(width: 64, height: 64)
-                
+                    .accessibilityHidden(true)
+
                 Image(systemName: "broom.fill")
-                    .font(.system(size: 28, weight: .semibold))
+                    .font(.title.weight(.semibold))
                     .foregroundStyle(.white)
             }
-            
+
             Text("Booking Broom")
-                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .font(AppTypography.pageTitle)
                 .foregroundStyle(.primary)
-            
+
             Text("Manager control for every cleaning site")
                 .font(AppTypography.meta)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, AppSpacing.xl)
         }
+        .accessibilityElement(children: .combine)
     }
     
     private var biometricUnlockPanel: some View {
@@ -154,7 +156,7 @@ public struct LoginView: View {
         VStack(alignment: .leading, spacing: AppSpacing.md) {
             VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(authVM.isSignUpMode ? "Create manager account" : "Sign in")
-                    .font(AppTypography.pageTitle)
+                    .font(AppTypography.sectionTitle)
                 Text(
                     authVM.isSignUpMode
                         ? "First time only — use a strong password."

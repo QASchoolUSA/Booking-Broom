@@ -51,10 +51,12 @@ public struct PricingOpsView: View {
                 }
             }
         }
-        .background(AppColors.groupedBackground.ignoresSafeArea())
+        .bbPageBackground()
         .navigationTitle("Live Pricing")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.large)
+        #endif
         .refreshable {
-            // loadPricingAndWait re-fires the compare only when none is already in flight.
             await opsVM.loadPricingAndWait()
         }
         .onAppear {
@@ -63,7 +65,7 @@ public struct PricingOpsView: View {
                 selectedSlug = opsVM.sitePricingList.first?.siteSlug
             }
         }
-        .onChange(of: opsVM.sitePricingList) { list in
+        .onChange(of: opsVM.sitePricingList) { _, list in
             if selectedSlug == nil || !list.contains(where: { $0.siteSlug == selectedSlug }) {
                 selectedSlug = list.first?.siteSlug
             }

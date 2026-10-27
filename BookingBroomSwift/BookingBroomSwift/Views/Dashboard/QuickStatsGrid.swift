@@ -3,30 +3,15 @@ import SwiftUI
 public struct QuickStatsGrid: View {
     @Bindable var bookingsVM: BookingsViewModel
     var siteCount: Int
-    
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
     public init(bookingsVM: BookingsViewModel, siteCount: Int) {
         self.bookingsVM = bookingsVM
         self.siteCount = siteCount
     }
-    
-    private var columns: [GridItem] {
-        #if os(macOS)
-        [
-            GridItem(.flexible(), spacing: AppSpacing.sm),
-            GridItem(.flexible(), spacing: AppSpacing.sm),
-            GridItem(.flexible(), spacing: AppSpacing.sm),
-            GridItem(.flexible(), spacing: AppSpacing.sm)
-        ]
-        #else
-        [
-            GridItem(.flexible(), spacing: AppSpacing.sm),
-            GridItem(.flexible(), spacing: AppSpacing.sm)
-        ]
-        #endif
-    }
-    
+
     public var body: some View {
-        LazyVGrid(columns: columns, spacing: AppSpacing.sm) {
+        BBMetricGrid {
             StatCard(
                 title: "New Leads",
                 value: "\(bookingsVM.newBookingsCount)",
@@ -34,7 +19,7 @@ public struct QuickStatsGrid: View {
                 iconColor: AppColors.amber,
                 subtitle: "Action required"
             )
-            
+
             StatCard(
                 title: "Confirmed",
                 value: "\(bookingsVM.confirmedBookingsCount)",
@@ -42,7 +27,7 @@ public struct QuickStatsGrid: View {
                 iconColor: AppColors.primary,
                 subtitle: "Scheduled"
             )
-            
+
             StatCard(
                 title: "Completed",
                 value: "\(bookingsVM.completedBookingsCount)",
@@ -50,7 +35,7 @@ public struct QuickStatsGrid: View {
                 iconColor: AppColors.emerald,
                 subtitle: "Done"
             )
-            
+
             StatCard(
                 title: "Sites",
                 value: "\(siteCount)",

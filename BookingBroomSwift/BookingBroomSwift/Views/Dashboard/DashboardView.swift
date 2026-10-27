@@ -46,157 +46,142 @@ public struct DashboardView: View {
     public var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: AppSpacing.lg) {
-                    QuickStatsGrid(bookingsVM: bookingsVM, siteCount: liveSiteCount)
-                    
-                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        SectionHeader(title: "Recent Bookings")
-                        
-                        #if os(iOS)
-                        HStack {
-                            Spacer()
+                BBWidePage {
+                    VStack(alignment: .leading, spacing: AppSpacing.xl) {
+                        QuickStatsGrid(bookingsVM: bookingsVM, siteCount: liveSiteCount)
+
+                        BBSection("Recent Bookings") {
+                            #if os(iOS)
                             NavigationLink(destination: BookingsListView(bookingsVM: bookingsVM, messagesVM: messagesVM)) {
                                 Text("See All (\(bookingsVM.bookings.count))")
                                     .font(AppTypography.metaBold)
-                                    .foregroundStyle(AppColors.primary)
                             }
-                        }
-                        #else
-                        HStack {
-                            Spacer()
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            #else
                             Button("See All (\(bookingsVM.bookings.count))") {
                                 appController.select(.bookings)
                             }
                             .font(AppTypography.metaBold)
                             .buttonStyle(.plain)
                             .foregroundStyle(AppColors.primary)
-                        }
-                        #endif
-                        
-                        ForEach(bookingsVM.bookings.prefix(3)) { booking in
-                            BookingCardView(
-                                booking: booking,
-                                bookingsVM: bookingsVM,
-                                messagesVM: messagesVM,
-                                onStatusChange: { newStatus in
-                                    bookingsVM.updateStatus(booking: booking, newStatus: newStatus)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            #endif
+
+                            LazyVStack(spacing: AppSpacing.sm) {
+                                ForEach(bookingsVM.bookings.prefix(3)) { booking in
+                                    BookingCardView(
+                                        booking: booking,
+                                        bookingsVM: bookingsVM,
+                                        messagesVM: messagesVM,
+                                        onStatusChange: { newStatus in
+                                            bookingsVM.updateStatus(booking: booking, newStatus: newStatus)
+                                        }
+                                    )
                                 }
-                            )
+                            }
                         }
-                    }
-                    
-                    VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                        SectionHeader(title: "Recent SMS")
-                        
-                        #if os(iOS)
-                        HStack {
-                            Spacer()
+
+                        BBSection("Recent SMS") {
+                            #if os(iOS)
                             NavigationLink(destination: MessagesInboxView(messagesVM: messagesVM)) {
                                 Text("Open Inbox")
                                     .font(AppTypography.metaBold)
-                                    .foregroundStyle(AppColors.primary)
                             }
-                        }
-                        #else
-                        HStack {
-                            Spacer()
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            #else
                             Button("Open Inbox") {
                                 appController.select(.messages)
                             }
                             .font(AppTypography.metaBold)
                             .buttonStyle(.plain)
                             .foregroundStyle(AppColors.primary)
-                        }
-                        #endif
-                        
-                        ForEach(messagesVM.threads.prefix(2)) { thread in
-                            HStack(spacing: AppSpacing.sm) {
-                                ContactAvatar(
-                                    title: thread.contactName ?? thread.contact,
-                                    systemImage: "message.fill",
-                                    tint: AppColors.primary,
-                                    size: 40
-                                )
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text(thread.contactName ?? thread.contact)
-                                            .font(AppTypography.rowTitle)
-                                        Spacer()
-                                        Text(thread.lastMessage.sentAt, style: .time)
-                                            .font(AppTypography.micro)
-                                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            #endif
+
+                            LazyVStack(spacing: AppSpacing.xs) {
+                                ForEach(messagesVM.threads.prefix(2)) { thread in
+                                    HStack(spacing: AppSpacing.sm) {
+                                        ContactAvatar(
+                                            title: thread.contactName ?? thread.contact,
+                                            tint: AppColors.primary,
+                                            size: 40
+                                        )
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            HStack {
+                                                Text(thread.contactName ?? thread.contact)
+                                                    .font(AppTypography.rowTitle)
+                                                Spacer()
+                                                Text(thread.lastMessage.sentAt, style: .time)
+                                                    .font(AppTypography.micro)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            Text(thread.lastMessage.body)
+                                                .font(AppTypography.meta)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
                                     }
-                                    Text(thread.lastMessage.body)
-                                        .font(AppTypography.meta)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
+                                    .padding(AppSpacing.sm)
+                                    .appSurface()
                                 }
                             }
-                            .padding(AppSpacing.sm)
-                            .appSurface()
                         }
-                    }
-                    
-                    if showsMoreSection {
-                        VStack(alignment: .leading, spacing: AppSpacing.sm) {
-                            SectionHeader(title: "More")
-                            
-                            NavigationLink(destination: SitesHealthView(opsVM: opsVM)) {
-                                DashboardMoreRow(
-                                    title: "Sites Health",
-                                    subtitle: "Hosting, uptime, and infrastructure",
-                                    iconName: "globe",
-                                    iconColor: AppColors.primary
-                                )
-                            }
-                            
-                            NavigationLink(destination: DeploymentsView(deploymentsVM: appController.deploymentsVM)) {
-                                DashboardMoreRow(
-                                    title: "Deploys",
-                                    subtitle: "Workers Builds and free-tier usage",
-                                    iconName: "cloud.fill",
-                                    iconColor: AppColors.sky
-                                )
-                            }
-                            
-                            NavigationLink(destination: PerformanceDashboardView(perfVM: perfVM)) {
-                                DashboardMoreRow(
-                                    title: "PageSpeed",
-                                    subtitle: "Lighthouse and Core Web Vitals",
-                                    iconName: "gauge.with.needle.fill",
-                                    iconColor: AppColors.emerald
-                                )
-                            }
-                            
-                            NavigationLink(destination: PricingOpsView(opsVM: opsVM)) {
-                                DashboardMoreRow(
-                                    title: "Live Pricing",
-                                    subtitle: "Edit site rates that websites pull live",
-                                    iconName: "dollarsign.circle.fill",
-                                    iconColor: AppColors.amber
-                                )
-                            }
-                            
-                            NavigationLink(destination: SettingsView(settingsVM: settingsVM, authVM: authVM, opsVM: opsVM)) {
-                                DashboardMoreRow(
-                                    title: "Settings",
-                                    subtitle: "Account, notifications, and security",
-                                    iconName: "gearshape.fill",
-                                    iconColor: .secondary
-                                )
+
+                        if showsMoreSection {
+                            BBSection("More") {
+                                VStack(spacing: AppSpacing.xs) {
+                                    NavigationLink(destination: SitesHealthView(opsVM: opsVM)) {
+                                        DashboardMoreRow(
+                                            title: "Sites Health",
+                                            subtitle: "Hosting, uptime, and infrastructure",
+                                            iconName: "globe",
+                                            iconColor: AppColors.primary
+                                        )
+                                    }
+                                    NavigationLink(destination: DeploymentsView(deploymentsVM: appController.deploymentsVM)) {
+                                        DashboardMoreRow(
+                                            title: "Deploys",
+                                            subtitle: "Workers Builds and free-tier usage",
+                                            iconName: "cloud.fill",
+                                            iconColor: AppColors.sky
+                                        )
+                                    }
+                                    NavigationLink(destination: PerformanceDashboardView(perfVM: perfVM)) {
+                                        DashboardMoreRow(
+                                            title: "PageSpeed",
+                                            subtitle: "Lighthouse and Core Web Vitals",
+                                            iconName: "gauge.with.needle.fill",
+                                            iconColor: AppColors.emerald
+                                        )
+                                    }
+                                    NavigationLink(destination: PricingOpsView(opsVM: opsVM)) {
+                                        DashboardMoreRow(
+                                            title: "Live Pricing",
+                                            subtitle: "Edit site rates that websites pull live",
+                                            iconName: "dollarsign.circle.fill",
+                                            iconColor: AppColors.amber
+                                        )
+                                    }
+                                    NavigationLink(destination: SettingsView(settingsVM: settingsVM, authVM: authVM, opsVM: opsVM)) {
+                                        DashboardMoreRow(
+                                            title: "Settings",
+                                            subtitle: "Account, notifications, and security",
+                                            iconName: "gearshape.fill",
+                                            iconColor: .secondary
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+                    .padding(.vertical, AppSpacing.md)
                 }
-                .padding(.horizontal, AppSpacing.contentInset)
-                .padding(.vertical, AppSpacing.md)
-                .frame(maxWidth: AppSpacing.dashboardMaxWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .background(AppColors.groupedBackground.ignoresSafeArea())
+            .bbPageBackground()
             .navigationTitle("Dashboard")
             #if os(iOS)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -208,7 +193,6 @@ public struct DashboardView: View {
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink(destination: SettingsView(settingsVM: settingsVM, authVM: authVM, opsVM: opsVM)) {
                         Image(systemName: "gearshape")
-                            .foregroundStyle(AppColors.primary)
                     }
                 }
             }

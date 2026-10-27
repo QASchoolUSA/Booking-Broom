@@ -67,6 +67,7 @@ public struct SectionHeader: View {
             Text(title)
                 .font(AppTypography.sectionTitle)
                 .foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
             Spacer(minLength: AppSpacing.sm)
             if let actionTitle, let action {
                 Button(actionTitle, action: action)

@@ -1,13 +1,32 @@
 import SwiftUI
 
-/// Platform-adaptive card surface: flat Mac panels vs iOS glass materials.
+/// Content surfaces: flat grouped cards — materials reserved for chrome.
 public struct AppSurfaceModifier: ViewModifier {
     var cornerRadius: CGFloat?
-    
+
     private var resolvedRadius: CGFloat {
         cornerRadius ?? AppSpacing.cardCornerRadius
     }
-    
+
+    public func body(content: Content) -> some View {
+        content
+            .background(AppColors.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: resolvedRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: resolvedRadius, style: .continuous)
+                    .strokeBorder(AppColors.separator.opacity(0.35), lineWidth: ControlMetrics.hairlineWidth)
+            )
+    }
+}
+
+/// Subtle elevated panel for interactive cards (booking row, etc.).
+public struct AppElevatedSurfaceModifier: ViewModifier {
+    var cornerRadius: CGFloat?
+
+    private var resolvedRadius: CGFloat {
+        cornerRadius ?? AppSpacing.cardCornerRadius
+    }
+
     public func body(content: Content) -> some View {
         #if os(macOS)
         content
@@ -15,33 +34,34 @@ public struct AppSurfaceModifier: ViewModifier {
             .clipShape(RoundedRectangle(cornerRadius: resolvedRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: resolvedRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(AppColors.separator.opacity(0.4), lineWidth: ControlMetrics.hairlineWidth)
             )
         #else
         content
-            .background(.regularMaterial)
+            .background(AppColors.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: resolvedRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: resolvedRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
         #endif
     }
 }
 
 extension View {
-    /// Preferred card surface for list rows, stats, and panels.
+    /// Preferred content card surface (no glass).
     public func appSurface(cornerRadius: CGFloat? = nil) -> some View {
         modifier(AppSurfaceModifier(cornerRadius: cornerRadius))
     }
-    
-    /// Legacy alias — routes through `appSurface` so call sites pick up Mac-native styling.
-    public func glassCard(cornerRadius: CGFloat = 16) -> some View {
-        #if os(macOS)
-        appSurface(cornerRadius: min(cornerRadius, 12))
-        #else
+
+    public func appElevatedSurface(cornerRadius: CGFloat? = nil) -> some View {
+        modifier(AppElevatedSurfaceModifier(cornerRadius: cornerRadius))
+    }
+
+    /// Legacy alias — routes to flat content surface (HIG: no glass on content cards).
+    public func glassCard(cornerRadius: CGFloat = 12) -> some View {
         appSurface(cornerRadius: cornerRadius)
-        #endif
+    }
+
+    /// Page background using system grouped color.
+    public func bbPageBackground() -> some View {
+        background(AppColors.groupedBackground.ignoresSafeArea())
     }
 }

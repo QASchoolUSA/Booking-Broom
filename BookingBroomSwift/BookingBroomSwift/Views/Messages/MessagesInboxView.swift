@@ -35,8 +35,11 @@ public struct MessagesInboxView: View {
                 phoneLayout
                 #endif
             }
-            .background(AppColors.groupedBackground.ignoresSafeArea())
+            .bbPageBackground()
             .navigationTitle("Messages")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.large)
+            #endif
             .searchable(text: $messagesVM.searchText, prompt: "Search conversations")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

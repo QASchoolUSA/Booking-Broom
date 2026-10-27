@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared bottom composer for SMS / Email threads.
+/// Shared bottom composer for SMS / Email threads — system bar material.
 public struct BBComposerBar: View {
     @Binding public var text: String
     public var placeholder: String
@@ -10,13 +10,13 @@ public struct BBComposerBar: View {
     public var leadingHelp: String?
     public var onLeading: (() -> Void)?
     public var onSend: () -> Void
-    
+
     @FocusState private var isFocused: Bool
-    
+
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
     }
-    
+
     public init(
         text: Binding<String>,
         placeholder: String = "Message",
@@ -36,39 +36,42 @@ public struct BBComposerBar: View {
         self.onLeading = onLeading
         self.onSend = onSend
     }
-    
+
     public var body: some View {
         HStack(alignment: .bottom, spacing: AppSpacing.xs) {
             if let leadingSystemImage, !leadingSystemImage.isEmpty, let onLeading {
                 Button(action: onLeading) {
                     Image(systemName: leadingSystemImage)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                 }
                 .buttonStyle(BBIconButtonStyle(tint: leadingTint))
                 .help(leadingHelp ?? "")
+                .accessibilityLabel(leadingHelp ?? "Action")
             }
-            
+
             TextField(placeholder, text: $text, axis: .vertical)
                 .lineLimit(1...6)
                 .focused($isFocused)
                 .bbComposerField(isFocused: isFocused)
                 .disabled(isSending)
-            
+
             Button(action: onSend) {
                 Group {
                     if isSending {
                         ProgressView()
                             .controlSize(.small)
                     } else {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 13, weight: .bold))
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(canSend ? AppColors.primary : Color.secondary.opacity(0.45))
                     }
                 }
                 .frame(width: ControlMetrics.iconHitTarget, height: ControlMetrics.iconHitTarget)
             }
-            .bbPrimaryButton(expand: false)
+            .buttonStyle(.plain)
             .disabled(!canSend)
-            .help("Send")
+            .accessibilityLabel("Send")
         }
         .padding(.horizontal, AppSpacing.sm)
         .padding(.vertical, AppSpacing.xs)

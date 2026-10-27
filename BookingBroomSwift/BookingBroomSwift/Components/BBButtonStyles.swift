@@ -1,15 +1,15 @@
 import SwiftUI
 
-/// Full-width primary CTA — system prominent on Mac, filled brand on iOS.
+/// Full-width primary CTA — capsule on iOS, system prominent on Mac.
 public struct BBPrimaryButtonStyle: ButtonStyle {
     public var isLoading: Bool = false
     public var expand: Bool = true
-    
+
     public init(isLoading: Bool = false, expand: Bool = true) {
         self.isLoading = isLoading
         self.expand = expand
     }
-    
+
     public func makeBody(configuration: Configuration) -> some View {
         #if os(macOS)
         configuration.label
@@ -23,21 +23,20 @@ public struct BBPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(.white)
             .frame(maxWidth: expand ? .infinity : nil, minHeight: ControlMetrics.primaryButtonMinHeight)
             .padding(.horizontal, AppSpacing.md)
-            .background(AppColors.primary.opacity(configuration.isPressed ? 0.85 : 1))
-            .clipShape(RoundedRectangle(cornerRadius: ControlMetrics.controlRadius, style: .continuous))
+            .background(AppColors.primary.opacity(configuration.isPressed ? 0.88 : 1))
+            .clipShape(Capsule())
             .opacity(isLoading ? 0.7 : 1)
         #endif
     }
 }
 
-/// Secondary / bordered action.
 public struct BBSecondaryButtonStyle: ButtonStyle {
     public var expand: Bool = true
-    
+
     public init(expand: Bool = true) {
         self.expand = expand
     }
-    
+
     public func makeBody(configuration: Configuration) -> some View {
         #if os(macOS)
         configuration.label
@@ -51,20 +50,19 @@ public struct BBSecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(AppColors.primary)
             .frame(maxWidth: expand ? .infinity : nil, minHeight: ControlMetrics.primaryButtonMinHeight)
             .padding(.horizontal, AppSpacing.md)
-            .background(AppColors.primary.opacity(configuration.isPressed ? 0.18 : 0.12))
-            .clipShape(RoundedRectangle(cornerRadius: ControlMetrics.controlRadius, style: .continuous))
+            .background(AppColors.primary.opacity(configuration.isPressed ? 0.16 : 0.10))
+            .clipShape(Capsule())
         #endif
     }
 }
 
-/// Destructive full-width action.
 public struct BBDestructiveButtonStyle: ButtonStyle {
     public var expand: Bool = true
-    
+
     public init(expand: Bool = true) {
         self.expand = expand
     }
-    
+
     public func makeBody(configuration: Configuration) -> some View {
         #if os(macOS)
         configuration.label
@@ -79,20 +77,19 @@ public struct BBDestructiveButtonStyle: ButtonStyle {
             .foregroundStyle(AppColors.rose)
             .frame(maxWidth: expand ? .infinity : nil, minHeight: ControlMetrics.primaryButtonMinHeight)
             .padding(.horizontal, AppSpacing.md)
-            .background(AppColors.rose.opacity(configuration.isPressed ? 0.22 : 0.14))
-            .clipShape(RoundedRectangle(cornerRadius: ControlMetrics.controlRadius, style: .continuous))
+            .background(AppColors.rose.opacity(configuration.isPressed ? 0.18 : 0.12))
+            .clipShape(Capsule())
         #endif
     }
 }
 
-/// Icon-only control with a proper hit target (composer / toolbar).
 public struct BBIconButtonStyle: ButtonStyle {
     public var tint: Color = AppColors.primary
-    
+
     public init(tint: Color = AppColors.primary) {
         self.tint = tint
     }
-    
+
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(tint)
@@ -103,19 +100,17 @@ public struct BBIconButtonStyle: ButtonStyle {
 }
 
 extension View {
-    /// Apply native Mac borderedProminent + brand tint; iOS uses filled primary style.
     @ViewBuilder
     public func bbPrimaryButton(isLoading: Bool = false, expand: Bool = true) -> some View {
         #if os(macOS)
         self
             .buttonStyle(.borderedProminent)
-            .tint(AppColors.primary)
             .controlSize(expand ? .large : .regular)
         #else
         self.buttonStyle(BBPrimaryButtonStyle(isLoading: isLoading, expand: expand))
         #endif
     }
-    
+
     @ViewBuilder
     public func bbSecondaryButton(expand: Bool = true) -> some View {
         #if os(macOS)
@@ -126,7 +121,7 @@ extension View {
         self.buttonStyle(BBSecondaryButtonStyle(expand: expand))
         #endif
     }
-    
+
     @ViewBuilder
     public func bbDestructiveButton(expand: Bool = true) -> some View {
         #if os(macOS)
