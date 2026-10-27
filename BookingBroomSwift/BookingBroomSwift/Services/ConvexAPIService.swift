@@ -1210,24 +1210,27 @@ public actor ConvexAPIService {
             }
 
             var indexCoverage: SEOIndexCoverage? = nil
-            if let cov = item["index_coverage"] as? [String: Any] {
-                let totalPages = Int(cov["total_pages"] as? Double ?? Double(cov["total_pages"] as? Int ?? 0))
-                let indexedCount = Int(cov["indexed_count"] as? Double ?? Double(cov["indexed_count"] as? Int ?? 0))
-                let notIndexedCount = Int(cov["not_indexed_count"] as? Double ?? Double(cov["not_indexed_count"] as? Int ?? 0))
-                let inspectedCount = Int(cov["inspected_count"] as? Double ?? Double(cov["inspected_count"] as? Int ?? 0))
-                let percentIndexed = cov["percent_indexed"] as? Double
-                    ?? Double(cov["percent_indexed"] as? Int ?? 0)
-                let partial = cov["partial"] as? Bool ?? false
+            if let covAny = item["index_coverage"], !(covAny is NSNull),
+               let cov = covAny as? [String: Any] {
+                let totalPages = Self.jsonInt(cov["total_pages"])
+                let indexedCount = Self.jsonInt(cov["indexed_count"])
+                let notIndexedCount = Self.jsonInt(cov["not_indexed_count"])
+                let inspectedCount = Self.jsonInt(cov["inspected_count"])
+                let percentIndexed = Self.jsonDouble(cov["percent_indexed"])
+                let partial = (cov["partial"] as? Bool) ?? false
                 let detail = cov["detail"] as? String
-                indexCoverage = SEOIndexCoverage(
-                    totalPages: totalPages,
-                    indexedCount: indexedCount,
-                    notIndexedCount: notIndexedCount,
-                    inspectedCount: inspectedCount,
-                    percentIndexed: percentIndexed,
-                    partial: partial,
-                    detail: detail
-                )
+                // Treat empty/zero-only rows as missing until Sync index runs.
+                if totalPages > 0 || inspectedCount > 0 || indexedCount > 0 {
+                    indexCoverage = SEOIndexCoverage(
+                        totalPages: totalPages,
+                        indexedCount: indexedCount,
+                        notIndexedCount: notIndexedCount,
+                        inspectedCount: inspectedCount,
+                        percentIndexed: percentIndexed,
+                        partial: partial,
+                        detail: detail
+                    )
+                }
             }
             
             return SEOMetrics(
@@ -1256,6 +1259,35 @@ public actor ConvexAPIService {
         let path = source == "google" ? "gscActions:syncNow" : "bingActions:syncNow"
         try await action(path, timeout: 180)
         return try await fetchSEOMetrics(source: source, periodDays: periodDays)
+    }
+
+    /// Runs GSC URL Inspection across site sitemaps and persists index coverage, then reloads metrics.
+    public func syncSEOIndexCoverage(periodDays: Int = 28) async throws -> [SEOMetrics] {
+        if useMockData {
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            return MockDataService.shared.sampleSEOMetrics
+        }
+        // URL Inspection can take several minutes under the daily quota budget.
+        _ = try await action("gscActions:syncIndexNow", timeout: 900)
+        return try await fetchSEOMetrics(source: "google", periodDays: periodDays)
+    }
+
+    private static func jsonInt(_ value: Any?) -> Int {
+        if let i = value as? Int { return i }
+        if let i64 = value as? Int64 { return Int(i64) }
+        if let n = value as? NSNumber { return n.intValue }
+        if let d = value as? Double { return Int(d) }
+        if let s = value as? String, let i = Int(s) { return i }
+        return 0
+    }
+
+    private static func jsonDouble(_ value: Any?) -> Double {
+        if let d = value as? Double { return d }
+        if let n = value as? NSNumber { return n.doubleValue }
+        if let i = value as? Int { return Double(i) }
+        if let i64 = value as? Int64 { return Double(i64) }
+        if let s = value as? String, let d = Double(s) { return d }
+        return 0
     }
     
     // MARK: - Performance Metrics (PageSpeed Insights)

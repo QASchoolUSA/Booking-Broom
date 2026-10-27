@@ -88,23 +88,49 @@ public struct SiteSEOCard: View {
                 MetricItem(label: "Avg Pos", value: String(format: "%.1f", seo.position))
             }
 
-            if seo.source == "google", let coverage = seo.indexCoverage {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(
-                        "Indexed \(formatInt(coverage.indexedCount)) / \(formatInt(coverage.totalPages)) (\(String(format: "%.0f", coverage.percentIndexed))%) · Not indexed \(formatInt(coverage.notIndexedCount))"
-                    )
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                    if coverage.partial {
-                        Text(
-                            "Partial — inspected \(formatInt(coverage.inspectedCount)) of \(formatInt(coverage.totalPages))"
-                                + (coverage.detail.map { " · \($0)" } ?? "")
-                        )
-                        .font(.caption2)
+            if seo.source == "google" {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Index coverage")
+                        .font(.caption.bold())
                         .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let coverage = seo.indexCoverage {
+                        HStack(spacing: 10) {
+                            indexMetric(
+                                label: "Indexed",
+                                value: formatInt(coverage.indexedCount),
+                                accent: AppColors.emerald
+                            )
+                            indexMetric(
+                                label: "Not indexed",
+                                value: formatInt(coverage.notIndexedCount),
+                                accent: AppColors.rose
+                            )
+                            indexMetric(
+                                label: "Total",
+                                value: formatInt(coverage.totalPages),
+                                accent: AppColors.violet
+                            )
+                            indexMetric(
+                                label: "%",
+                                value: String(format: "%.0f%%", coverage.percentIndexed),
+                                accent: AppColors.amber
+                            )
+                        }
+
+                        if coverage.partial {
+                            Text(
+                                "Partial — inspected \(formatInt(coverage.inspectedCount)) of \(formatInt(coverage.totalPages))"
+                                    + (coverage.detail.map { " · \($0)" } ?? "")
+                            )
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } else {
+                        Text("No index data yet — use Sync index on this screen.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
                 .padding(10)
@@ -213,6 +239,22 @@ public struct SiteSEOCard: View {
                 .frame(width: 64, alignment: .trailing)
         }
         .padding(.vertical, 2)
+    }
+
+    private func indexMetric(label: String, value: String, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(value)
+                .font(.subheadline.bold().monospacedDigit())
+                .foregroundColor(accent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func heroMetric(label: String, value: String, accent: Color) -> some View {

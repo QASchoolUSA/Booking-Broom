@@ -74,39 +74,67 @@ public struct SEODashboardView: View {
                     StatCard(title: "Avg Position", value: String(format: "%.1f", seoVM.averagePosition), iconName: "chart.line.uptrend.xyaxis", iconColor: AppColors.amber)
                 }
 
-                if seoVM.hasIndexCoverage {
-                    HStack(spacing: 12) {
-                        StatCard(
-                            title: "Indexed",
-                            value: "\(seoVM.totalIndexedPages)",
-                            iconName: "checkmark.seal.fill",
-                            iconColor: AppColors.emerald
-                        )
-                        StatCard(
-                            title: "Not indexed",
-                            value: "\(seoVM.totalNotIndexedPages)",
-                            iconName: "xmark.seal.fill",
-                            iconColor: AppColors.rose
-                        )
+                if seoVM.selectedSource == "google" {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Index coverage (all sites)")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Button {
+                                seoVM.syncIndexCoverage()
+                            } label: {
+                                if seoVM.isSyncingIndex {
+                                    ProgressView()
+                                } else {
+                                    Label("Sync index", systemImage: "magnifyingglass")
+                                        .font(.caption.weight(.semibold))
+                                }
+                            }
+                            .disabled(seoVM.isSyncingIndex || seoVM.isSyncing)
+                        }
+
+                        HStack(spacing: 12) {
+                            StatCard(
+                                title: "Indexed",
+                                value: seoVM.hasIndexCoverage ? "\(seoVM.totalIndexedPages)" : "—",
+                                iconName: "checkmark.seal.fill",
+                                iconColor: AppColors.emerald
+                            )
+                            StatCard(
+                                title: "Not indexed",
+                                value: seoVM.hasIndexCoverage ? "\(seoVM.totalNotIndexedPages)" : "—",
+                                iconName: "xmark.seal.fill",
+                                iconColor: AppColors.rose
+                            )
+                        }
+                        HStack(spacing: 12) {
+                            StatCard(
+                                title: "Total pages",
+                                value: seoVM.hasIndexCoverage ? "\(seoVM.totalPages)" : "—",
+                                iconName: "doc.on.doc.fill",
+                                iconColor: AppColors.violet
+                            )
+                            StatCard(
+                                title: seoVM.indexCoveragePartial ? "% indexed (partial)" : "% indexed",
+                                value: seoVM.hasIndexCoverage
+                                    ? String(format: "%.0f%%", seoVM.percentIndexed)
+                                    : "—",
+                                iconName: "percent",
+                                iconColor: AppColors.amber
+                            )
+                        }
+
+                        if seoVM.hasIndexCoverage {
+                            Text("\(seoVM.sitesWithIndexCoverage) of \(seoVM.seoMetricsList.count) sites have coverage data")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("Tap Sync index to inspect each site’s sitemap in Google Search Console. Traffic Sync alone does not fill these numbers.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                    HStack(spacing: 12) {
-                        StatCard(
-                            title: "Total pages",
-                            value: "\(seoVM.totalPages)",
-                            iconName: "doc.on.doc.fill",
-                            iconColor: AppColors.violet
-                        )
-                        StatCard(
-                            title: seoVM.indexCoveragePartial ? "% indexed (partial)" : "% indexed",
-                            value: String(format: "%.0f%%", seoVM.percentIndexed),
-                            iconName: "percent",
-                            iconColor: AppColors.amber
-                        )
-                    }
-                } else if seoVM.selectedSource == "google" {
-                    Text("Index coverage appears after Sync index on the web SEO page (or the weekly cron).")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
                 
                 // Per-site SEO Cards
@@ -164,8 +192,24 @@ public struct SEODashboardView: View {
         .navigationTitle("SEO Analytics")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: { seoVM.syncMetrics() }) {
-                    if seoVM.isSyncing {
+                Menu {
+                    Button {
+                        seoVM.syncMetrics()
+                    } label: {
+                        Label("Sync traffic", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(seoVM.isSyncing || seoVM.isSyncingIndex)
+
+                    if seoVM.selectedSource == "google" {
+                        Button {
+                            seoVM.syncIndexCoverage()
+                        } label: {
+                            Label("Sync index coverage", systemImage: "magnifyingglass")
+                        }
+                        .disabled(seoVM.isSyncing || seoVM.isSyncingIndex)
+                    }
+                } label: {
+                    if seoVM.isSyncing || seoVM.isSyncingIndex {
                         ProgressView()
                     } else {
                         Image(systemName: "arrow.clockwise")

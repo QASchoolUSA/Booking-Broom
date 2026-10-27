@@ -96,6 +96,7 @@ public final class SEOViewModel {
     }
     public var isLoading: Bool = false
     public var isSyncing: Bool = false
+    public var isSyncingIndex: Bool = false
     public var syncError: String? = nil
     public var loadError: String? = nil
     
@@ -109,6 +110,7 @@ public final class SEOViewModel {
     public private(set) var percentIndexed: Double = 0
     public private(set) var hasIndexCoverage: Bool = false
     public private(set) var indexCoveragePartial: Bool = false
+    public private(set) var sitesWithIndexCoverage: Int = 0
     
     @ObservationIgnored private var rawMetricsList: [SEOMetrics] = []
     @ObservationIgnored private var didLoad = false
@@ -141,6 +143,7 @@ public final class SEOViewModel {
         loadError = nil
         isLoading = false
         isSyncing = false
+        isSyncingIndex = false
     }
     
     /// Read from Convex only. Cancels the prior in-flight load (source/period toggles).
@@ -209,6 +212,35 @@ public final class SEOViewModel {
     public func clearSyncError() {
         syncError = nil
     }
+
+    /// GSC URL Inspection → indexed / not indexed / total (separate from traffic Sync).
+    public func syncIndexCoverage() {
+        guard selectedSource == "google", !isSyncingIndex, !isSyncing else { return }
+        isSyncingIndex = true
+        syncError = nil
+        loadTask?.cancel()
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let period = selectedPeriodDays
+        Task {
+            do {
+                let fetched = try await ConvexAPIService.shared.syncSEOIndexCoverage(periodDays: period)
+                guard generation == self.loadGeneration else { return }
+                self.rawMetricsList = fetched
+                self.applySort()
+                self.lastLoadedAt = Date()
+                self.loadError = nil
+                if !self.hasIndexCoverage {
+                    self.syncError = "Index sync finished, but no coverage rows were saved. Confirm Google is connected and sites are verified in Search Console."
+                }
+                HapticFeedback.notification(.success)
+            } catch {
+                self.syncError = error.localizedDescription
+                HapticFeedback.notification(.error)
+            }
+            self.isSyncingIndex = false
+        }
+    }
     
     public func selectSiteSort(_ key: SEOSortKey) {
         var next = siteSort
@@ -226,13 +258,18 @@ public final class SEOViewModel {
         totalClicks = seoMetricsList.reduce(0) { $0 + $1.clicks }
         totalImpressions = seoMetricsList.reduce(0) { $0 + $1.impressions }
         let withCoverage = seoMetricsList.compactMap(\.indexCoverage)
+        sitesWithIndexCoverage = withCoverage.count
         hasIndexCoverage = selectedSource == "google" && !withCoverage.isEmpty
         totalIndexedPages = withCoverage.reduce(0) { $0 + $1.indexedCount }
         totalPages = withCoverage.reduce(0) { $0 + $1.totalPages }
-        totalNotIndexedPages = withCoverage.reduce(0) { $0 + $1.notIndexedCount }
+        // Prefer explicit not-indexed counts; fall back to total − indexed when complete.
+        let explicitNotIndexed = withCoverage.reduce(0) { $0 + $1.notIndexedCount }
+        let inferredNotIndexed = max(0, totalPages - totalIndexedPages)
+        totalNotIndexedPages = explicitNotIndexed > 0 ? explicitNotIndexed : inferredNotIndexed
         let inspected = withCoverage.reduce(0) { $0 + $1.inspectedCount }
-        percentIndexed = inspected > 0
-            ? (Double(totalIndexedPages) / Double(inspected)) * 100.0
+        let denom = inspected > 0 ? inspected : totalPages
+        percentIndexed = denom > 0
+            ? (Double(totalIndexedPages) / Double(denom)) * 100.0
             : 0
         indexCoveragePartial = withCoverage.contains(where: \.partial)
         guard !seoMetricsList.isEmpty else {
