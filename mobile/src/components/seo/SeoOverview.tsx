@@ -34,6 +34,7 @@ export type SeoIndexCoverage = {
   percent_indexed: number;
   partial: boolean;
   detail?: string | null;
+  intentional_noindex_skipped?: number;
 };
 
 export type SeoMetricRow = {

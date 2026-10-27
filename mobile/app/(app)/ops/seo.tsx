@@ -205,13 +205,33 @@ export default function SeoOpsScreen() {
                       : "Sync to pull Bing Webmaster data."}
                   </AppText>
                 )}
-                {source === "google" && row.index_coverage ? (
-                  <AppText muted size={13} style={{ marginTop: 4 }}>
-                    Indexed {Math.round(row.index_coverage.indexed_count)} /{" "}
-                    {Math.round(row.index_coverage.total_pages)} (
-                    {row.index_coverage.percent_indexed.toFixed(0)}%)
-                    {row.index_coverage.partial ? " · partial" : ""}
-                  </AppText>
+                {source === "google" ? (
+                  row.index_coverage ? (
+                    <View style={styles.indexRow}>
+                      <AppText size={12} weight="semibold">
+                        Indexed {Math.round(row.index_coverage.indexed_count)}
+                      </AppText>
+                      <AppText muted size={12}>
+                        ·
+                      </AppText>
+                      <AppText size={12} weight="semibold">
+                        Not indexed{" "}
+                        {Math.round(row.index_coverage.not_indexed_count)}
+                      </AppText>
+                      <AppText muted size={12}>
+                        ·
+                      </AppText>
+                      <AppText muted size={12}>
+                        Total {Math.round(row.index_coverage.total_pages)} (
+                        {row.index_coverage.percent_indexed.toFixed(0)}%)
+                        {row.index_coverage.partial ? " · partial" : ""}
+                      </AppText>
+                    </View>
+                  ) : (
+                    <AppText muted size={12} style={{ marginTop: 6 }}>
+                      No index data — Sync index on web or in Swift SEO.
+                    </AppText>
+                  )
                 ) : null}
                 {(row.top_queries?.length ?? 0) > 0 ? (
                   <View style={styles.siteKeywords}>
@@ -278,6 +298,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  indexRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+  },
   siteKeywords: {
     marginTop: spacing.md,
     gap: 4,

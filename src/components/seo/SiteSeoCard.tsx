@@ -434,25 +434,58 @@ export function SiteSeoCard({
         </div>
       )}
 
-      {source === "google" && index_coverage && !notInConsole && (
-        <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2">
-          <p className="text-xs font-medium text-foreground">
-            Indexed{" "}
-            <span className="tabular-nums">
-              {formatNumber(index_coverage.indexed_count)} /{" "}
-              {formatNumber(index_coverage.total_pages)}
-            </span>{" "}
-            (
-            <span className="tabular-nums">
-              {index_coverage.percent_indexed.toFixed(0)}%
-            </span>
-            )
+      {source === "google" && !notInConsole && (
+        <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Index coverage
           </p>
-          {index_coverage.partial && (
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Partial — inspected {formatNumber(index_coverage.inspected_count)} of{" "}
-              {formatNumber(index_coverage.total_pages)}
-              {index_coverage.detail ? ` · ${index_coverage.detail}` : ""}
+          {index_coverage ? (
+            <>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-md bg-background/60 px-2.5 py-2">
+                  <p className="text-base font-bold tabular-nums leading-none tracking-tight text-emerald-700 dark:text-emerald-400">
+                    {formatNumber(index_coverage.indexed_count)}
+                  </p>
+                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                    Indexed
+                  </p>
+                </div>
+                <div className="rounded-md bg-background/60 px-2.5 py-2">
+                  <p className="text-base font-bold tabular-nums leading-none tracking-tight text-rose-700 dark:text-rose-400">
+                    {formatNumber(index_coverage.not_indexed_count)}
+                  </p>
+                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                    Not indexed
+                  </p>
+                </div>
+                <div className="rounded-md bg-background/60 px-2.5 py-2">
+                  <p className="text-base font-bold tabular-nums leading-none tracking-tight">
+                    {formatNumber(index_coverage.total_pages)}
+                  </p>
+                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                    Total pages
+                  </p>
+                </div>
+                <div className="rounded-md bg-background/60 px-2.5 py-2">
+                  <p className="text-base font-bold tabular-nums leading-none tracking-tight text-amber-800 dark:text-amber-300">
+                    {index_coverage.percent_indexed.toFixed(0)}%
+                  </p>
+                  <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                    {index_coverage.partial ? "% indexed (partial)" : "% indexed"}
+                  </p>
+                </div>
+              </div>
+              {index_coverage.partial && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  Inspected {formatNumber(index_coverage.inspected_count)} of{" "}
+                  {formatNumber(index_coverage.total_pages)}
+                  {index_coverage.detail ? ` · ${index_coverage.detail}` : ""}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              No index data yet — use Sync index to inspect this site’s sitemap.
             </p>
           )}
         </div>
