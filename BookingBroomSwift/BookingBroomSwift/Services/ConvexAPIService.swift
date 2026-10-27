@@ -1208,6 +1208,27 @@ public actor ConvexAPIService {
                     return SEOQuery(query: queryStr, clicks: qClicks, impressions: qImp, ctr: qCtr, position: qPos)
                 }
             }
+
+            var indexCoverage: SEOIndexCoverage? = nil
+            if let cov = item["index_coverage"] as? [String: Any] {
+                let totalPages = Int(cov["total_pages"] as? Double ?? Double(cov["total_pages"] as? Int ?? 0))
+                let indexedCount = Int(cov["indexed_count"] as? Double ?? Double(cov["indexed_count"] as? Int ?? 0))
+                let notIndexedCount = Int(cov["not_indexed_count"] as? Double ?? Double(cov["not_indexed_count"] as? Int ?? 0))
+                let inspectedCount = Int(cov["inspected_count"] as? Double ?? Double(cov["inspected_count"] as? Int ?? 0))
+                let percentIndexed = cov["percent_indexed"] as? Double
+                    ?? Double(cov["percent_indexed"] as? Int ?? 0)
+                let partial = cov["partial"] as? Bool ?? false
+                let detail = cov["detail"] as? String
+                indexCoverage = SEOIndexCoverage(
+                    totalPages: totalPages,
+                    indexedCount: indexedCount,
+                    notIndexedCount: notIndexedCount,
+                    inspectedCount: inspectedCount,
+                    percentIndexed: percentIndexed,
+                    partial: partial,
+                    detail: detail
+                )
+            }
             
             return SEOMetrics(
                 id: siteId,
@@ -1220,7 +1241,8 @@ public actor ConvexAPIService {
                 ctr: ctr,
                 position: position,
                 source: source,
-                topQueries: topQ
+                topQueries: topQ,
+                indexCoverage: indexCoverage
             )
         }
     }

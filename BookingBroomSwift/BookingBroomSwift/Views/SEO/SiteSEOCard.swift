@@ -88,6 +88,31 @@ public struct SiteSEOCard: View {
                 MetricItem(label: "Avg Pos", value: String(format: "%.1f", seo.position))
             }
 
+            if seo.source == "google", let coverage = seo.indexCoverage {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(
+                        "Indexed \(formatInt(coverage.indexedCount)) / \(formatInt(coverage.totalPages)) (\(String(format: "%.0f", coverage.percentIndexed))%) · Not indexed \(formatInt(coverage.notIndexedCount))"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    if coverage.partial {
+                        Text(
+                            "Partial — inspected \(formatInt(coverage.inspectedCount)) of \(formatInt(coverage.totalPages))"
+                                + (coverage.detail.map { " · \($0)" } ?? "")
+                        )
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
             if !seo.history.isEmpty {
                 ChartCard(title: "Traffic Trend", trendPoints: seo.history)
             }

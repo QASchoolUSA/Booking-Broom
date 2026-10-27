@@ -437,7 +437,14 @@ public final class MockDataService {
                 SEOQuery(query: "house cleaning sanford fl", clicks: 142, impressions: 2800, ctr: 5.07, position: 2.1),
                 SEOQuery(query: "maid service sanford", clicks: 98, impressions: 1950, ctr: 5.02, position: 3.4),
                 SEOQuery(query: "deep clean sanford florida", clicks: 65, impressions: 1200, ctr: 5.41, position: 2.8)
-            ]
+            ],
+            indexCoverage: SEOIndexCoverage(
+                totalPages: 48,
+                indexedCount: 41,
+                notIndexedCount: 7,
+                inspectedCount: 48,
+                percentIndexed: 85.4
+            )
         ),
         SEOMetrics(
             id: "seo2", siteId: "s4", siteSlug: "celebration", siteName: "Celebration Cleaning",
@@ -454,7 +461,14 @@ public final class MockDataService {
             topQueries: [
                 SEOQuery(query: "cleaning company celebration fl", clicks: 210, impressions: 4200, ctr: 5.0, position: 1.8),
                 SEOQuery(query: "move out cleaning celebration", clicks: 130, impressions: 3100, ctr: 4.19, position: 2.4)
-            ]
+            ],
+            indexCoverage: SEOIndexCoverage(
+                totalPages: 148,
+                indexedCount: 120,
+                notIndexedCount: 28,
+                inspectedCount: 148,
+                percentIndexed: 81.1
+            )
         )
     ]
     

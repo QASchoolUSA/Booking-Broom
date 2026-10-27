@@ -103,6 +103,12 @@ public final class SEOViewModel {
     public private(set) var totalImpressions: Int = 0
     public private(set) var averageCTR: Double = 0
     public private(set) var averagePosition: Double = 0
+    public private(set) var totalIndexedPages: Int = 0
+    public private(set) var totalPages: Int = 0
+    public private(set) var totalNotIndexedPages: Int = 0
+    public private(set) var percentIndexed: Double = 0
+    public private(set) var hasIndexCoverage: Bool = false
+    public private(set) var indexCoveragePartial: Bool = false
     
     @ObservationIgnored private var rawMetricsList: [SEOMetrics] = []
     @ObservationIgnored private var didLoad = false
@@ -219,6 +225,16 @@ public final class SEOViewModel {
     private func recomputeTotals() {
         totalClicks = seoMetricsList.reduce(0) { $0 + $1.clicks }
         totalImpressions = seoMetricsList.reduce(0) { $0 + $1.impressions }
+        let withCoverage = seoMetricsList.compactMap(\.indexCoverage)
+        hasIndexCoverage = selectedSource == "google" && !withCoverage.isEmpty
+        totalIndexedPages = withCoverage.reduce(0) { $0 + $1.indexedCount }
+        totalPages = withCoverage.reduce(0) { $0 + $1.totalPages }
+        totalNotIndexedPages = withCoverage.reduce(0) { $0 + $1.notIndexedCount }
+        let inspected = withCoverage.reduce(0) { $0 + $1.inspectedCount }
+        percentIndexed = inspected > 0
+            ? (Double(totalIndexedPages) / Double(inspected)) * 100.0
+            : 0
+        indexCoveragePartial = withCoverage.contains(where: \.partial)
         guard !seoMetricsList.isEmpty else {
             averageCTR = 0
             averagePosition = 0

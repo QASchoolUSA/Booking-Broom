@@ -73,6 +73,41 @@ public struct SEODashboardView: View {
                     StatCard(title: "Avg CTR", value: String(format: "%.2f%%", seoVM.averageCTR), iconName: "percent", iconColor: AppColors.emerald)
                     StatCard(title: "Avg Position", value: String(format: "%.1f", seoVM.averagePosition), iconName: "chart.line.uptrend.xyaxis", iconColor: AppColors.amber)
                 }
+
+                if seoVM.hasIndexCoverage {
+                    HStack(spacing: 12) {
+                        StatCard(
+                            title: "Indexed",
+                            value: "\(seoVM.totalIndexedPages)",
+                            iconName: "checkmark.seal.fill",
+                            iconColor: AppColors.emerald
+                        )
+                        StatCard(
+                            title: "Not indexed",
+                            value: "\(seoVM.totalNotIndexedPages)",
+                            iconName: "xmark.seal.fill",
+                            iconColor: AppColors.rose
+                        )
+                    }
+                    HStack(spacing: 12) {
+                        StatCard(
+                            title: "Total pages",
+                            value: "\(seoVM.totalPages)",
+                            iconName: "doc.on.doc.fill",
+                            iconColor: AppColors.violet
+                        )
+                        StatCard(
+                            title: seoVM.indexCoveragePartial ? "% indexed (partial)" : "% indexed",
+                            value: String(format: "%.0f%%", seoVM.percentIndexed),
+                            iconName: "percent",
+                            iconColor: AppColors.amber
+                        )
+                    }
+                } else if seoVM.selectedSource == "google" {
+                    Text("Index coverage appears after Sync index on the web SEO page (or the weekly cron).")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 
                 // Per-site SEO Cards
                 VStack(alignment: .leading, spacing: 14) {

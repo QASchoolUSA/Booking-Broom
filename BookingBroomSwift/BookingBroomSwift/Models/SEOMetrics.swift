@@ -1,5 +1,34 @@
 import Foundation
 
+/// GSC URL Inspection coverage summary (Google only).
+public struct SEOIndexCoverage: Codable, Hashable {
+    public var totalPages: Int
+    public var indexedCount: Int
+    public var notIndexedCount: Int
+    public var inspectedCount: Int
+    public var percentIndexed: Double
+    public var partial: Bool
+    public var detail: String?
+
+    public init(
+        totalPages: Int,
+        indexedCount: Int,
+        notIndexedCount: Int,
+        inspectedCount: Int,
+        percentIndexed: Double,
+        partial: Bool = false,
+        detail: String? = nil
+    ) {
+        self.totalPages = totalPages
+        self.indexedCount = indexedCount
+        self.notIndexedCount = notIndexedCount
+        self.inspectedCount = inspectedCount
+        self.percentIndexed = percentIndexed
+        self.partial = partial
+        self.detail = detail
+    }
+}
+
 public struct SEOMetrics: Identifiable, Codable, Hashable {
     public var id: String
     public var siteId: String
@@ -13,6 +42,7 @@ public struct SEOMetrics: Identifiable, Codable, Hashable {
     public var source: String // "google" or "bing"
     public var history: [SEOTrendPoint]
     public var topQueries: [SEOQuery]
+    public var indexCoverage: SEOIndexCoverage?
     
     public init(
         id: String,
@@ -26,7 +56,8 @@ public struct SEOMetrics: Identifiable, Codable, Hashable {
         position: Double,
         source: String = "google",
         history: [SEOTrendPoint] = [],
-        topQueries: [SEOQuery] = []
+        topQueries: [SEOQuery] = [],
+        indexCoverage: SEOIndexCoverage? = nil
     ) {
         self.id = id
         self.siteId = siteId
@@ -40,6 +71,7 @@ public struct SEOMetrics: Identifiable, Codable, Hashable {
         self.source = source
         self.history = history
         self.topQueries = topQueries
+        self.indexCoverage = indexCoverage
     }
 }
 
