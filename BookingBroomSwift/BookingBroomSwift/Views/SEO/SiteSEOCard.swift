@@ -107,7 +107,7 @@ public struct SiteSEOCard: View {
                                 accent: AppColors.rose
                             )
                             indexMetric(
-                                label: "Total",
+                                label: "Sitemap",
                                 value: formatInt(coverage.totalPages),
                                 accent: AppColors.violet
                             )

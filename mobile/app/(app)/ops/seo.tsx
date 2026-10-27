@@ -222,9 +222,9 @@ export default function SeoOpsScreen() {
                         ·
                       </AppText>
                       <AppText muted size={12}>
-                        Total {Math.round(row.index_coverage.total_pages)} (
-                        {row.index_coverage.percent_indexed.toFixed(0)}%)
-                        {row.index_coverage.partial ? " · partial" : ""}
+                        Sitemap {Math.round(row.index_coverage.total_pages)} (
+                        {row.index_coverage.percent_indexed.toFixed(0)}%
+                        {row.index_coverage.partial ? " est." : ""})
                       </AppText>
                     </View>
                   ) : (

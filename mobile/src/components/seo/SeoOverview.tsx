@@ -248,12 +248,12 @@ export function SeoOverview({
                 Icon: CheckCircle2,
               },
               {
-                label: "Total pages",
+                label: "Sitemap pages",
                 value: formatNumber(totalPages),
                 Icon: Files,
               },
               {
-                label: anyPartial ? "% indexed (partial)" : "% indexed",
+                label: anyPartial ? "% indexed (est.)" : "% indexed",
                 value: `${fleetPercent.toFixed(0)}%`,
                 Icon: Percent,
               },

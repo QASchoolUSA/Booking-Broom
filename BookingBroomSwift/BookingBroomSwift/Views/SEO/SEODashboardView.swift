@@ -108,32 +108,33 @@ public struct SEODashboardView: View {
                             )
                         }
                         HStack(spacing: 12) {
-                            StatCard(
-                                title: "Total pages",
-                                value: seoVM.hasIndexCoverage ? "\(seoVM.totalPages)" : "—",
-                                iconName: "doc.on.doc.fill",
-                                iconColor: AppColors.violet
-                            )
-                            StatCard(
-                                title: seoVM.indexCoveragePartial ? "% indexed (partial)" : "% indexed",
-                                value: seoVM.hasIndexCoverage
-                                    ? String(format: "%.0f%%", seoVM.percentIndexed)
-                                    : "—",
-                                iconName: "percent",
-                                iconColor: AppColors.amber
-                            )
-                        }
+                        StatCard(
+                            title: "Sitemap pages",
+                            value: seoVM.hasIndexCoverage ? "\(seoVM.totalPages)" : "—",
+                            iconName: "doc.on.doc.fill",
+                            iconColor: AppColors.violet
+                        )
+                        StatCard(
+                            title: seoVM.indexCoveragePartial ? "% indexed (est.)" : "% indexed",
+                            value: seoVM.hasIndexCoverage
+                                ? String(format: "%.0f%%", seoVM.percentIndexed)
+                                : "—",
+                            iconName: "percent",
+                            iconColor: AppColors.amber
+                        )
+                    }
 
-                        if seoVM.hasIndexCoverage {
-                            Text("\(seoVM.sitesWithIndexCoverage) of \(seoVM.seoMetricsList.count) sites have coverage data")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        } else {
-                            Text("Tap Sync index to inspect each site’s sitemap in Google Search Console. Traffic Sync alone does not fill these numbers.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                    if seoVM.hasIndexCoverage {
+                        Text("\(seoVM.sitesWithIndexCoverage) of \(seoVM.seoMetricsList.count) sites · totals are sitemap URLs only (noindex city×service pages are excluded).")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("Tap Sync index to pull sitemap × Search Analytics coverage. Traffic Sync alone does not fill these numbers.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     }
                 }
                 

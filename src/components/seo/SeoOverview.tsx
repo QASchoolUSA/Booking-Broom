@@ -188,14 +188,14 @@ export function SeoOverview({ rows, source = "google", className }: SeoOverviewP
             "text-teal-700 bg-teal-100 dark:text-teal-300 dark:bg-teal-950",
         },
         {
-          label: "Total pages",
+          label: "Sitemap pages",
           value: formatNumber(totalPages),
           icon: Files,
           accent:
             "text-slate-700 bg-slate-100 dark:text-slate-300 dark:bg-slate-900",
         },
         {
-          label: anyPartial ? "% indexed (partial)" : "% indexed",
+          label: anyPartial ? "% indexed (est.)" : "% indexed",
           value: formatPercent(fleetPercentIndexed),
           icon: Percent,
           accent:

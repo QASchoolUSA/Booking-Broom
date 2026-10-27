@@ -463,7 +463,7 @@ export function SiteSeoCard({
                     {formatNumber(index_coverage.total_pages)}
                   </p>
                   <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                    Total pages
+                    Sitemap pages
                   </p>
                 </div>
                 <div className="rounded-md bg-background/60 px-2.5 py-2">
@@ -471,15 +471,13 @@ export function SiteSeoCard({
                     {index_coverage.percent_indexed.toFixed(0)}%
                   </p>
                   <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                    {index_coverage.partial ? "% indexed (partial)" : "% indexed"}
+                    {index_coverage.partial ? "% indexed (est.)" : "% indexed"}
                   </p>
                 </div>
               </div>
-              {index_coverage.partial && (
+              {index_coverage.detail && (
                 <p className="mt-1.5 text-[11px] text-muted-foreground">
-                  Inspected {formatNumber(index_coverage.inspected_count)} of{" "}
-                  {formatNumber(index_coverage.total_pages)}
-                  {index_coverage.detail ? ` · ${index_coverage.detail}` : ""}
+                  {index_coverage.detail}
                 </p>
               )}
             </>
