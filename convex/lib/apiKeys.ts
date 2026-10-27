@@ -142,4 +142,15 @@ export const SEED_SITES = [
     apiKeyHash:
       "0e7461f3f46600f13286a97bcc97c999b2501270892aee942a65567305491474",
   },
+  {
+    slug: "lakeland",
+    name: "Cleaning Lakeland",
+    domain: "cleaninglakeland.com",
+    accentColor: "#1E3A8A",
+    contactEmail: "info@cleaninglakeland.com",
+    cloudflareWorkerName: "cleaning-lakeland",
+    // New Cloudflare account — paste Account ID on Deploys card when ready.
+    apiKeyHash:
+      "23e6b91a19d2a238ecbc1c36a7e46fc786eab227ee9c3ce6b2838cc12deb16db",
+  },
 ] as const;

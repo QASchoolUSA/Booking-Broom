@@ -50,6 +50,14 @@ const SITE_EMAILS: Record<
     name: "Cleaning Boca Raton",
     email: "hello@cleaningbocaraton.com",
   },
+  "sanford-nc": {
+    name: "Cleaning Sanford",
+    email: "info@cleaningsanford.com",
+  },
+  lakeland: {
+    name: "Cleaning Lakeland",
+    email: "info@cleaninglakeland.com",
+  },
 };
 
 export function getAdminEmail(siteSlug: string): string | undefined {

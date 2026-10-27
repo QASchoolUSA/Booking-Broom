@@ -11,7 +11,7 @@ import type { PricingConfig, PricingEngine, SqftRateMinConfig } from "./pricingC
  * Rate tiers (USD / sqft):
  * - Standard (9 sites): house/maintenance 0.15, deep 0.20, move 0.23,
  *   airbnb 0.12, post-construction 0.39; apartment uses the house rate.
- * - Discount −25% rounded 2dp (winter-haven, haines-city, davenport):
+ * - Discount −25% rounded 2dp (winter-haven, haines-city, davenport, lakeland):
  *   0.11 / 0.15 / 0.17 / 0.09 / 0.29
  */
 
@@ -137,7 +137,12 @@ const standardConfig = makeSqftRateMinConfig({ discount: false });
 const discountConfig = makeSqftRateMinConfig({ discount: true });
 
 /** Sites that receive Nikita’s −25% rounded rates. */
-const DISCOUNT_SLUGS = new Set(["winter-haven", "haines-city", "davenport"]);
+const DISCOUNT_SLUGS = new Set([
+  "winter-haven",
+  "haines-city",
+  "davenport",
+  "lakeland",
+]);
 
 export type SeedPricing = {
   slug: string;
@@ -159,6 +164,7 @@ const ALL_SITE_SLUGS = [
   "sanford",
   "boca-raton",
   "celebration",
+  "lakeland",
 ] as const;
 
 export const SEED_PRICING: SeedPricing[] = ALL_SITE_SLUGS.map((slug) => ({

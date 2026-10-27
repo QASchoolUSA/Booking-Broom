@@ -323,6 +323,13 @@ const SITES = [
     bookPath: "/api/book",
     quotePath: "/api/book",
   },
+  {
+    slug: "lakeland",
+    origin: "https://cleaninglakeland.com",
+    kind: "simple",
+    bookPath: "/api/book",
+    quotePath: "/api/book",
+  },
 ];
 
 function pathFor(site, type) {
