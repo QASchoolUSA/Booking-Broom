@@ -1267,8 +1267,8 @@ public actor ConvexAPIService {
             try? await Task.sleep(nanoseconds: 800_000_000)
             return MockDataService.shared.sampleSEOMetrics
         }
-        // URL Inspection can take several minutes under the daily quota budget.
-        _ = try await action("gscActions:syncIndexNow", timeout: 900)
+        // Fast path: sitemap + Search Analytics pages (seconds, not minutes).
+        _ = try await action("gscActions:syncIndexNow", timeout: 180)
         return try await fetchSEOMetrics(source: "google", periodDays: periodDays)
     }
 

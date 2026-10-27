@@ -20,6 +20,7 @@ import {
   compareSeoQueries,
 } from "./lib/seoSort";
 import {
+  estimateIndexCoverageFromAnalytics,
   isIntentionalNoindexUrl,
   parseSitemapLocs,
   summarizeIndexCoverage,
@@ -27,8 +28,14 @@ import {
 
 export { isIntentionalNoindexUrl, parseSitemapLocs } from "./lib/gscInspection";
 
-/** Soft daily budget for URL Inspection (~2k/day Google quota). */
+/** Soft daily budget for deep URL Inspection (~2k/day Google quota). */
 const DEFAULT_INDEX_SYNC_MAX_URLS = 1800;
+
+/** Parallel sites during fast Search Analytics index sync. */
+const FAST_INDEX_SITE_CONCURRENCY = 4;
+
+const FAST_INDEX_DETAIL =
+  "Fast estimate: sitemap pages vs Search Analytics impressions (28d). Zero-impression pages may still be indexed.";
 const GSC_SCOPE =
   "https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/userinfo.email";
 
@@ -1300,25 +1307,88 @@ export const inspectSitemaps = action({
   },
 });
 
+async function queryPagesWithImpressions(
+  accessToken: string,
+  property: string,
+  rowLimit = 25000
+): Promise<{ pages: string[]; startDate: string; endDate: string }> {
+  const { startDate, endDate } = dateRangeForPeriod(28, new Date());
+  const encoded = encodeURIComponent(property);
+  const res = await fetch(
+    `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        startDate,
+        endDate,
+        type: "web",
+        aggregationType: "byPage",
+        dimensions: ["page"],
+        rowLimit,
+        dataState: "all",
+      }),
+    }
+  );
+  const data = (await res.json()) as {
+    rows?: GscAnalyticsRow[];
+    error?: { message?: string };
+  };
+  if (!res.ok) {
+    throw new Error(
+      data.error?.message || `Page analytics failed for ${property}`
+    );
+  }
+  const pages = (data.rows ?? [])
+    .map((row) => row.keys?.[0] ?? "")
+    .filter((p) => p.length > 0);
+  return { pages, startDate, endDate };
+}
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(Math.max(1, concurrency), Math.max(1, items.length)) },
+    async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]!, i);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 /**
- * Inspect all site sitemaps under a daily quota budget and persist index coverage.
- * Used by "Sync index" and the weekly cron — separate from traffic Sync now.
+ * Fast index coverage for all sites: sitemap totals × Search Analytics pages
+ * with impressions (28d). Seconds instead of per-URL Inspection.
  */
 export const syncIndexCoverageInternal = internalAction({
   args: {
+    /** Ignored on fast path; kept for callers / deep inspect fallback. */
     maxUrls: v.optional(v.number()),
     delayMs: v.optional(v.number()),
+    /** When true, fall back to slow URL Inspection of every sitemap URL. */
+    deepInspect: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<InspectSitemapsResult> => {
     const sites = (await ctx.runQuery(
       internal.gsc.listSitesInternal,
       {}
     )) as SiteSlugDomain[];
-    const slugs = sites
-      .map((s) => s.slug)
-      .sort((a, b) => a.localeCompare(b));
+    const sorted = [...sites].sort((a, b) => a.slug.localeCompare(b.slug));
 
-    if (slugs.length === 0) {
+    if (sorted.length === 0) {
       return {
         ok: true,
         sites: [],
@@ -1327,18 +1397,148 @@ export const syncIndexCoverageInternal = internalAction({
       };
     }
 
-    return (await ctx.runAction(internal.gscActions.inspectSitemapsInternal, {
-      slugs,
-      maxUrls: args.maxUrls ?? DEFAULT_INDEX_SYNC_MAX_URLS,
-      delayMs: args.delayMs,
-    })) as InspectSitemapsResult;
+    if (args.deepInspect) {
+      return (await ctx.runAction(internal.gscActions.inspectSitemapsInternal, {
+        slugs: sorted.map((s) => s.slug),
+        maxUrls: args.maxUrls ?? DEFAULT_INDEX_SYNC_MAX_URLS,
+        delayMs: args.delayMs,
+      })) as InspectSitemapsResult;
+    }
+
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) {
+      return {
+        ok: false,
+        error: "Google Search Console is not connected",
+        sites: [],
+        reconnectHint: null,
+      };
+    }
+
+    let accessToken: string;
+    try {
+      accessToken = await ensureAccessToken(ctx, connection);
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Token refresh failed",
+        sites: [],
+        reconnectHint: null,
+      };
+    }
+
+    const properties = await listGscSites(accessToken);
+
+    const siteReports = await mapPool(
+      sorted,
+      FAST_INDEX_SITE_CONCURRENCY,
+      async (site): Promise<InspectSitemapsSiteReport> => {
+        const property = matchGscProperty(site.domain, properties);
+        if (!property) {
+          return {
+            slug: site.slug,
+            domain: site.domain,
+            status: "not_in_console",
+            detail: "Skip until the property is verified in GSC",
+            results: [],
+            sitemapUrlCount: 0,
+            inspectedCount: 0,
+            intentionalNoindexSkipped: 0,
+          };
+        }
+
+        let sitemapUrls: string[];
+        try {
+          sitemapUrls = await fetchSitemapUrls(site.domain);
+        } catch (e) {
+          return {
+            slug: site.slug,
+            domain: site.domain,
+            status: "sitemap_error",
+            detail: e instanceof Error ? e.message : "Sitemap fetch failed",
+            property,
+            results: [],
+            sitemapUrlCount: 0,
+            inspectedCount: 0,
+            intentionalNoindexSkipped: 0,
+          };
+        }
+
+        const intentional = sitemapUrls.filter((u) =>
+          isIntentionalNoindexUrl(u, site.slug)
+        );
+        const eligible = sitemapUrls.filter(
+          (u) => !isIntentionalNoindexUrl(u, site.slug)
+        );
+
+        let analyticsPages: string[];
+        try {
+          const queried = await queryPagesWithImpressions(
+            accessToken,
+            property
+          );
+          analyticsPages = queried.pages;
+        } catch (e) {
+          return {
+            slug: site.slug,
+            domain: site.domain,
+            status: "error",
+            detail: e instanceof Error ? e.message : "Search Analytics failed",
+            property,
+            results: [],
+            sitemapUrlCount: sitemapUrls.length,
+            inspectedCount: 0,
+            intentionalNoindexSkipped: intentional.length,
+          };
+        }
+
+        const estimate = estimateIndexCoverageFromAnalytics(
+          eligible,
+          analyticsPages
+        );
+
+        await ctx.runMutation(internal.gsc.upsertIndexCoverage, {
+          siteId: site._id,
+          gscPropertyUrl: property,
+          totalPages: estimate.totalPages,
+          indexedCount: estimate.indexedCount,
+          notIndexedCount: estimate.notIndexedCount,
+          inspectedCount: estimate.totalPages,
+          intentionalNoindexSkipped: intentional.length,
+          percentIndexed: estimate.percentIndexed,
+          partial: true,
+          detail: FAST_INDEX_DETAIL,
+          syncedAt: Date.now(),
+        });
+
+        return {
+          slug: site.slug,
+          domain: site.domain,
+          status: "inspected",
+          property,
+          results: [],
+          sitemapUrlCount: sitemapUrls.length,
+          inspectedCount: estimate.totalPages,
+          intentionalNoindexSkipped: intentional.length,
+          detail: `${FAST_INDEX_DETAIL} · ${estimate.indexedCount}/${estimate.totalPages} with impressions`,
+        };
+      }
+    );
+
+    return {
+      ok: true,
+      sites: siteReports,
+      reconnectHint: null,
+      inspectedTotal: siteReports.reduce((n, s) => n + s.inspectedCount, 0),
+    };
   },
 });
 
-/** Manager-facing index coverage sync (URL Inspection across all sites). */
+/** Manager-facing index coverage sync (fast Search Analytics estimate by default). */
 export const syncIndexNow = action({
   args: {
     maxUrls: v.optional(v.number()),
+    deepInspect: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<InspectSitemapsResult> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -1349,7 +1549,10 @@ export const syncIndexNow = action({
 
     return (await ctx.runAction(
       internal.gscActions.syncIndexCoverageInternal,
-      { maxUrls: args.maxUrls }
+      {
+        maxUrls: args.maxUrls,
+        deepInspect: args.deepInspect,
+      }
     )) as InspectSitemapsResult;
   },
 });

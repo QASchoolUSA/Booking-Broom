@@ -75,12 +75,11 @@ export function GscConnectBanner({ connection }: GscConnectBannerProps) {
         toast.error(result.reconnectHint);
         return;
       }
-      const inspected = result.inspectedTotal ?? 0;
       const withData = result.sites.filter((s) => s.inspectedCount > 0).length;
       toast.success(
-        inspected > 0
-          ? `Index coverage synced · ${inspected} URLs across ${withData} site${withData === 1 ? "" : "s"}`
-          : "Index sync finished — no URLs inspected (check GSC property match)"
+        withData > 0
+          ? `Index coverage synced for ${withData} site${withData === 1 ? "" : "s"} (fast Search Analytics estimate)`
+          : "Index sync finished — no coverage saved (check GSC property match)"
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : "Index sync failed";

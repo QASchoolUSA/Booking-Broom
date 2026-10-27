@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  estimateIndexCoverageFromAnalytics,
   isIndexedVerdict,
   isIntentionalNoindexUrl,
+  normalizePageUrl,
   parseSitemapLocs,
   summarizeIndexCoverage,
 } from "./gscInspection";
@@ -69,5 +71,31 @@ describe("isIndexedVerdict / summarizeIndexCoverage", () => {
     assert.equal(summary.indexedCount, 2);
     assert.equal(summary.notIndexedCount, 2);
     assert.equal(summary.percentIndexed, 50);
+  });
+});
+
+describe("normalizePageUrl / estimateIndexCoverageFromAnalytics", () => {
+  it("normalizes host and trailing slash", () => {
+    assert.equal(
+      normalizePageUrl("https://www.Example.com/About/"),
+      "example.com/about"
+    );
+    assert.equal(normalizePageUrl("https://example.com/"), "example.com/");
+  });
+
+  it("estimates indexed from analytics intersection", () => {
+    const estimate = estimateIndexCoverageFromAnalytics(
+      [
+        "https://example.com/",
+        "https://example.com/a",
+        "https://example.com/b",
+        "https://www.example.com/c/",
+      ],
+      ["https://example.com/", "https://example.com/c"]
+    );
+    assert.equal(estimate.totalPages, 4);
+    assert.equal(estimate.indexedCount, 2);
+    assert.equal(estimate.notIndexedCount, 2);
+    assert.equal(estimate.percentIndexed, 50);
   });
 });
