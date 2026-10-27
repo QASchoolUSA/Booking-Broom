@@ -172,11 +172,12 @@ function SeoPageContent() {
         </div>
 
         {source === "google" ? (
-          <GscConnectBanner connection={gscConnection} />
+          <GscConnectBanner connection={gscConnection} periodDays={period} />
         ) : (
           <BingSyncBanner
             syncState={bingSyncState}
             hasMetrics={rows.some((r) => r.metrics)}
+            periodDays={period}
           />
         )}
 

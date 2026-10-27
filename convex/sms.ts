@@ -48,6 +48,7 @@ function mapSyncState(doc: Doc<"smsSyncState">) {
     last_did_sync_at: doc.lastDidSyncAt
       ? new Date(doc.lastDidSyncAt).toISOString()
       : null,
+    history_synced_from: doc.historySyncedFrom ?? null,
   };
 }
 
@@ -265,18 +266,20 @@ export const upsertDidInternal = internalMutation({
   },
 });
 
+const messageUpsertValidator = v.object({
+  voipmsId: v.string(),
+  did: v.string(),
+  contact: v.string(),
+  direction: v.union(v.literal("in"), v.literal("out")),
+  type: v.union(v.literal("sms"), v.literal("mms")),
+  body: v.string(),
+  mediaUrls: v.optional(v.array(v.string())),
+  sentAt: v.number(),
+  status: v.optional(v.string()),
+});
+
 export const upsertMessageInternal = internalMutation({
-  args: {
-    voipmsId: v.string(),
-    did: v.string(),
-    contact: v.string(),
-    direction: v.union(v.literal("in"), v.literal("out")),
-    type: v.union(v.literal("sms"), v.literal("mms")),
-    body: v.string(),
-    mediaUrls: v.optional(v.array(v.string())),
-    sentAt: v.number(),
-    status: v.optional(v.string()),
-  },
+  args: messageUpsertValidator,
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("smsMessages")
@@ -309,11 +312,53 @@ export const upsertMessageInternal = internalMutation({
   },
 });
 
+/** Bulk upsert — far fewer round-trips than one mutation per message. */
+export const upsertMessagesBatchInternal = internalMutation({
+  args: {
+    messages: v.array(messageUpsertValidator),
+  },
+  handler: async (ctx, args) => {
+    let upserted = 0;
+    for (const msg of args.messages) {
+      if (!msg.did || !msg.contact || !msg.voipmsId) continue;
+      const existing = await ctx.db
+        .query("smsMessages")
+        .withIndex("by_voipms_id", (q) => q.eq("voipmsId", msg.voipmsId))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          body: msg.body,
+          mediaUrls: msg.mediaUrls,
+          type: msg.type,
+          direction: msg.direction,
+          sentAt: msg.sentAt,
+          status: msg.status,
+        });
+      } else {
+        await ctx.db.insert("smsMessages", {
+          voipmsId: msg.voipmsId,
+          did: msg.did,
+          contact: msg.contact,
+          direction: msg.direction,
+          type: msg.type,
+          body: msg.body,
+          mediaUrls: msg.mediaUrls,
+          sentAt: msg.sentAt,
+          status: msg.status,
+        });
+      }
+      upserted += 1;
+    }
+    return { upserted };
+  },
+});
+
 export const setSyncStateInternal = internalMutation({
   args: {
     lastSyncAt: v.optional(v.number()),
     lastSyncError: v.optional(v.union(v.string(), v.null())),
     lastDidSyncAt: v.optional(v.number()),
+    historySyncedFrom: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.query("smsSyncState").first();
@@ -321,6 +366,7 @@ export const setSyncStateInternal = internalMutation({
       lastSyncAt?: number;
       lastSyncError?: string;
       lastDidSyncAt?: number;
+      historySyncedFrom?: string;
     } = {};
     if (args.lastSyncAt !== undefined) patch.lastSyncAt = args.lastSyncAt;
     if (args.lastDidSyncAt !== undefined) {
@@ -330,6 +376,11 @@ export const setSyncStateInternal = internalMutation({
       patch.lastSyncError = undefined;
     } else if (args.lastSyncError !== undefined) {
       patch.lastSyncError = args.lastSyncError;
+    }
+    if (args.historySyncedFrom === null) {
+      patch.historySyncedFrom = undefined;
+    } else if (args.historySyncedFrom !== undefined) {
+      patch.historySyncedFrom = args.historySyncedFrom;
     }
 
     if (existing) {
@@ -341,7 +392,18 @@ export const setSyncStateInternal = internalMutation({
       lastSyncError:
         args.lastSyncError === null ? undefined : args.lastSyncError,
       lastDidSyncAt: args.lastDidSyncAt,
+      historySyncedFrom:
+        args.historySyncedFrom === null
+          ? undefined
+          : args.historySyncedFrom,
     });
+  },
+});
+
+export const getSyncStateInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("smsSyncState").first();
   },
 });
 

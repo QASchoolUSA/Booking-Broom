@@ -161,14 +161,14 @@ public final class MessagesViewModel {
         }
     }
     
-    /// Pull from Voip.ms (external API) then reload. Toolbar / ⌘R only — never pull-to-refresh.
-    public func syncVoipms() {
+    /// Pull from Voip.ms (messages-only). First Sync fills full history; later Syncs are fast.
+    public func syncVoipms(mode: String = "auto") {
         guard !isSyncingVoipms else { return }
         isSyncingVoipms = true
         HapticFeedback.impact(.medium)
         Task {
             do {
-                try await ConvexAPIService.shared.syncVoipmsNow()
+                try await ConvexAPIService.shared.syncVoipmsNow(mode: mode)
             } catch {
                 self.loadError = error.localizedDescription
             }
@@ -177,6 +177,21 @@ public final class MessagesViewModel {
             self.loadDids()
             self.isSyncingVoipms = false
         }
+    }
+
+    /// Awaitable Voip.ms sync for `.refreshable`.
+    public func syncVoipmsAndWait(mode: String = "auto") async {
+        guard !isSyncingVoipms else { return }
+        isSyncingVoipms = true
+        defer { isSyncingVoipms = false }
+        do {
+            try await ConvexAPIService.shared.syncVoipmsNow(mode: mode)
+        } catch {
+            loadError = error.localizedDescription
+        }
+        hydratedAt = [:]
+        await loadMessagesAndWait()
+        loadDids()
     }
     
     private func rebuildThreads() {

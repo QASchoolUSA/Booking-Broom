@@ -1251,13 +1251,14 @@ public actor ConvexAPIService {
     }
     
     /// Pulls fresh metrics from Google/Bing into Convex, then returns updated list metrics.
+    /// Passes `periodDays` so Sync now refreshes the active UI period only (cron still syncs all).
     public func syncSEOMetrics(source: String = "google", periodDays: Int = 28) async throws -> [SEOMetrics] {
         if useMockData {
             try? await Task.sleep(nanoseconds: 600_000_000)
             return MockDataService.shared.sampleSEOMetrics
         }
         let path = source == "google" ? "gscActions:syncNow" : "bingActions:syncNow"
-        try await action(path, timeout: 180)
+        try await action(path, args: ["periodDays": periodDays], timeout: 180)
         return try await fetchSEOMetrics(source: source, periodDays: periodDays)
     }
 
@@ -1523,12 +1524,22 @@ public actor ConvexAPIService {
         try await action("voipmsActions:sendMessage", args: ["did": did, "contact": contact, "message": message], timeout: 60)
     }
     
-    public func syncVoipmsNow() async throws {
+    /// Messages-only Voip.ms pull (skips DID reconfigure).
+    /// `mode: auto` does a full 365d history once, then fast recent overlap.
+    public func syncVoipmsNow(mode: String = "auto", daysBack: Int? = nil) async throws {
         if useMockData {
             try? await Task.sleep(nanoseconds: 800_000_000)
             return
         }
-        try await action("voipmsActions:syncMessagesNow", timeout: 120)
+        var args: [String: Any] = ["mode": mode]
+        if let daysBack {
+            args["daysBack"] = daysBack
+        }
+        try await action(
+            "voipmsActions:syncMessagesNow",
+            args: args,
+            timeout: 300
+        )
     }
     
     public func deleteSMSConversation(did: String, contact: String) async throws {

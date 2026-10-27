@@ -101,15 +101,28 @@ export function SitePricingEditor({
   );
   const [saving, setSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  /** Empty = all sections open (default). Titles listed here are collapsed. */
+  /**
+   * Titles listed here are collapsed. Default: keep the first (primary rates)
+   * group open for quick per-site editing; collapse the rest.
+   */
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     () => new Set()
   );
+  const [didInitCollapse, setDidInitCollapse] = useState(false);
 
   const groups = useMemo(
     () => (draft ? describePricingConfig(draft) : []),
     [draft]
   );
+
+  useEffect(() => {
+    if (didInitCollapse || groups.length === 0) return;
+    const keepOpen = groups[0]?.title;
+    setCollapsedSections(
+      new Set(groups.map((g) => g.title).filter((t) => t !== keepOpen))
+    );
+    setDidInitCollapse(true);
+  }, [groups, didInitCollapse]);
 
   const changed = useMemo(
     () => (pricing && draft ? countChangedFields(pricing.config, draft) : 0),

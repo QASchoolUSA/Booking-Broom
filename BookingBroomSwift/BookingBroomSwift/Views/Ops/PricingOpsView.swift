@@ -4,17 +4,18 @@ public struct PricingOpsView: View {
     @Bindable var opsVM: OpsViewModel
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var selectedSlug: String?
-    @State private var mode: PricingMode = .calculator
+    /// Edit is the fast path for setting rates per site; Calculator stays for compare.
+    @State private var mode: PricingMode = .edit
     
     private enum PricingMode: String, CaseIterable, Identifiable {
-        case calculator
         case edit
+        case calculator
         
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .calculator: return "Calculator"
             case .edit: return "Edit"
+            case .calculator: return "Compare"
             }
         }
     }
@@ -70,23 +71,38 @@ public struct PricingOpsView: View {
     }
     
     private var phoneEditLayout: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                introCopy
-                if opsVM.sitePricingList.isEmpty {
-                    emptyState
-                } else {
-                    ForEach(opsVM.sitePricingList) { row in
-                        NavigationLink {
-                            PricingEditView(opsVM: opsVM, row: row)
-                        } label: {
-                            PricingSiteCard(row: row)
+        VStack(spacing: 0) {
+            if opsVM.sitePricingList.isEmpty {
+                emptyState
+                    .padding(16)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(opsVM.sitePricingList) { row in
+                            let selected = row.siteSlug == selectedRow?.siteSlug
+                            Button {
+                                selectedSlug = row.siteSlug
+                            } label: {
+                                Text(row.siteName)
+                                    .font(AppTypography.metaBold)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(selected ? AppColors.primary : Color.secondary.opacity(0.12))
+                                    .foregroundStyle(selected ? .white : .primary)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+                .background(.regularMaterial)
+
+                if let row = selectedRow {
+                    PricingEditView(opsVM: opsVM, row: row, embedsInSplit: true)
                 }
             }
-            .padding(16)
         }
     }
     
@@ -127,7 +143,7 @@ public struct PricingOpsView: View {
     }
     
     private var introCopy: some View {
-        Text("These numbers power each cleaning site’s online quote. Changes go live about a minute after you save.")
+        Text("Pick a site, edit main rates, Save & Publish. Quotes go live on the marketing site within about a minute.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 4)

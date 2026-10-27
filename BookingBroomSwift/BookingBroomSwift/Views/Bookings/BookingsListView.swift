@@ -3,6 +3,7 @@ import SwiftUI
 public struct BookingsListView: View {
     @Bindable var bookingsVM: BookingsViewModel
     @Bindable var messagesVM: MessagesViewModel
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showingCreateSheet = false
     @State private var selectedBookingId: String?
     #if os(macOS)
@@ -212,7 +213,7 @@ public struct BookingsListView: View {
             macBookingsTable
             #else
             ScrollView {
-                LazyVStack(spacing: AppSpacing.sm) {
+                LazyVStack(spacing: 8) {
                     ForEach(bookingsVM.filteredBookings) { booking in
                         BookingCardView(
                             booking: booking,
@@ -224,7 +225,10 @@ public struct BookingsListView: View {
                         )
                     }
                 }
-                .padding(AppSpacing.md)
+                .padding(.horizontal, sizeClass == .regular ? AppSpacing.lg : AppSpacing.md)
+                .padding(.vertical, AppSpacing.sm)
+                .frame(maxWidth: sizeClass == .regular ? 900 : .infinity)
+                .frame(maxWidth: .infinity)
             }
             #endif
         }

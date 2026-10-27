@@ -84,7 +84,7 @@ export function SmsSyncBanner({
   const handleSyncMessages = async () => {
     setBusy("messages");
     try {
-      const result = await syncMessages({ daysBack: 30 });
+      const result = await syncMessages({ mode: "auto" });
       if (result.error) {
         toast.warning("Messages synced with some errors", {
           description: result.error,

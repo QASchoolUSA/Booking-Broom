@@ -26,7 +26,8 @@ struct BookingBroomApp: App {
             .environment(appController)
             .tint(AppColors.primary)
             #if os(macOS)
-            .frame(minWidth: 900, minHeight: 600)
+            // Mac is a horizontal workspace — keep the main window landscape-biased.
+            .frame(minWidth: 1024, minHeight: 640)
             #endif
             .task {
                 NotificationManager.shared.onNotificationOpen = { bookingId in
@@ -68,7 +69,7 @@ struct BookingBroomApp: App {
             }
         }
         #if os(macOS)
-        .defaultSize(width: 1200, height: 800)
+        .defaultSize(width: 1280, height: 800)
         .commands {
             BookingBroomCommands(authVM: authVM, appController: appController)
         }
@@ -120,10 +121,20 @@ struct BookingBroomApp: App {
 }
 
 #if os(iOS)
+import UIKit
+
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    /// iPhone: portrait only. iPad: all orientations.
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            return .all
+        }
+        return .portrait
     }
     
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

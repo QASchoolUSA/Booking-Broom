@@ -58,8 +58,12 @@ public struct BookingDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Header Status Banner
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Customer")
+                                .font(AppTypography.microBold)
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
                             Text(liveBooking.customerName)
                                 .font(.title2.bold())
                             HStack(spacing: 6) {
@@ -158,7 +162,7 @@ public struct BookingDetailView: View {
                     // Location Map Preview
                     if let address = liveBooking.address {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Property Location")
+                            Text("Property")
                                 .font(.headline)
                             if let coordinate = mapCoordinate ?? liveBooking.coordinate {
                                 MapPreview(address: address, coordinate: coordinate)
@@ -197,7 +201,7 @@ public struct BookingDetailView: View {
                     // Property & Service Specification Card
                     if let prop = liveBooking.property {
                         VStack(alignment: .leading, spacing: 14) {
-                            Text("Property Specs")
+                            Text("Job details")
                                 .font(.headline)
                             
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
@@ -249,7 +253,7 @@ public struct BookingDetailView: View {
                     if let quote = liveBooking.quote {
                         VStack(alignment: .leading, spacing: 14) {
                             HStack {
-                                Text("Quote Breakdown")
+                                Text("Quote")
                                     .font(.headline)
                                 Spacer()
                                 if quote.internalQuote == true {
@@ -378,7 +382,7 @@ public struct BookingDetailView: View {
                     
                     // Update Booking Status (under quote)
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Update Booking Status")
+                        Text("Actions")
                             .font(.headline)
                         
                         Picker("Status", selection: $selectedStatus) {
@@ -481,9 +485,11 @@ public struct BookingDetailView: View {
                     .disabled(isPendingCreate)
                 }
                 .padding(16)
+                .frame(maxWidth: sizeClass == .regular ? 720 : .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(AppColors.groupedBackground.ignoresSafeArea())
-            .navigationTitle("Booking Details")
+            .navigationTitle("Booking")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

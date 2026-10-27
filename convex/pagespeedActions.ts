@@ -2,8 +2,11 @@ import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { mapPool } from "./lib/mapPool";
 
 const STRATEGIES = ["mobile", "desktop"] as const;
+/** PSI is slow per URL; keep modest concurrency to avoid quota storms. */
+const PSI_CONCURRENCY = 4;
 
 type Strategy = (typeof STRATEGIES)[number];
 
@@ -218,47 +221,51 @@ export const syncAllInternal = internalAction({
     }> = await ctx.runQuery(internal.pagespeed.listSitesInternal, {});
 
     const errors: string[] = [];
-
-    for (const site of sites) {
+    type Job = {
+      site: (typeof sites)[number];
+      strategy: Strategy;
+      url: string;
+    };
+    const jobs: Job[] = sites.flatMap((site) => {
       const url = siteUrl(site.domain, site.performanceUrl);
-      for (const strategy of STRATEGIES) {
-        try {
-          const result = await runPagespeed(url, strategy, apiKey);
-          await ctx.runMutation(internal.pagespeed.upsertMetric, {
-            siteId: site._id,
-            strategy,
-            url: result.url,
-            performanceScore: result.performanceScore,
-            accessibilityScore: result.accessibilityScore,
-            bestPracticesScore: result.bestPracticesScore,
-            seoScore: result.seoScore,
-            agenticBrowsingScore: result.agenticBrowsingScore,
-            agenticBrowsingPassed: result.agenticBrowsingPassed,
-            agenticBrowsingTotal: result.agenticBrowsingTotal,
-            lcpMs: result.lcpMs,
-            cls: result.cls,
-            inpMs: result.inpMs,
-            fcpMs: result.fcpMs,
-            overallCategory: result.overallCategory,
-            error: result.error ?? null,
-          });
-          if (result.error) {
-            errors.push(`${site.slug}/${strategy}: ${result.error}`);
-          }
-        } catch (e) {
-          const message = e instanceof Error ? e.message : "PageSpeed failed";
-          errors.push(`${site.slug}/${strategy}: ${message}`);
-          await ctx.runMutation(internal.pagespeed.upsertMetric, {
-            siteId: site._id,
-            strategy,
-            url,
-            error: message,
-          });
+      return STRATEGIES.map((strategy) => ({ site, strategy, url }));
+    });
+
+    await mapPool(jobs, PSI_CONCURRENCY, async (job) => {
+      try {
+        const result = await runPagespeed(job.url, job.strategy, apiKey);
+        await ctx.runMutation(internal.pagespeed.upsertMetric, {
+          siteId: job.site._id,
+          strategy: job.strategy,
+          url: result.url,
+          performanceScore: result.performanceScore,
+          accessibilityScore: result.accessibilityScore,
+          bestPracticesScore: result.bestPracticesScore,
+          seoScore: result.seoScore,
+          agenticBrowsingScore: result.agenticBrowsingScore,
+          agenticBrowsingPassed: result.agenticBrowsingPassed,
+          agenticBrowsingTotal: result.agenticBrowsingTotal,
+          lcpMs: result.lcpMs,
+          cls: result.cls,
+          inpMs: result.inpMs,
+          fcpMs: result.fcpMs,
+          overallCategory: result.overallCategory,
+          error: result.error ?? null,
+        });
+        if (result.error) {
+          errors.push(`${job.site.slug}/${job.strategy}: ${result.error}`);
         }
-        // Brief pause between audits — PSI is sensitive to burst traffic.
-        await sleep(750);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "PageSpeed failed";
+        errors.push(`${job.site.slug}/${job.strategy}: ${message}`);
+        await ctx.runMutation(internal.pagespeed.upsertMetric, {
+          siteId: job.site._id,
+          strategy: job.strategy,
+          url: job.url,
+          error: message,
+        });
       }
-    }
+    });
 
     const summary =
       errors.length > 0
@@ -331,7 +338,7 @@ export const syncSite = action({
         : [...STRATEGIES];
 
     const errors: string[] = [];
-    for (const strategy of strategies) {
+    await mapPool(strategies, Math.min(PSI_CONCURRENCY, strategies.length), async (strategy) => {
       try {
         const result = await runPagespeed(url, strategy, apiKey);
         await ctx.runMutation(internal.pagespeed.upsertMetric, {
@@ -363,8 +370,7 @@ export const syncSite = action({
           error: message,
         });
       }
-      await sleep(750);
-    }
+    });
 
     if (errors.length === strategies.length) {
       throw new Error(errors[0] || "PageSpeed sync failed");

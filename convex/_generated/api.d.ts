@@ -32,6 +32,7 @@ import type * as lib_gscAggregate from "../lib/gscAggregate.js";
 import type * as lib_gscDates from "../lib/gscDates.js";
 import type * as lib_gscInspection from "../lib/gscInspection.js";
 import type * as lib_gscMatch from "../lib/gscMatch.js";
+import type * as lib_mapPool from "../lib/mapPool.js";
 import type * as lib_phone from "../lib/phone.js";
 import type * as lib_pricingConfigs from "../lib/pricingConfigs.js";
 import type * as lib_pricingEngines from "../lib/pricingEngines.js";
@@ -90,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   "lib/gscDates": typeof lib_gscDates;
   "lib/gscInspection": typeof lib_gscInspection;
   "lib/gscMatch": typeof lib_gscMatch;
+  "lib/mapPool": typeof lib_mapPool;
   "lib/phone": typeof lib_phone;
   "lib/pricingConfigs": typeof lib_pricingConfigs;
   "lib/pricingEngines": typeof lib_pricingEngines;

@@ -6,10 +6,13 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { extractPhoneFromHtml } from "./lib/phone";
+import { mapPool } from "./lib/mapPool";
 
 const BODY_CAP = 512_000;
-const FETCH_TIMEOUT_MS = 15_000;
-const DOH_TIMEOUT_MS = 5_000;
+const FETCH_TIMEOUT_MS = 12_000;
+const DOH_TIMEOUT_MS = 4_000;
+/** Health checks are lightweight HTTP — run many sites at once. */
+const HEALTH_CONCURRENCY = 10;
 
 type HealthCheckResult = {
   status: "online" | "offline";
@@ -81,20 +84,24 @@ async function checkSiteHealth(
 ): Promise<HealthCheckResult> {
   const hostname = siteHostname(domain);
   const checkedUrl = siteUrl(domain);
-  const ipAddress = await resolveIpv4(hostname);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
+  // DNS + HTML fetch in parallel — biggest latency win per site.
+  const dnsPromise = resolveIpv4(hostname);
   try {
-    const res = await fetch(checkedUrl, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        "User-Agent": "BookingBroom-SiteHealth/1.0",
-      },
-    });
+    const [ipAddress, res] = await Promise.all([
+      dnsPromise,
+      fetch(checkedUrl, {
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "User-Agent": "BookingBroom-SiteHealth/1.0",
+        },
+      }),
+    ]);
 
     const httpStatus = res.status;
     const raw = await res.text();
@@ -128,6 +135,7 @@ async function checkSiteHealth(
       ipAddress,
     };
   } catch (e) {
+    const ipAddress = await dnsPromise.catch(() => null);
     const message =
       e instanceof Error
         ? e.name === "AbortError"
@@ -162,7 +170,7 @@ export const checkAllInternal = internalAction({
 
     const errors: string[] = [];
 
-    for (const site of sites) {
+    await mapPool(sites, HEALTH_CONCURRENCY, async (site) => {
       try {
         const result = await checkSiteHealth(site.domain, site.name);
         await ctx.runMutation(internal.siteHealth.upsertStatus, {
@@ -193,7 +201,7 @@ export const checkAllInternal = internalAction({
           ipAddress: null,
         });
       }
-    }
+    });
 
     const summary =
       errors.length > 0

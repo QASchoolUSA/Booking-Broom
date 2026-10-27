@@ -26,9 +26,14 @@ import {
 
 interface GscConnectBannerProps {
   connection: GscConnection | null | undefined;
+  /** When set, Sync now refreshes only this period (faster). Cron still syncs all. */
+  periodDays?: 1 | 7 | 28 | 90;
 }
 
-export function GscConnectBanner({ connection }: GscConnectBannerProps) {
+export function GscConnectBanner({
+  connection,
+  periodDays,
+}: GscConnectBannerProps) {
   const getConnectUrl = useAction(api.gscActions.getConnectUrl);
   const syncNow = useAction(api.gscActions.syncNow);
   const syncIndexNow = useAction(api.gscActions.syncIndexNow);
@@ -54,7 +59,7 @@ export function GscConnectBanner({ connection }: GscConnectBannerProps) {
   const handleSync = async () => {
     setBusy("sync");
     try {
-      await syncNow({});
+      await syncNow(periodDays != null ? { periodDays } : {});
       toast.success("Search Console metrics synced");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sync failed");

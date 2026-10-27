@@ -25,11 +25,14 @@ import {
 interface BingSyncBannerProps {
   syncState: BingSyncState | null | undefined;
   hasMetrics: boolean;
+  /** When set, Sync now refreshes only this period (faster). Cron still syncs all. */
+  periodDays?: 1 | 7 | 28 | 90;
 }
 
 export function BingSyncBanner({
   syncState,
   hasMetrics,
+  periodDays,
 }: BingSyncBannerProps) {
   const syncNow = useAction(api.bingActions.syncNow);
   const clearMetrics = useMutation(api.bing.clearMetrics);
@@ -38,7 +41,7 @@ export function BingSyncBanner({
   const handleSync = async () => {
     setBusy("sync");
     try {
-      await syncNow({});
+      await syncNow(periodDays != null ? { periodDays } : {});
       toast.success("Bing Webmaster metrics synced");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Bing sync failed");

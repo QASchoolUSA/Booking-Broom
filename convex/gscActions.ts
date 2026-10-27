@@ -34,8 +34,36 @@ const DEFAULT_INDEX_SYNC_MAX_URLS = 1800;
 /** Parallel sites during fast Search Analytics index sync. */
 const FAST_INDEX_SITE_CONCURRENCY = 4;
 
+/** Parallel sites during GSC traffic Sync now / cron. */
+const TRAFFIC_SITE_CONCURRENCY = 4;
+
+/** Hourly (24h) query×HOUR pagination is expensive — one page is enough for top queries. */
+const HOURLY_QUERY_FETCH_CAP = 25_000;
+
 const FAST_INDEX_DETAIL =
   "Fast estimate: sitemap pages vs Search Analytics impressions (28d). Zero-impression pages may still be indexed.";
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(Math.max(1, concurrency), items.length) },
+    async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]!, i);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
+}
 const GSC_SCOPE =
   "https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/userinfo.email";
 
@@ -409,13 +437,14 @@ type TopQueryRow = {
 async function fetchAllSearchAnalyticsRows(
   accessToken: string,
   siteUrl: string,
-  baseBody: Record<string, unknown>
+  baseBody: Record<string, unknown>,
+  fetchCap = GSC_QUERY_FETCH_CAP
 ): Promise<GscAnalyticsRow[]> {
   const encoded = encodeURIComponent(siteUrl);
   const all: GscAnalyticsRow[] = [];
   let startRow = 0;
 
-  while (startRow < GSC_QUERY_FETCH_CAP) {
+  while (startRow < fetchCap) {
     const res = await fetch(
       `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
       {
@@ -476,7 +505,8 @@ async function queryTopQueries(
           aggregationType: "byProperty",
           dimensions: ["query"],
           dataState: "all",
-        }
+        },
+    hourly ? HOURLY_QUERY_FETCH_CAP : GSC_QUERY_FETCH_CAP
   );
 
   if (hourly) {
@@ -496,9 +526,19 @@ async function queryTopQueries(
     .slice(0, SEO_TOP_QUERY_LIMIT);
 }
 
+const syncPeriodValidator = v.union(
+  v.literal(1),
+  v.literal(7),
+  v.literal(28),
+  v.literal(90)
+);
+
 export const syncAllInternal = internalAction({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    /** When set, only refresh this period (faster Sync now). Cron omits → all periods. */
+    periodDays: v.optional(syncPeriodValidator),
+  },
+  handler: async (ctx, args) => {
     const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
     if (!connection) return { ok: false as const, error: "Not connected" };
 
@@ -515,14 +555,17 @@ export const syncAllInternal = internalAction({
         accessToken = refreshed.accessToken;
       }
 
-      await ctx.runMutation(internal.gsc.wipeGoogleSearchMetricsInternal, {});
-
+      // Upsert in place — do not wipe first (keeps UI populated during sync).
       const properties = await listGscSites(accessToken);
       await ctx.runMutation(internal.gsc.stripGscPropertyOverrides, {});
       const sites = await ctx.runQuery(internal.gsc.listSitesInternal, {});
       const syncNow = new Date();
+      const periods: Array<(typeof PERIODS)[number]> = args.periodDays
+        ? [args.periodDays]
+        : [...PERIODS];
+      const siteErrors: string[] = [];
 
-      for (const site of sites) {
+      await mapPool(sites, TRAFFIC_SITE_CONCURRENCY, async (site) => {
         const property = matchGscProperty(site.domain, properties);
 
         if (!property) {
@@ -533,7 +576,7 @@ export const syncAllInternal = internalAction({
           await ctx.runMutation(internal.gsc.clearSiteMetrics, {
             siteId: site._id as Id<"sites">,
           });
-          continue;
+          return;
         }
 
         await ctx.runMutation(internal.gsc.upsertPropertyStatus, {
@@ -542,50 +585,67 @@ export const syncAllInternal = internalAction({
           propertyUrl: property,
         });
 
-        for (const periodDays of PERIODS) {
-          const { startDate, endDate } = dateRangeForPeriod(periodDays, syncNow);
-          const hourly = periodDays === 1;
-          const stats = await querySearchAnalytics(
-            accessToken,
-            property,
-            startDate,
-            endDate,
-            hourly,
-            syncNow
+        try {
+          await Promise.all(
+            periods.map(async (periodDays) => {
+              const { startDate, endDate } = dateRangeForPeriod(
+                periodDays,
+                syncNow
+              );
+              const hourly = periodDays === 1;
+              const [stats, queries] = await Promise.all([
+                querySearchAnalytics(
+                  accessToken,
+                  property,
+                  startDate,
+                  endDate,
+                  hourly,
+                  syncNow
+                ),
+                queryTopQueries(
+                  accessToken,
+                  property,
+                  startDate,
+                  endDate,
+                  hourly,
+                  syncNow
+                ),
+              ]);
+              await Promise.all([
+                ctx.runMutation(internal.gsc.upsertMetric, {
+                  siteId: site._id as Id<"sites">,
+                  periodDays,
+                  gscPropertyUrl: property,
+                  clicks: stats.clicks,
+                  impressions: stats.impressions,
+                  ctr: stats.ctr,
+                  position: stats.position,
+                  startDate: stats.startDate,
+                  endDate: stats.endDate,
+                }),
+                ctx.runMutation(internal.gsc.upsertQueries, {
+                  siteId: site._id as Id<"sites">,
+                  periodDays,
+                  queries,
+                }),
+              ]);
+            })
           );
-          await ctx.runMutation(internal.gsc.upsertMetric, {
-            siteId: site._id as Id<"sites">,
-            periodDays,
-            gscPropertyUrl: property,
-            clicks: stats.clicks,
-            impressions: stats.impressions,
-            ctr: stats.ctr,
-            position: stats.position,
-            startDate: stats.startDate,
-            endDate: stats.endDate,
-          });
-
-          const queries = await queryTopQueries(
-            accessToken,
-            property,
-            startDate,
-            endDate,
-            hourly,
-            syncNow
-          );
-          await ctx.runMutation(internal.gsc.upsertQueries, {
-            siteId: site._id as Id<"sites">,
-            periodDays,
-            queries,
-          });
+        } catch (e) {
+          const message = e instanceof Error ? e.message : "Site sync failed";
+          siteErrors.push(`${site.slug}: ${message}`);
         }
-      }
+      });
 
+      const error =
+        siteErrors.length > 0 ? siteErrors.slice(0, 5).join("; ") : null;
       await ctx.runMutation(internal.gsc.setSyncResult, {
         connectionId: connection._id,
-        error: null,
+        error,
       });
-      return { ok: true as const };
+      return error
+        ? { ok: false as const, error }
+        : { ok: true as const };
     } catch (e) {
       const message = e instanceof Error ? e.message : "Sync failed";
       await ctx.runMutation(internal.gsc.setSyncResult, {
@@ -598,15 +658,19 @@ export const syncAllInternal = internalAction({
 });
 
 export const syncNow = action({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    periodDays: v.optional(syncPeriodValidator),
+  },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
     const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
     if (!connection) throw new Error("Google Search Console is not connected");
 
-    const result = await ctx.runAction(internal.gscActions.syncAllInternal, {});
+    const result = await ctx.runAction(internal.gscActions.syncAllInternal, {
+      periodDays: args.periodDays,
+    });
     if (!result.ok) {
       throw new Error(result.error || "Sync failed");
     }
@@ -1346,27 +1410,6 @@ async function queryPagesWithImpressions(
     .map((row) => row.keys?.[0] ?? "")
     .filter((p) => p.length > 0);
   return { pages, startDate, endDate };
-}
-
-async function mapPool<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T, index: number) => Promise<R>
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const workers = Array.from(
-    { length: Math.min(Math.max(1, concurrency), Math.max(1, items.length)) },
-    async () => {
-      while (true) {
-        const i = next++;
-        if (i >= items.length) return;
-        results[i] = await fn(items[i]!, i);
-      }
-    }
-  );
-  await Promise.all(workers);
-  return results;
 }
 
 /**

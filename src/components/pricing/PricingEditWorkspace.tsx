@@ -83,34 +83,39 @@ export function PricingEditWorkspace({
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      {/* Mobile site picker */}
+      {/* Mobile site chips */}
       <div className="lg:hidden">
-        <label htmlFor="pricing-site-select" className="sr-only">
-          Site
-        </label>
-        <select
-          id="pricing-site-select"
-          className="flex h-10 w-full cursor-pointer rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          value={selected?.site.id ?? ""}
-          onChange={(e) => requestSelect(e.target.value)}
-        >
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          Site — edit main rates below
+        </p>
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {rows.map((row) => {
+            const isActive = row.site.id === selected?.site.id;
             const dirty = dirtyBySite[row.site.id] ?? 0;
             return (
-              <option key={row.site.id} value={row.site.id}>
+              <button
+                key={row.site.id}
+                type="button"
+                onClick={() => requestSelect(row.site.id)}
+                className={cn(
+                  "shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-foreground hover:bg-muted/80"
+                )}
+              >
                 {row.site.name}
-                {dirty > 0 ? ` (${dirty} unsaved)` : ""}
-                {!row.pricing ? " — not configured" : ""}
-              </option>
+                {dirty > 0 ? ` · ${dirty}` : ""}
+              </button>
             );
           })}
-        </select>
+        </div>
       </div>
 
       {/* Desktop site list */}
       <aside className="hidden w-56 shrink-0 lg:block xl:w-64">
         <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">
-          Sites
+          Sites — quick edit
         </p>
         <nav className="space-y-0.5 rounded-xl border bg-card p-1">
           {rows.map((row) => {

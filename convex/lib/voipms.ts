@@ -257,6 +257,50 @@ function ymd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Voip.ms caps each getSMS/getMMS response around this size. */
+export const VOIPMS_PAGE_LIMIT = 100;
+
+/** Default full-history lookback for Sync (covers typical Voip.ms retention). */
+export const VOIPMS_FULL_HISTORY_DAYS = 365;
+
+/** Overlap when refreshing after a prior full sync (catch late webhooks). */
+export const VOIPMS_RECENT_OVERLAP_DAYS = 3;
+
+export function parseYmd(ymdStr: string): Date {
+  const [y, m, d] = ymdStr.split("-").map((n) => Number(n));
+  return new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1));
+}
+
+export function addDaysYmd(ymdStr: string, days: number): string {
+  const d = parseYmd(ymdStr);
+  d.setUTCDate(d.getUTCDate() + days);
+  return ymd(d);
+}
+
+export function midYmd(from: string, to: string): string {
+  const a = parseYmd(from).getTime();
+  const b = parseYmd(to).getTime();
+  return ymd(new Date(Math.floor((a + b) / 2)));
+}
+
+/** Inclusive date windows of up to `chunkDays` covering [from, to]. */
+export function chunkDateRange(
+  from: string,
+  to: string,
+  chunkDays: number
+): Array<{ from: string; to: string }> {
+  if (from > to) return [];
+  const chunks: Array<{ from: string; to: string }> = [];
+  let cursor = from;
+  while (cursor <= to) {
+    const end = addDaysYmd(cursor, Math.max(0, chunkDays - 1));
+    const clipped = end < to ? end : to;
+    chunks.push({ from: cursor, to: clipped });
+    cursor = addDaysYmd(clipped, 1);
+  }
+  return chunks;
+}
+
 /** Fetch SMS history. `from`/`to` are YYYY-MM-DD (Voip.ms date range). */
 export async function getSms(opts: {
   did?: string;
@@ -268,7 +312,7 @@ export async function getSms(opts: {
     did: opts.did,
     from: opts.from,
     to: opts.to,
-    limit: opts.limit ?? 100,
+    limit: opts.limit ?? VOIPMS_PAGE_LIMIT,
     timezone: -5,
   });
   return asArray<VoipmsSmsRow>(data.sms).map((row) => ({
@@ -293,7 +337,7 @@ export async function getMms(opts: {
       did: opts.did,
       from: opts.from,
       to: opts.to,
-      limit: opts.limit ?? 100,
+      limit: opts.limit ?? VOIPMS_PAGE_LIMIT,
       timezone: -5,
     });
     return asArray<VoipmsMmsRow>(data.mms ?? data.sms).map((row) => ({
@@ -308,6 +352,63 @@ export async function getMms(opts: {
   } catch {
     return [];
   }
+}
+
+/**
+ * Fetch every SMS in [from, to], recursively splitting windows when Voip.ms
+ * returns a full page (so nothing is silently truncated).
+ */
+export async function getSmsComplete(opts: {
+  did?: string;
+  from: string;
+  to: string;
+}): Promise<VoipmsSmsRow[]> {
+  const rows = await getSms({
+    did: opts.did,
+    from: opts.from,
+    to: opts.to,
+    limit: VOIPMS_PAGE_LIMIT,
+  });
+  if (rows.length < VOIPMS_PAGE_LIMIT || opts.from >= opts.to) {
+    return rows;
+  }
+  const mid = midYmd(opts.from, opts.to);
+  if (mid <= opts.from || mid >= opts.to) return rows;
+  const next = addDaysYmd(mid, 1);
+  const [left, right] = await Promise.all([
+    getSmsComplete({ did: opts.did, from: opts.from, to: mid }),
+    getSmsComplete({ did: opts.did, from: next, to: opts.to }),
+  ]);
+  const byId = new Map<string, VoipmsSmsRow>();
+  for (const row of [...left, ...right]) byId.set(row.id, row);
+  return [...byId.values()];
+}
+
+/** Same completeness strategy for MMS. */
+export async function getMmsComplete(opts: {
+  did?: string;
+  from: string;
+  to: string;
+}): Promise<VoipmsMmsRow[]> {
+  const rows = await getMms({
+    did: opts.did,
+    from: opts.from,
+    to: opts.to,
+    limit: VOIPMS_PAGE_LIMIT,
+  });
+  if (rows.length < VOIPMS_PAGE_LIMIT || opts.from >= opts.to) {
+    return rows;
+  }
+  const mid = midYmd(opts.from, opts.to);
+  if (mid <= opts.from || mid >= opts.to) return rows;
+  const next = addDaysYmd(mid, 1);
+  const [left, right] = await Promise.all([
+    getMmsComplete({ did: opts.did, from: opts.from, to: mid }),
+    getMmsComplete({ did: opts.did, from: next, to: opts.to }),
+  ]);
+  const byId = new Map<string, VoipmsMmsRow>();
+  for (const row of [...left, ...right]) byId.set(row.id, row);
+  return [...byId.values()];
 }
 
 export function defaultSyncDateRange(daysBack = 30): {

@@ -595,6 +595,8 @@ export default defineSchema({
     lastSyncAt: v.optional(v.number()),
     lastSyncError: v.optional(v.string()),
     lastDidSyncAt: v.optional(v.number()),
+    /** Oldest YYYY-MM-DD fully covered by a completed history sync. */
+    historySyncedFrom: v.optional(v.string()),
   }),
 
   /**

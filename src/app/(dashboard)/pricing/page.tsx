@@ -30,7 +30,7 @@ type PricingTab = "compare" | "edit";
 export default function PricingPage() {
   const { sites, connectionState } = useSites();
   const { isAuthenticated } = useConvexAuth();
-  const [tab, setTab] = useState<PricingTab>("compare");
+  const [tab, setTab] = useState<PricingTab>("edit");
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [scenario, setScenario] = useState<PricingScenario>(() => ({
     ...DEFAULT_SCENARIO,
@@ -97,9 +97,10 @@ export default function PricingPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="hidden md:block">
-          <h2 className="text-2xl font-bold tracking-tight">Pricing</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Live Pricing</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Quote any home, compare every market, then edit one site at a time
+            Edit main rates per site, then compare markets — changes go live in
+            about a minute
           </p>
         </div>
         <Tabs
@@ -109,8 +110,8 @@ export default function PricingPage() {
           }}
         >
           <TabsList>
+            <TabsTrigger value="edit">Edit rates</TabsTrigger>
             <TabsTrigger value="compare">Compare</TabsTrigger>
-            <TabsTrigger value="edit">Edit</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

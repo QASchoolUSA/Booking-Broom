@@ -10,13 +10,14 @@ import {
 import { buildCustomerBookingSms, BOOKING_SMS_MAX } from "./lib/bookingSmsTemplates";
 import {
   buildWebhookUrl,
+  chunkDateRange,
   defaultSyncDateRange,
   deleteMms,
   deleteSms,
   directionFromType,
   extractMmsMediaUrls,
-  getMms,
-  getSms,
+  getMmsComplete,
+  getSmsComplete,
   listDids,
   parseVoipmsDate,
   MMS_TEXT_MAX,
@@ -25,8 +26,16 @@ import {
   sendSms,
   setSmsCallback,
   SMS_SEGMENT_MAX,
+  VOIPMS_FULL_HISTORY_DAYS,
+  VOIPMS_RECENT_OVERLAP_DAYS,
   type VoipmsMmsRow,
+  type VoipmsSmsRow,
 } from "./lib/voipms";
+import { mapPool } from "./lib/mapPool";
+
+const WINDOW_CHUNK_DAYS = 14;
+const WINDOW_CONCURRENCY = 6;
+const UPSERT_BATCH = 40;
 
 function matchSiteId(
   did: string,
@@ -101,108 +110,171 @@ export const syncDidsInternal = internalAction({
   },
 });
 
+type IngestRow = {
+  voipmsId: string;
+  did: string;
+  contact: string;
+  direction: "in" | "out";
+  type: "sms" | "mms";
+  body: string;
+  mediaUrls?: string[];
+  sentAt: number;
+};
+
+function toIngestRows(
+  smsRows: VoipmsSmsRow[],
+  mmsRows: VoipmsMmsRow[]
+): IngestRow[] {
+  const byId = new Map<string, IngestRow>();
+  for (const row of smsRows) {
+    if (!row.did || !row.contact || !row.id) continue;
+    byId.set(row.id, {
+      voipmsId: row.id,
+      did: row.did,
+      contact: row.contact,
+      direction: directionFromType(row.type),
+      type: "sms",
+      body: row.message,
+      sentAt: parseVoipmsDate(row.date),
+    });
+  }
+  for (const row of mmsRows) {
+    if (!row.did || !row.contact || !row.id) continue;
+    const mediaUrls = extractMmsMediaUrls(row);
+    byId.set(row.id, {
+      voipmsId: row.id,
+      did: row.did,
+      contact: row.contact,
+      direction: directionFromType(row.type),
+      type: mediaUrls.length > 0 ? "mms" : "sms",
+      body: row.message,
+      mediaUrls: mediaUrls.length ? mediaUrls : undefined,
+      sentAt: parseVoipmsDate(row.date),
+    });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Pull Voip.ms SMS+MMS into Convex.
+ *
+ * Strategy (complete + fast):
+ * 1. Account-wide fetches (no per-DID loops) — one SMS+MMS stream for all lines.
+ * 2. Date windows (14d) in parallel; auto-split any window that hits the API page cap.
+ * 3. Batch upserts (40/msg) instead of one mutation per message.
+ * 4. `mode: "auto"` — full 365d history once, then recent overlap only.
+ */
 export const syncMessagesInternal = internalAction({
   args: {
     daysBack: v.optional(v.number()),
+    /**
+     * auto — full history if never backfilled, else recent overlap (fast).
+     * full — always pull `daysBack` (default 365).
+     * recent — only the recent overlap window.
+     */
+    mode: v.optional(
+      v.union(v.literal("auto"), v.literal("full"), v.literal("recent"))
+    ),
   },
   handler: async (
     ctx,
     args
-  ): Promise<{ ok: boolean; upserted: number; error: string | null }> => {
+  ): Promise<{
+    ok: boolean;
+    upserted: number;
+    error: string | null;
+    from: string;
+    to: string;
+    mode: string;
+  }> => {
+    const mode = args.mode ?? "auto";
     try {
-      const range = defaultSyncDateRange(args.daysBack ?? 30);
-      const storedDids = await ctx.runQuery(internal.sms.listDidsInternal, {});
-      const didList =
-        storedDids.length > 0
-          ? storedDids.map((d: { did: string }) => d.did)
-          : (await listDids()).map((d) => d.did);
+      const syncState = await ctx.runQuery(internal.sms.getSyncStateInternal, {});
+      const targetFull = defaultSyncDateRange(
+        args.daysBack ?? VOIPMS_FULL_HISTORY_DAYS
+      );
+      const recent = defaultSyncDateRange(VOIPMS_RECENT_OVERLAP_DAYS);
 
-      let upserted = 0;
-      const errors: string[] = [];
-
-      const ingestSms = async (
-        row: {
-          id: string;
-          date: string;
-          type: string;
-          did: string;
-          contact: string;
-          message: string;
-        },
-        mediaUrls?: string[]
-      ) => {
-        if (!row.did || !row.contact) return;
-        const isMms = (mediaUrls?.length ?? 0) > 0;
-        await ctx.runMutation(internal.sms.upsertMessageInternal, {
-          voipmsId: row.id,
-          did: row.did,
-          contact: row.contact,
-          direction: directionFromType(row.type),
-          type: isMms ? "mms" : "sms",
-          body: row.message,
-          mediaUrls: mediaUrls?.length ? mediaUrls : undefined,
-          sentAt: parseVoipmsDate(row.date),
-        });
-        upserted += 1;
-      };
-
-      if (didList.length === 0) {
-        const smsRows = await getSms({
-          from: range.from,
-          to: range.to,
-          limit: 100,
-        });
-        for (const row of smsRows) await ingestSms(row);
-
-        const mmsRows = await getMms({
-          from: range.from,
-          to: range.to,
-          limit: 100,
-        });
-        for (const row of mmsRows) {
-          await ingestSms(row, extractMmsMediaUrls(row));
-        }
-      } else {
-        for (const did of didList) {
-          try {
-            const smsRows = await getSms({
-              did,
-              from: range.from,
-              to: range.to,
-              limit: 100,
-            });
-            for (const row of smsRows) await ingestSms(row);
-
-            const mmsRows = await getMms({
-              did,
-              from: range.from,
-              to: range.to,
-              limit: 100,
-            });
-            for (const row of mmsRows) {
-              await ingestSms(row, extractMmsMediaUrls(row as VoipmsMmsRow));
-            }
-          } catch (e) {
-            errors.push(
-              `${did}: ${e instanceof Error ? e.message : "sync failed"}`
-            );
-          }
+      let range = targetFull;
+      let effectiveMode = mode;
+      if (mode === "recent") {
+        range = recent;
+      } else if (mode === "auto") {
+        const backfilled = syncState?.historySyncedFrom;
+        if (backfilled && backfilled <= targetFull.from) {
+          // History already covered — only refresh recent.
+          range = recent;
+          effectiveMode = "recent";
+        } else {
+          range = targetFull;
+          effectiveMode = "full";
         }
       }
+
+      const windows = chunkDateRange(range.from, range.to, WINDOW_CHUNK_DAYS);
+      const errors: string[] = [];
+      let upserted = 0;
+
+      const flushBatch = async (batch: IngestRow[]) => {
+        if (batch.length === 0) return;
+        for (let i = 0; i < batch.length; i += UPSERT_BATCH) {
+          const slice = batch.slice(i, i + UPSERT_BATCH);
+          const result = await ctx.runMutation(
+            internal.sms.upsertMessagesBatchInternal,
+            { messages: slice }
+          );
+          upserted += result.upserted;
+        }
+      };
+
+      await mapPool(windows, WINDOW_CONCURRENCY, async (window) => {
+        try {
+          const [smsRows, mmsRows] = await Promise.all([
+            getSmsComplete({ from: window.from, to: window.to }),
+            getMmsComplete({ from: window.from, to: window.to }),
+          ]);
+          await flushBatch(toIngestRows(smsRows, mmsRows));
+        } catch (e) {
+          errors.push(
+            `${window.from}→${window.to}: ${
+              e instanceof Error ? e.message : "sync failed"
+            }`
+          );
+        }
+      });
 
       const error = errors.length > 0 ? errors.slice(0, 3).join("; ") : null;
       await ctx.runMutation(internal.sms.setSyncStateInternal, {
         lastSyncAt: Date.now(),
         lastSyncError: error,
+        // Mark full history coverage only when a full/auto-full pass succeeds.
+        ...(error == null &&
+        (effectiveMode === "full" || mode === "full")
+          ? { historySyncedFrom: range.from }
+          : {}),
       });
 
-      return { ok: error == null, upserted, error };
+      return {
+        ok: error == null,
+        upserted,
+        error,
+        from: range.from,
+        to: range.to,
+        mode: effectiveMode,
+      };
     } catch (e) {
       const message = e instanceof Error ? e.message : "Message sync failed";
       await ctx.runMutation(internal.sms.setSyncStateInternal, {
         lastSyncError: message,
       });
-      return { ok: false, upserted: 0, error: message };
+      return {
+        ok: false,
+        upserted: 0,
+        error: message,
+        from: "",
+        to: "",
+        mode,
+      };
     }
   },
 });
@@ -218,9 +290,10 @@ export const syncAllInternal = internalAction({
     if (!dids.ok) {
       return { ok: false, error: dids.error };
     }
+    // Cron: keep recent fresh; full history is handled by interactive Sync once.
     const messages = await ctx.runAction(
       internal.voipmsActions.syncMessagesInternal,
-      { daysBack: 7 }
+      { mode: "auto" }
     );
     return {
       ok: messages.ok,
@@ -253,16 +326,30 @@ export const syncDidsNow = action({
 export const syncMessagesNow = action({
   args: {
     daysBack: v.optional(v.number()),
+    mode: v.optional(
+      v.union(v.literal("auto"), v.literal("full"), v.literal("recent"))
+    ),
   },
   handler: async (
     ctx,
     args
-  ): Promise<{ ok: boolean; upserted: number; error: string | null }> => {
+  ): Promise<{
+    ok: boolean;
+    upserted: number;
+    error: string | null;
+    from?: string;
+    to?: string;
+    mode?: string;
+  }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
+    // Messages-only. auto = full 365d history once, then fast recent overlap.
     const result = await ctx.runAction(
       internal.voipmsActions.syncMessagesInternal,
-      { daysBack: args.daysBack ?? 30 }
+      {
+        daysBack: args.daysBack,
+        mode: args.mode ?? "auto",
+      }
     );
     if (!result.ok && result.error?.includes("credentials")) {
       throw new Error(result.error);

@@ -1,6 +1,7 @@
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { v } from "convex/values";
 import {
   dateRangeForBingPeriod,
   matchBingProperty,
@@ -11,6 +12,29 @@ import { SEO_TOP_QUERY_LIMIT } from "./lib/seoSort";
 
 const PERIODS = SEO_SYNC_PERIODS;
 const CRAWL_ISSUES_CAP = 25;
+const TRAFFIC_SITE_CONCURRENCY = 4;
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(Math.max(1, concurrency), items.length) },
+    async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]!);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
+}
 
 function requireBingApiKey(): string {
   const key = process.env.BING_WEBMASTER_API_KEY?.trim();
@@ -246,9 +270,20 @@ async function getCrawlIssues(
     .slice(0, CRAWL_ISSUES_CAP);
 }
 
+const syncPeriodValidator = v.union(
+  v.literal(1),
+  v.literal(7),
+  v.literal(28),
+  v.literal(90)
+);
+
 export const syncAllInternal = internalAction({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    periodDays: v.optional(syncPeriodValidator),
+    /** Skip crawl-issues fetch on fast Sync now (cron still fetches). */
+    skipCrawlIssues: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
     let apiKey: string;
     try {
       apiKey = requireBingApiKey();
@@ -262,8 +297,12 @@ export const syncAllInternal = internalAction({
       const properties = await listBingSites(apiKey);
       const sites = await ctx.runQuery(internal.bing.listSitesInternal, {});
       const siteErrors: string[] = [];
+      const periods: Array<(typeof PERIODS)[number]> = args.periodDays
+        ? [args.periodDays]
+        : [...PERIODS];
+      const skipCrawl = args.skipCrawlIssues === true;
 
-      for (const site of sites) {
+      await mapPool(sites, TRAFFIC_SITE_CONCURRENCY, async (site) => {
         const property = matchBingProperty(
           site.domain,
           properties,
@@ -278,7 +317,7 @@ export const syncAllInternal = internalAction({
           await ctx.runMutation(internal.bing.clearSiteMetrics, {
             siteId: site._id as Id<"sites">,
           });
-          continue;
+          return;
         }
 
         await ctx.runMutation(internal.bing.upsertPropertyStatus, {
@@ -288,46 +327,53 @@ export const syncAllInternal = internalAction({
         });
 
         try {
-          const daily = await getRankAndTrafficStats(apiKey, property);
-          const queryStats = await getQueryStats(apiKey, property);
-          for (const periodDays of PERIODS) {
-            const { startDate, endDate } = dateRangeForBingPeriod(periodDays);
-            const stats = aggregatePeriod(daily, startDate, endDate);
-            await ctx.runMutation(internal.bing.upsertMetric, {
-              siteId: site._id as Id<"sites">,
-              periodDays,
-              bingPropertyUrl: property,
-              clicks: stats.clicks,
-              impressions: stats.impressions,
-              ctr: stats.ctr,
-              position: 0,
-              startDate,
-              endDate,
-            });
+          const [daily, queryStats] = await Promise.all([
+            getRankAndTrafficStats(apiKey, property),
+            getQueryStats(apiKey, property),
+          ]);
+          await Promise.all(
+            periods.map(async (periodDays) => {
+              const { startDate, endDate } = dateRangeForBingPeriod(periodDays);
+              const stats = aggregatePeriod(daily, startDate, endDate);
+              const queries = topQueriesForPeriod(
+                queryStats,
+                startDate,
+                endDate
+              );
+              await Promise.all([
+                ctx.runMutation(internal.bing.upsertMetric, {
+                  siteId: site._id as Id<"sites">,
+                  periodDays,
+                  bingPropertyUrl: property,
+                  clicks: stats.clicks,
+                  impressions: stats.impressions,
+                  ctr: stats.ctr,
+                  position: 0,
+                  startDate,
+                  endDate,
+                }),
+                ctx.runMutation(internal.bing.upsertQueries, {
+                  siteId: site._id as Id<"sites">,
+                  periodDays,
+                  queries,
+                }),
+              ]);
+            })
+          );
 
-            const queries = topQueriesForPeriod(
-              queryStats,
-              startDate,
-              endDate
-            );
-            await ctx.runMutation(internal.bing.upsertQueries, {
+          if (!skipCrawl) {
+            const issues = await getCrawlIssues(apiKey, property);
+            await ctx.runMutation(internal.bing.upsertCrawlIssues, {
               siteId: site._id as Id<"sites">,
-              periodDays,
-              queries,
+              issueCount: issues.length,
+              issues,
             });
           }
-
-          const issues = await getCrawlIssues(apiKey, property);
-          await ctx.runMutation(internal.bing.upsertCrawlIssues, {
-            siteId: site._id as Id<"sites">,
-            issueCount: issues.length,
-            issues,
-          });
         } catch (e) {
           const message = e instanceof Error ? e.message : "Site sync failed";
           siteErrors.push(`${site.slug}: ${message}`);
         }
-      }
+      });
 
       const error =
         siteErrors.length > 0 ? siteErrors.slice(0, 5).join("; ") : null;
@@ -344,14 +390,20 @@ export const syncAllInternal = internalAction({
 });
 
 export const syncNow = action({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    periodDays: v.optional(syncPeriodValidator),
+  },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
     requireBingApiKey();
 
-    const result = await ctx.runAction(internal.bingActions.syncAllInternal, {});
+    const result = await ctx.runAction(internal.bingActions.syncAllInternal, {
+      periodDays: args.periodDays,
+      // Fast interactive sync — crawl issues refresh on cron.
+      skipCrawlIssues: true,
+    });
     if (!result.ok) {
       throw new Error(result.error || "Bing sync failed");
     }

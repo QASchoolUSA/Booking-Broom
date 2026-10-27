@@ -6,32 +6,37 @@ const crons = cronJobs();
 crons.daily(
   "sync Google Search Console metrics",
   { hourUTC: 6, minuteUTC: 0 },
-  internal.gscActions.syncAllInternal
+  internal.gscActions.syncAllInternal,
+  {}
 );
 
 crons.daily(
   "prune Google Search Console metrics history",
   { hourUTC: 7, minuteUTC: 0 },
-  internal.gsc.pruneHistory
+  internal.gsc.pruneHistory,
+  {}
 );
 
 crons.daily(
   "sync Bing Webmaster metrics",
   { hourUTC: 6, minuteUTC: 30 },
-  internal.bingActions.syncAllInternal
+  internal.bingActions.syncAllInternal,
+  {}
 );
 
 crons.daily(
   "prune Bing Webmaster metrics history",
   { hourUTC: 7, minuteUTC: 30 },
-  internal.bing.pruneHistory
+  internal.bing.pruneHistory,
+  {}
 );
 
 /** PageSpeed runs are slower; weekly is enough for ops health checks. */
 crons.weekly(
   "sync PageSpeed Insights metrics",
   { dayOfWeek: "monday", hourUTC: 7, minuteUTC: 0 },
-  internal.pagespeedActions.syncAllInternal
+  internal.pagespeedActions.syncAllInternal,
+  {}
 );
 
 /** GSC URL Inspection coverage (indexed/total/%) — quota-heavy; weekly. */
@@ -46,28 +51,32 @@ crons.weekly(
 crons.interval(
   "check site health",
   { hours: 3 },
-  internal.siteHealthActions.checkAllInternal
+  internal.siteHealthActions.checkAllInternal,
+  {}
 );
 
 /** Latest Cloudflare Workers Builds status per Worker. */
 crons.interval(
   "sync Cloudflare Workers Builds",
   { hours: 3 },
-  internal.deploymentsActions.syncAllInternal
+  internal.deploymentsActions.syncAllInternal,
+  {}
 );
 
 /** Safety net if a Voip.ms SMS webhook is missed. */
 crons.interval(
   "sync Voip.ms SMS messages",
   { minutes: 30 },
-  internal.voipmsActions.syncAllInternal
+  internal.voipmsActions.syncAllInternal,
+  {}
 );
 
 /** SpaceMail IMAP: one mailbox per tick (round-robin). */
 crons.interval(
   "sync SpaceMail inbox",
   { minutes: 10 },
-  internal.emailActions.syncNextMailboxInternal
+  internal.emailActions.syncNextMailboxInternal,
+  {}
 );
 
 /** Convex Auth never deletes expired sessions/refresh tokens on its own. */
@@ -82,7 +91,8 @@ crons.daily(
 crons.interval(
   "dispatch due reminders",
   { minutes: 5 },
-  internal.reminders.dispatchDueInternal
+  internal.reminders.dispatchDueInternal,
+  {}
 );
 
 export default crons;
