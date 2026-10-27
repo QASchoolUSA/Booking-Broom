@@ -38,7 +38,8 @@ crons.weekly(
 crons.weekly(
   "sync Google Search Console index coverage",
   { dayOfWeek: "sunday", hourUTC: 8, minuteUTC: 0 },
-  internal.gscActions.syncIndexCoverageInternal
+  internal.gscActions.syncIndexCoverageInternal,
+  {}
 );
 
 /** HTTP + site-name check for each cleaning website. */
