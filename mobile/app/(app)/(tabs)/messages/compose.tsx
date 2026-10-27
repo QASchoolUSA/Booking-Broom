@@ -15,6 +15,10 @@ import {
   TextField,
 } from "@/components/ui";
 import { api } from "@/lib/api";
+import {
+  MMS_TEXT_MAX,
+  messageLengthLabel,
+} from "@/lib/messageLimits";
 import { encodeSmsThreadId } from "@/lib/smsThreadId";
 import { useTheme } from "@/theme";
 import { radius, spacing } from "@/theme/tokens";
@@ -68,8 +72,8 @@ export default function ComposeMessageScreen() {
       Alert.alert("Enter a message");
       return;
     }
-    if (message.length > 160) {
-      Alert.alert("SMS is limited to 160 characters");
+    if (message.length > MMS_TEXT_MAX) {
+      Alert.alert(`Message is limited to ${MMS_TEXT_MAX} characters`);
       return;
     }
     setSending(true);
@@ -154,9 +158,9 @@ export default function ComposeMessageScreen() {
           placeholder="(407) 555-0100"
         />
         <TextField
-          label={`Message (${body.length}/160)`}
+          label={`Message (${messageLengthLabel(body.length)})`}
           value={body}
-          onChangeText={(t) => setBody(t.slice(0, 160))}
+          onChangeText={(t) => setBody(t.slice(0, MMS_TEXT_MAX))}
           placeholder="Type your message…"
           multiline
         />

@@ -1,6 +1,13 @@
 "use client";
 
-import { CursorClick, Eye, Percent, Ranking } from "@phosphor-icons/react";
+import {
+  CheckCircle,
+  CursorClick,
+  Eye,
+  Files,
+  Percent,
+  Ranking,
+} from "@phosphor-icons/react";
 import type { SiteSeoRow } from "@/lib/types";
 import {
   deltaClassName,
@@ -29,6 +36,10 @@ function formatCtr(ctr: number): string {
 function formatPosition(pos: number): string {
   if (pos <= 0) return "—";
   return pos.toFixed(1);
+}
+
+function formatPercent(n: number): string {
+  return `${n.toFixed(0)}%`;
 }
 
 export function SeoOverview({ rows, source = "google", className }: SeoOverviewProps) {
@@ -88,6 +99,24 @@ export function SeoOverview({ rows, source = "google", className }: SeoOverviewP
       positionDelta = avgPosition - prevWeighted / prevWeight;
     }
   }
+
+  const withCoverage = rows.filter((r) => r.index_coverage);
+  const totalIndexed = withCoverage.reduce(
+    (s, r) => s + (r.index_coverage?.indexed_count ?? 0),
+    0
+  );
+  const totalPages = withCoverage.reduce(
+    (s, r) => s + (r.index_coverage?.total_pages ?? 0),
+    0
+  );
+  const totalInspected = withCoverage.reduce(
+    (s, r) => s + (r.index_coverage?.inspected_count ?? 0),
+    0
+  );
+  const fleetPercentIndexed =
+    totalInspected > 0 ? (totalIndexed / totalInspected) * 100 : 0;
+  const anyPartial = withCoverage.some((r) => r.index_coverage?.partial);
+  const showIndexCoverage = source === "google" && withCoverage.length > 0;
 
   const stats: {
     label: string;
@@ -149,42 +178,97 @@ export function SeoOverview({ rows, source = "google", className }: SeoOverviewP
       : []),
   ];
 
+  const indexStats = showIndexCoverage
+    ? [
+        {
+          label: "Indexed",
+          value: formatNumber(totalIndexed),
+          icon: CheckCircle,
+          accent:
+            "text-teal-700 bg-teal-100 dark:text-teal-300 dark:bg-teal-950",
+        },
+        {
+          label: "Total pages",
+          value: formatNumber(totalPages),
+          icon: Files,
+          accent:
+            "text-slate-700 bg-slate-100 dark:text-slate-300 dark:bg-slate-900",
+        },
+        {
+          label: anyPartial ? "% indexed (partial)" : "% indexed",
+          value: formatPercent(fleetPercentIndexed),
+          icon: Percent,
+          accent:
+            "text-amber-800 bg-amber-100 dark:text-amber-300 dark:bg-amber-950",
+        },
+      ]
+    : [];
+
   return (
-    <div
-      className={cn(
-        "grid grid-cols-2 gap-3",
-        showPosition ? "lg:grid-cols-4" : "lg:grid-cols-3",
-        className
-      )}
-    >
-      {stats.map(({ label, value, icon: Icon, accent, deltaText, deltaValue, direction }) => (
-        <div
-          key={label}
-          className="flex items-center gap-3 rounded-xl border bg-card p-3.5 shadow-sm sm:p-4"
-        >
+    <div className={cn("space-y-3", className)}>
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-3",
+          showPosition ? "lg:grid-cols-4" : "lg:grid-cols-3"
+        )}
+      >
+        {stats.map(({ label, value, icon: Icon, accent, deltaText, deltaValue, direction }) => (
           <div
-            className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-              accent
-            )}
+            key={label}
+            className="flex items-center gap-3 rounded-xl border bg-card p-3.5 shadow-sm sm:p-4"
           >
-            <Icon size={20} weight="duotone" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-2xl font-bold tabular-nums leading-none tracking-tight">
-              {value}
-            </p>
-            {deltaText && (
-              <p className={cn("mt-1", deltaClassName(deltaValue, direction))}>
-                {deltaText}
+            <div
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+                accent
+              )}
+            >
+              <Icon size={20} weight="duotone" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-2xl font-bold tabular-nums leading-none tracking-tight">
+                {value}
               </p>
-            )}
-            <p className="mt-1 text-xs font-medium text-muted-foreground">
-              {label}
-            </p>
+              {deltaText && (
+                <p className={cn("mt-1", deltaClassName(deltaValue, direction))}>
+                  {deltaText}
+                </p>
+              )}
+              <p className="mt-1 text-xs font-medium text-muted-foreground">
+                {label}
+              </p>
+            </div>
           </div>
+        ))}
+      </div>
+
+      {indexStats.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {indexStats.map(({ label, value, icon: Icon, accent }) => (
+            <div
+              key={label}
+              className="flex items-center gap-3 rounded-xl border bg-card p-3.5 shadow-sm sm:p-4"
+            >
+              <div
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+                  accent
+                )}
+              >
+                <Icon size={20} weight="duotone" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-2xl font-bold tabular-nums leading-none tracking-tight">
+                  {value}
+                </p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">
+                  {label}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }

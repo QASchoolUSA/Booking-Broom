@@ -77,15 +77,20 @@ public struct ComposeSMSView: View {
                         .platformKeyboardType(.phonePad)
                 }
                 
-                Section("Message Content (SMS)") {
-                    TextField("Type your SMS message...", text: $messageBody, axis: .vertical)
+                Section("Message Content") {
+                    TextField("Type your message...", text: $messageBody, axis: .vertical)
                         .lineLimit(3...8)
+                        .onChange(of: messageBody) { _, newValue in
+                            if newValue.count > 2048 {
+                                messageBody = String(newValue.prefix(2048))
+                            }
+                        }
                     
                     HStack {
                         Spacer()
-                        Text("\(messageBody.count) / 160 characters")
+                        Text(messageLengthLabel)
                             .font(.caption2)
-                            .foregroundColor(messageBody.count > 160 ? AppColors.rose : .secondary)
+                            .foregroundColor(messageBody.count > 2048 ? AppColors.rose : .secondary)
                     }
                 }
                 
@@ -97,7 +102,7 @@ public struct ComposeSMSView: View {
                     }
                 }
             }
-            .navigationTitle("New SMS Message")
+            .navigationTitle("New Message")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -122,6 +127,14 @@ public struct ComposeSMSView: View {
                 }
             }
         }
+    }
+    
+    private var messageLengthLabel: String {
+        let count = messageBody.count
+        if count > 160 {
+            return "\(count) / 2048 MMS"
+        }
+        return "\(count) / 160 SMS"
     }
     
     private func matchedDid() -> String? {
@@ -150,12 +163,18 @@ public struct ComposeSMSView: View {
         let to = recipientPhone.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
         
+        if body.count > 2048 {
+            errorMessage = "Message is limited to 2048 characters"
+            isSending = false
+            return
+        }
+        
         Task {
             let success = await messagesVM.composeNewSMS(fromDid: selectedDid, toContact: to, messageText: body)
             if success {
                 dismiss()
             } else {
-                errorMessage = "Failed to send SMS message. Please check number and connection."
+                errorMessage = "Failed to send message. Please check number and connection."
             }
             isSending = false
         }

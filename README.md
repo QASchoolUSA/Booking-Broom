@@ -151,6 +151,7 @@ Open `/login` → **Create manager account** (first-time only), then sign in.
 | `windermere` | Windermere Cleaning | `bb_windermere_dev_key` |
 | `boca-raton` | Cleaning Boca Raton | `bb_boca-raton_dev_key` |
 | `sanford-nc` | Cleaning Sanford | `bb_sanford-nc_dev_key` |
+| `lakeland` | Cleaning Lakeland | `bb_lakeland_dev_key` |
 
 Use the **Test booking** button in development to simulate incoming bookings.
 
@@ -162,7 +163,7 @@ pnpm test:bookings-all
 
 Optional: `BOOKING_TEST_EMAIL=you@example.com` (default `booking-test@kedrik.com`), `--site=haines-city` to run one origin, and `--type=quote` or `--type=book` (default both). The probe posts through each site’s public APIs using phone `3212360618` (no customer SMS). Each pass still creates a real dashboard row and may send confirmation emails.
 
-Site-specific production keys and env setup: see `docs/*-site.md` (including `docs/apopka-site.md`, `docs/kissimmee-site.md`, `docs/windermere-site.md`, `docs/boca-raton-site.md`, `docs/sanford-nc-site.md`).
+Site-specific production keys and env setup: see `docs/*-site.md` (including `docs/apopka-site.md`, `docs/kissimmee-site.md`, `docs/windermere-site.md`, `docs/boca-raton-site.md`, `docs/sanford-nc-site.md`, `docs/lakeland-site.md`).
 
 ## Public Booking API
 
@@ -355,7 +356,7 @@ Also set `NEXT_PUBLIC_APP_URL=https://bookings.kedrik.com` in Cloudflare Worker 
 
 7. In the app: open **SEO** → **Connect Google** → approve Search Console access (read + submit sitemaps). Metrics sync daily at 06:00 UTC and on demand via **Sync now**. Use **Submit sitemaps** to push each site’s `sitemap.xml` to Search Console for every verified property. If you previously connected with read-only access, **Disconnect** and **Connect Google** again so the new scope is granted. Sites that are not in the connected Search Console account show a **Not in Google Search Console** badge.
 
-8. **URL Inspection** (indexing recovery): internal actions `gscActions.inspectUrlsInternal` / `inspectSitemapsInternal` call Google’s URL Inspection API with the stored `webmasters` refresh token (same scope as sitemap submit). Optional `queryPages28dInternal` pulls Search Analytics with the `page` dimension as a secondary indexed signal. Rate-limit under Google’s ~2,000 inspections/day quota. If Inspection returns insufficient scope, Disconnect → reconnect with consent.
+8. **URL Inspection / index coverage**: `gscActions.inspectSitemapsInternal` / **Sync index** (and a weekly cron) inspect sitemap URLs, persist `siteIndexCoverage` (indexed / total / %), and show it on SEO. Rate-limit under Google’s ~2,000 inspections/day quota (`maxUrls` default 1800). Optional `queryPages28dInternal` is a weaker secondary signal. If Inspection returns insufficient scope, Disconnect → reconnect with consent.
 ## Bing Webmaster (SEO page)
 
 The same **SEO** page (`/seo`) can show Bing traffic (clicks, impressions, CTR), crawl issues, and property match status. Use the **Google / Bing** toggle at the top of the page.
@@ -447,7 +448,7 @@ Sites without a Worker name (e.g. Celebration if still on Vercel) show as **Not 
 
 ## Voip.ms SMS / MMS (Messages page)
 
-The **Messages** page (`/messages`) shows SMS/MMS for your Voip.ms DIDs (including each number’s **description** label and **sub-account**), lets you filter by line, and send text replies. Inbound MMS media is displayed; outbound is text-only.
+The **Messages** page (`/messages`) shows SMS/MMS for your Voip.ms DIDs (including each number’s **description** label and **sub-account**), lets you filter by line, and send replies. Bodies ≤160 chars use SMS; longer text (up to 2048) is sent as text-only MMS via Voip.ms `sendMMS`. Inbound MMS media is displayed; outbound media attachments are not yet supported.
 
 ### One-time Voip.ms setup
 

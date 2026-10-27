@@ -3,16 +3,17 @@ import { v } from "convex/values";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "llama-3.3-70b-versatile";
-const SMS_MAX = 160;
+/** Prefer SMS length; allow longer MMS text up to Voip.ms sendMMS max. */
+const MESSAGE_MAX = 2048;
 
-const SYSTEM_PROMPT = `You rewrite SMS drafts for a residential/commercial cleaning business manager texting clients.
+const SYSTEM_PROMPT = `You rewrite SMS/MMS drafts for a residential/commercial cleaning business manager texting clients.
 
 Rules:
 - Preserve the original meaning and any concrete details (names, times, addresses, prices).
 - Professional, warm, and clear — not stiff or corporate.
 - Plain text only. No markdown, bullets, emoji, or quotation marks around the whole message.
 - Do not add a greeting or sign-off unless the draft already has one.
-- Aim for 160 characters or fewer (standard SMS). Prefer concise wording.
+- Prefer concise wording. Stay under 160 characters when the draft is already short; otherwise keep under 2048 characters (MMS).
 - Return ONLY the rewritten message, nothing else.`;
 
 function cleanRewrite(raw: string): string {
@@ -25,11 +26,11 @@ function cleanRewrite(raw: string): string {
     text = text.slice(1, -1).trim();
   }
   text = text.replace(/\s+/g, " ");
-  if (text.length <= SMS_MAX) return text;
+  if (text.length <= MESSAGE_MAX) return text;
 
-  const sliced = text.slice(0, SMS_MAX);
+  const sliced = text.slice(0, MESSAGE_MAX);
   const lastSpace = sliced.lastIndexOf(" ");
-  if (lastSpace > 100) return sliced.slice(0, lastSpace).trim();
+  if (lastSpace > MESSAGE_MAX * 0.6) return sliced.slice(0, lastSpace).trim();
   return sliced.trim();
 }
 
@@ -43,8 +44,8 @@ export const rewriteSmsDraft = action({
 
     const draft = args.text.trim();
     if (!draft) throw new Error("Nothing to rewrite");
-    if (draft.length > 2000) {
-      throw new Error("Draft is too long to rewrite");
+    if (draft.length > MESSAGE_MAX) {
+      throw new Error(`Draft is limited to ${MESSAGE_MAX} characters`);
     }
 
     const apiKey = process.env.GROQ_API_KEY?.trim();
@@ -63,7 +64,7 @@ export const rewriteSmsDraft = action({
       body: JSON.stringify({
         model: MODEL,
         temperature: 0.3,
-        max_tokens: 120,
+        max_tokens: 600,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: draft },

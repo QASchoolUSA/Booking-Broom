@@ -15,6 +15,10 @@ import { ArrowUp, Trash2 } from "lucide-react-native";
 import { VirtualList } from "@/components/ui/VirtualList";
 import { AppText, LoadingBlock } from "@/components/ui";
 import { api, type Id } from "@/lib/api";
+import {
+  MMS_TEXT_MAX,
+  messageLengthLabel,
+} from "@/lib/messageLimits";
 import { useTheme } from "@/theme";
 import { radius, spacing } from "@/theme/tokens";
 
@@ -65,12 +69,17 @@ export function SmsConversation({
 
   const onSend = async () => {
     if (!canSend) return;
+    const message = draft.trim();
+    if (message.length > MMS_TEXT_MAX) {
+      Alert.alert(`Message is limited to ${MMS_TEXT_MAX} characters`);
+      return;
+    }
     setSending(true);
     try {
       await sendMessage({
         did,
         contact,
-        message: draft.trim(),
+        message,
       });
       setDraft("");
     } finally {
@@ -250,20 +259,27 @@ export function SmsConversation({
             },
           ]}
         >
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Message"
-            placeholderTextColor={colors.mutedForeground}
-            style={[
-              styles.input,
-              {
-                color: colors.foreground,
-                backgroundColor: colors.background,
-                borderColor: colors.border,
-              },
-            ]}
-          />
+          <View style={{ flex: 1, gap: 4 }}>
+            <TextInput
+              value={draft}
+              onChangeText={(t) => setDraft(t.slice(0, MMS_TEXT_MAX))}
+              placeholder="Message"
+              placeholderTextColor={colors.mutedForeground}
+              maxLength={MMS_TEXT_MAX}
+              multiline
+              style={[
+                styles.input,
+                {
+                  color: colors.foreground,
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                },
+              ]}
+            />
+            <AppText muted size={11}>
+              {messageLengthLabel(draft.length)}
+            </AppText>
+          </View>
           <Pressable
             onPress={onSend}
             disabled={!canSend}
@@ -326,17 +342,18 @@ const styles = StyleSheet.create({
   composer: {
     flexDirection: "row",
     gap: spacing.sm,
-    alignItems: "center",
+    alignItems: "flex-end",
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   input: {
-    flex: 1,
     minHeight: 44,
+    maxHeight: 120,
     borderWidth: 1,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     fontSize: 16,
     fontFamily: "OpenSans_400Regular",
   },
@@ -346,5 +363,6 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 18,
   },
 });

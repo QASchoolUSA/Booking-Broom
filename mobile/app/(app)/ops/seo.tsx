@@ -167,6 +167,7 @@ export default function SeoOpsScreen() {
             rows={rows}
             periodLabel={periodMeta.short}
             showPosition={source === "google"}
+            showIndexCoverage={source === "google"}
           />
         ) : null}
 
@@ -204,6 +205,14 @@ export default function SeoOpsScreen() {
                       : "Sync to pull Bing Webmaster data."}
                   </AppText>
                 )}
+                {source === "google" && row.index_coverage ? (
+                  <AppText muted size={13} style={{ marginTop: 4 }}>
+                    Indexed {Math.round(row.index_coverage.indexed_count)} /{" "}
+                    {Math.round(row.index_coverage.total_pages)} (
+                    {row.index_coverage.percent_indexed.toFixed(0)}%)
+                    {row.index_coverage.partial ? " · partial" : ""}
+                  </AppText>
+                ) : null}
                 {(row.top_queries?.length ?? 0) > 0 ? (
                   <View style={styles.siteKeywords}>
                     <AppText

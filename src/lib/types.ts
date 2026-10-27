@@ -261,6 +261,19 @@ export interface SeoCrawlIssues {
   synced_at: string;
 }
 
+/** GSC URL Inspection coverage (Google only). */
+export interface SeoIndexCoverage {
+  total_pages: number;
+  indexed_count: number;
+  not_indexed_count: number;
+  inspected_count: number;
+  intentional_noindex_skipped: number;
+  percent_indexed: number;
+  partial: boolean;
+  detail: string | null;
+  synced_at: string;
+}
+
 export interface SiteSeoRow {
   site: {
     id: string;
@@ -276,6 +289,7 @@ export interface SiteSeoRow {
   delta: SeoMetricDelta | null;
   top_queries: SeoTopQuery[] | null;
   crawl_issues: SeoCrawlIssues | null;
+  index_coverage: SeoIndexCoverage | null;
   page_scan: SeoPageScan | null;
 }
 

@@ -34,6 +34,13 @@ crons.weekly(
   internal.pagespeedActions.syncAllInternal
 );
 
+/** GSC URL Inspection coverage (indexed/total/%) — quota-heavy; weekly. */
+crons.weekly(
+  "sync Google Search Console index coverage",
+  { dayOfWeek: "sunday", hourUTC: 8, minuteUTC: 0 },
+  internal.gscActions.syncIndexCoverageInternal
+);
+
 /** HTTP + site-name check for each cleaning website. */
 crons.interval(
   "check site health",

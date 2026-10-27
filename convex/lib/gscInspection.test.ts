@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  isIndexedVerdict,
   isIntentionalNoindexUrl,
   parseSitemapLocs,
+  summarizeIndexCoverage,
 } from "./gscInspection";
 
 describe("isIntentionalNoindexUrl", () => {
@@ -46,5 +48,26 @@ describe("parseSitemapLocs", () => {
       "https://example.com/",
       "https://example.com/about",
     ]);
+  });
+});
+
+describe("isIndexedVerdict / summarizeIndexCoverage", () => {
+  it("treats PASS as indexed", () => {
+    assert.equal(isIndexedVerdict("PASS"), true);
+    assert.equal(isIndexedVerdict("NEUTRAL"), false);
+    assert.equal(isIndexedVerdict(undefined), false);
+  });
+
+  it("aggregates inspection results", () => {
+    const summary = summarizeIndexCoverage([
+      { ok: true, verdict: "PASS" },
+      { ok: true, verdict: "PASS" },
+      { ok: true, verdict: "FAIL" },
+      { ok: false, verdict: "PASS" },
+    ]);
+    assert.equal(summary.inspectedCount, 4);
+    assert.equal(summary.indexedCount, 2);
+    assert.equal(summary.notIndexedCount, 2);
+    assert.equal(summary.percentIndexed, 50);
   });
 });

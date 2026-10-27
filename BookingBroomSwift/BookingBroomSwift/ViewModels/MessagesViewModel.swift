@@ -212,7 +212,7 @@ public final class MessagesViewModel {
             did: did,
             contact: contact,
             direction: .out,
-            type: .sms,
+            type: trimmed.count > 160 ? .mms : .sms,
             body: trimmed,
             sentAt: Date(),
             status: "sent"
@@ -250,7 +250,7 @@ public final class MessagesViewModel {
             did: fromDid,
             contact: toContact,
             direction: .out,
-            type: .sms,
+            type: messageText.count > 160 ? .mms : .sms,
             body: messageText,
             sentAt: Date(),
             status: "sent"

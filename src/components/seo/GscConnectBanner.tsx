@@ -10,6 +10,7 @@ import {
   Globe,
   LinkBreak,
   LinkSimple,
+  MagnifyingGlass,
   WarningCircle,
 } from "@phosphor-icons/react";
 import type { GscConnection } from "@/lib/types";
@@ -30,10 +31,11 @@ interface GscConnectBannerProps {
 export function GscConnectBanner({ connection }: GscConnectBannerProps) {
   const getConnectUrl = useAction(api.gscActions.getConnectUrl);
   const syncNow = useAction(api.gscActions.syncNow);
+  const syncIndexNow = useAction(api.gscActions.syncIndexNow);
   const submitSitemaps = useAction(api.gscActions.submitSitemaps);
   const disconnect = useMutation(api.gsc.disconnect);
   const [busy, setBusy] = useState<
-    "connect" | "sync" | "submit" | "disconnect" | null
+    "connect" | "sync" | "index" | "submit" | "disconnect" | null
   >(null);
 
   const handleConnect = async () => {
@@ -56,6 +58,37 @@ export function GscConnectBanner({ connection }: GscConnectBannerProps) {
       toast.success("Search Console metrics synced");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleSyncIndex = async () => {
+    setBusy("index");
+    try {
+      const result = await syncIndexNow({});
+      if (!result.ok) {
+        toast.error(result.error ?? "Index sync failed");
+        return;
+      }
+      if (result.reconnectHint) {
+        toast.error(result.reconnectHint);
+        return;
+      }
+      const inspected = result.inspectedTotal ?? 0;
+      const withData = result.sites.filter((s) => s.inspectedCount > 0).length;
+      toast.success(
+        inspected > 0
+          ? `Index coverage synced · ${inspected} URLs across ${withData} site${withData === 1 ? "" : "s"}`
+          : "Index sync finished — no URLs inspected (check GSC property match)"
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Index sync failed";
+      toast.error(
+        /insufficient|scope|permission/i.test(message)
+          ? "Google needs URL Inspection access — disconnect and Connect Google again, then retry."
+          : message
+      );
     } finally {
       setBusy(null);
     }
@@ -173,6 +206,19 @@ export function GscConnectBanner({ connection }: GscConnectBannerProps) {
               className={busy === "sync" ? "animate-spin" : undefined}
             />
             {busy === "sync" ? "Syncing…" : "Sync now"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncIndex}
+            disabled={busy !== null}
+            className="gap-1.5"
+          >
+            <MagnifyingGlass
+              size={16}
+              className={busy === "index" ? "animate-pulse" : undefined}
+            />
+            {busy === "index" ? "Inspecting…" : "Sync index"}
           </Button>
           <Button
             variant="outline"

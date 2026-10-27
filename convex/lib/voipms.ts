@@ -7,6 +7,11 @@ import { smsPartyDigits } from "./phone";
 
 const API_URL = "https://voip.ms/api/v1/rest.php";
 
+/** Single-segment SMS body limit (Voip.ms sendSMS). */
+export const SMS_SEGMENT_MAX = 160;
+/** Text-only MMS body limit (Voip.ms sendMMS). */
+export const MMS_TEXT_MAX = 2048;
+
 export type VoipmsDid = {
   did: string;
   /** Voip.ms "Note" / description (often location-ish). */
@@ -57,20 +62,41 @@ function requireCreds(): { username: string; password: string } {
 
 export async function voipmsCall(
   method: string,
-  params: Record<string, string | number | undefined> = {}
+  params: Record<string, string | number | undefined> = {},
+  opts?: { httpMethod?: "GET" | "POST" }
 ): Promise<VoipmsEnvelope> {
   const { username, password } = requireCreds();
-  const url = new URL(API_URL);
-  url.searchParams.set("api_username", username);
-  url.searchParams.set("api_password", password);
-  url.searchParams.set("method", method);
-  url.searchParams.set("content_type", "json");
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === "") continue;
-    url.searchParams.set(key, String(value));
+  const httpMethod = opts?.httpMethod ?? "GET";
+
+  let res: Response;
+  if (httpMethod === "POST") {
+    const body = new URLSearchParams();
+    body.set("api_username", username);
+    body.set("api_password", password);
+    body.set("method", method);
+    body.set("content_type", "json");
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === "") continue;
+      body.set(key, String(value));
+    }
+    res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+  } else {
+    const url = new URL(API_URL);
+    url.searchParams.set("api_username", username);
+    url.searchParams.set("api_password", password);
+    url.searchParams.set("method", method);
+    url.searchParams.set("content_type", "json");
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === "") continue;
+      url.searchParams.set(key, String(value));
+    }
+    res = await fetch(url.toString(), { method: "GET" });
   }
 
-  const res = await fetch(url.toString(), { method: "GET" });
   if (!res.ok) {
     throw new Error(`Voip.ms HTTP ${res.status}`);
   }
@@ -305,6 +331,28 @@ export async function sendSms(opts: {
   });
   const smsId = String(data.sms ?? data.mms ?? Date.now());
   return { smsId };
+}
+
+/**
+ * Text-only MMS (Voip.ms allows long text without media1–3).
+ * Always POST so bodies up to 2048 chars are not truncated by GET URL limits.
+ */
+export async function sendMms(opts: {
+  did: string;
+  dst: string;
+  message: string;
+}): Promise<{ mmsId: string }> {
+  const data = await voipmsCall(
+    "sendMMS",
+    {
+      did: opts.did,
+      dst: opts.dst,
+      message: opts.message,
+    },
+    { httpMethod: "POST" }
+  );
+  const mmsId = String(data.mms ?? data.sms ?? Date.now());
+  return { mmsId };
 }
 
 /** Best-effort delete of one SMS on Voip.ms (by message id). */

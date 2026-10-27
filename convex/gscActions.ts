@@ -22,9 +22,13 @@ import {
 import {
   isIntentionalNoindexUrl,
   parseSitemapLocs,
+  summarizeIndexCoverage,
 } from "./lib/gscInspection";
 
 export { isIntentionalNoindexUrl, parseSitemapLocs } from "./lib/gscInspection";
+
+/** Soft daily budget for URL Inspection (~2k/day Google quota). */
+const DEFAULT_INDEX_SYNC_MAX_URLS = 1800;
 const GSC_SCOPE =
   "https://www.googleapis.com/auth/webmasters https://www.googleapis.com/auth/userinfo.email";
 
@@ -672,7 +676,11 @@ export type PageAnalyticsRow = {
   position: number;
 };
 
-type SiteSlugDomain = { slug: string; domain: string };
+type SiteSlugDomain = {
+  _id: Id<"sites">;
+  slug: string;
+  domain: string;
+};
 
 export type InspectUrlsResult =
   | {
@@ -1196,6 +1204,13 @@ export const inspectSitemapsInternal = internalAction({
         }
       }
 
+      const partial = eligible.length > toInspect.length;
+      const detail = partial
+        ? `Prioritized ${toInspect.length} of ${eligible.length} eligible URLs (quota)`
+        : reconnectHint
+          ? "Inspection stopped: insufficient OAuth scope"
+          : undefined;
+
       siteReports.push({
         slug,
         domain: site.domain,
@@ -1205,11 +1220,27 @@ export const inspectSitemapsInternal = internalAction({
         sitemapUrlCount: sitemapUrls.length,
         inspectedCount: results.length,
         intentionalNoindexSkipped: intentional.length,
-        detail:
-          eligible.length > toInspect.length
-            ? `Prioritized ${toInspect.length} of ${eligible.length} eligible URLs (quota)`
-            : undefined,
+        detail,
       });
+
+      if (results.length > 0) {
+        const summary = summarizeIndexCoverage(results);
+        const coveragePartial =
+          partial || Boolean(reconnectHint) || summary.inspectedCount < eligible.length;
+        await ctx.runMutation(internal.gsc.upsertIndexCoverage, {
+          siteId: site._id,
+          gscPropertyUrl: property,
+          totalPages: eligible.length,
+          indexedCount: summary.indexedCount,
+          notIndexedCount: summary.notIndexedCount,
+          inspectedCount: summary.inspectedCount,
+          intentionalNoindexSkipped: intentional.length,
+          percentIndexed: summary.percentIndexed,
+          partial: coveragePartial,
+          detail,
+          syncedAt: Date.now(),
+        });
+      }
 
       if (reconnectHint) break;
     }
@@ -1265,6 +1296,60 @@ export const inspectSitemaps = action({
     return (await ctx.runAction(
       internal.gscActions.inspectSitemapsInternal,
       args
+    )) as InspectSitemapsResult;
+  },
+});
+
+/**
+ * Inspect all site sitemaps under a daily quota budget and persist index coverage.
+ * Used by "Sync index" and the weekly cron — separate from traffic Sync now.
+ */
+export const syncIndexCoverageInternal = internalAction({
+  args: {
+    maxUrls: v.optional(v.number()),
+    delayMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<InspectSitemapsResult> => {
+    const sites = (await ctx.runQuery(
+      internal.gsc.listSitesInternal,
+      {}
+    )) as SiteSlugDomain[];
+    const slugs = sites
+      .map((s) => s.slug)
+      .sort((a, b) => a.localeCompare(b));
+
+    if (slugs.length === 0) {
+      return {
+        ok: true,
+        sites: [],
+        reconnectHint: null,
+        inspectedTotal: 0,
+      };
+    }
+
+    return (await ctx.runAction(internal.gscActions.inspectSitemapsInternal, {
+      slugs,
+      maxUrls: args.maxUrls ?? DEFAULT_INDEX_SYNC_MAX_URLS,
+      delayMs: args.delayMs,
+    })) as InspectSitemapsResult;
+  },
+});
+
+/** Manager-facing index coverage sync (URL Inspection across all sites). */
+export const syncIndexNow = action({
+  args: {
+    maxUrls: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<InspectSitemapsResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const connection = await ctx.runQuery(internal.gsc.getConnectionInternal, {});
+    if (!connection) throw new Error("Google Search Console is not connected");
+
+    return (await ctx.runAction(
+      internal.gscActions.syncIndexCoverageInternal,
+      { maxUrls: args.maxUrls }
     )) as InspectSitemapsResult;
   },
 });

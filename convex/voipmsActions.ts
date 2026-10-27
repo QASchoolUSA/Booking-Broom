@@ -19,9 +19,12 @@ import {
   getSms,
   listDids,
   parseVoipmsDate,
+  MMS_TEXT_MAX,
   resolveDidLabel,
+  sendMms,
   sendSms,
   setSmsCallback,
+  SMS_SEGMENT_MAX,
   type VoipmsMmsRow,
 } from "./lib/voipms";
 
@@ -286,12 +289,19 @@ export const sendMessage = action({
     const message = args.message.trim();
     if (!did || !contact) throw new Error("Invalid phone number");
     if (!message) throw new Error("Message is empty");
-    if (message.length > 160) {
-      throw new Error("SMS is limited to 160 characters");
+    if (message.length > MMS_TEXT_MAX) {
+      throw new Error(`Message is limited to ${MMS_TEXT_MAX} characters`);
     }
 
-    const { smsId } = await sendSms({ did, dst: contact, message });
-    const voipmsId = String(smsId);
+    const useMms = message.length > SMS_SEGMENT_MAX;
+    let voipmsId: string;
+    if (useMms) {
+      const { mmsId } = await sendMms({ did, dst: contact, message });
+      voipmsId = String(mmsId);
+    } else {
+      const { smsId } = await sendSms({ did, dst: contact, message });
+      voipmsId = String(smsId);
+    }
     const sentAt = Date.now();
 
     await ctx.runMutation(internal.sms.upsertMessageInternal, {
@@ -299,7 +309,7 @@ export const sendMessage = action({
       did,
       contact,
       direction: "out",
-      type: "sms",
+      type: useMms ? "mms" : "sms",
       body: message,
       sentAt,
       status: "sent",

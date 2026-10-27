@@ -15,6 +15,10 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import {
+  MMS_TEXT_MAX,
+  messageLengthLabel,
+} from "@/lib/messageLimits";
 import type { SmsMessage, SmsThread } from "@/lib/types";
 import { MessageBubbleSkeleton } from "@/components/loading/skeletons";
 import { Button } from "@/components/ui/button";
@@ -137,8 +141,8 @@ export function ConversationView({
   const handleSend = async () => {
     const text = draft.trim();
     if (!text || sending) return;
-    if (text.length > 160) {
-      toast.error("SMS is limited to 160 characters");
+    if (text.length > MMS_TEXT_MAX) {
+      toast.error(`Message is limited to ${MMS_TEXT_MAX} characters`);
       return;
     }
     setSending(true);
@@ -163,7 +167,7 @@ export function ConversationView({
     try {
       const result = await rewriteDraft({ text });
       const previous = draft;
-      setDraft(result.text.slice(0, 160));
+      setDraft(result.text.slice(0, MMS_TEXT_MAX));
       toast.success("Draft rewritten", {
         action: {
           label: "Undo",
@@ -415,7 +419,7 @@ export function ConversationView({
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Text message"
             rows={1}
-            maxLength={160}
+            maxLength={MMS_TEXT_MAX}
             className="max-h-28 min-h-[44px] flex-1 resize-none py-2.5 text-base"
             disabled={rewriting}
             onTouchStart={() => focusComposerWithoutScroll()}
@@ -476,7 +480,7 @@ export function ConversationView({
           </Button>
         </div>
         <p className="mx-auto mt-1 max-w-2xl text-[11px] text-muted-foreground">
-          {draft.length}/160
+          {messageLengthLabel(draft.length)}
           {rewriting ? " · Rewriting…" : " · Wand rewrites with Groq"}
         </p>
       </div>

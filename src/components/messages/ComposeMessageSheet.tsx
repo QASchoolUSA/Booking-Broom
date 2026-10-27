@@ -6,6 +6,10 @@ import { api } from "convex/_generated/api";
 import { toast } from "sonner";
 import { MagicWand, PaperPlaneTilt } from "@phosphor-icons/react";
 import type { SmsDid } from "@/lib/types";
+import {
+  MMS_TEXT_MAX,
+  messageLengthLabel,
+} from "@/lib/messageLimits";
 import { didDisplayLabel } from "@/lib/smsLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,7 +74,7 @@ export function ComposeMessageSheet({
     try {
       const result = await rewriteDraft({ text });
       const previous = body;
-      setBody(result.text.slice(0, 160));
+      setBody(result.text.slice(0, MMS_TEXT_MAX));
       toast.success("Draft rewritten", {
         action: {
           label: "Undo",
@@ -91,8 +95,8 @@ export function ComposeMessageSheet({
       toast.error("Enter a message");
       return;
     }
-    if (message.length > 160) {
-      toast.error("SMS is limited to 160 characters");
+    if (message.length > MMS_TEXT_MAX) {
+      toast.error(`Message is limited to ${MMS_TEXT_MAX} characters`);
       return;
     }
     setSending(true);
@@ -176,13 +180,13 @@ export function ComposeMessageSheet({
               onChange={(e) => setBody(e.target.value)}
               placeholder="Type your message…"
               rows={4}
-              maxLength={160}
+              maxLength={MMS_TEXT_MAX}
               className="min-h-[96px] resize-none text-base md:text-sm"
               disabled={rewriting}
             />
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] text-muted-foreground">
-                {body.length}/160
+                {messageLengthLabel(body.length)}
               </p>
               <Button
                 type="button"

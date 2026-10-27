@@ -71,8 +71,16 @@ export function SiteSeoCard({
   keywordSort: keywordSortProp,
   onKeywordSortChange,
 }: SiteSeoCardProps) {
-  const { site, metrics, delta, property_status, crawl_issues, page_scan, top_queries } =
-    row;
+  const {
+    site,
+    metrics,
+    delta,
+    property_status,
+    crawl_issues,
+    index_coverage,
+    page_scan,
+    top_queries,
+  } = row;
   const updateBingProperty = useMutation(api.bing.updateBingProperty);
   const scanSite = useAction(api.seoScanActions.scanSite);
   const [editing, setEditing] = useState(false);
@@ -421,6 +429,30 @@ export function SiteSeoCard({
           ) : (
             <p className="mt-1.5 text-xs text-muted-foreground">
               No keyword data yet — Sync now
+            </p>
+          )}
+        </div>
+      )}
+
+      {source === "google" && index_coverage && !notInConsole && (
+        <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2">
+          <p className="text-xs font-medium text-foreground">
+            Indexed{" "}
+            <span className="tabular-nums">
+              {formatNumber(index_coverage.indexed_count)} /{" "}
+              {formatNumber(index_coverage.total_pages)}
+            </span>{" "}
+            (
+            <span className="tabular-nums">
+              {index_coverage.percent_indexed.toFixed(0)}%
+            </span>
+            )
+          </p>
+          {index_coverage.partial && (
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Partial — inspected {formatNumber(index_coverage.inspected_count)} of{" "}
+              {formatNumber(index_coverage.total_pages)}
+              {index_coverage.detail ? ` · ${index_coverage.detail}` : ""}
             </p>
           )}
         </div>

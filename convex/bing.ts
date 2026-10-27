@@ -196,6 +196,7 @@ export const listMetrics = query({
               synced_at: new Date(crawl.syncedAt).toISOString(),
             }
           : null,
+        index_coverage: null,
         page_scan: pageScan
           ? {
               scanned_url: pageScan.scannedUrl,

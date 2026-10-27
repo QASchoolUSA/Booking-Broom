@@ -136,6 +136,11 @@ export const listMetrics = query({
         .withIndex("by_site", (q) => q.eq("siteId", site._id))
         .unique();
 
+      const indexCoverage = await ctx.db
+        .query("siteIndexCoverage")
+        .withIndex("by_site", (q) => q.eq("siteId", site._id))
+        .unique();
+
       const queryDoc = await ctx.db
         .query("siteSearchQueries")
         .withIndex("by_site_period", (q) =>
@@ -181,6 +186,20 @@ export const listMetrics = query({
           ? sortSeoQueries(queryDoc.queries)
           : null,
         crawl_issues: null,
+        index_coverage: indexCoverage
+          ? {
+              total_pages: indexCoverage.totalPages,
+              indexed_count: indexCoverage.indexedCount,
+              not_indexed_count: indexCoverage.notIndexedCount,
+              inspected_count: indexCoverage.inspectedCount,
+              intentional_noindex_skipped:
+                indexCoverage.intentionalNoindexSkipped,
+              percent_indexed: indexCoverage.percentIndexed,
+              partial: indexCoverage.partial,
+              detail: indexCoverage.detail ?? null,
+              synced_at: new Date(indexCoverage.syncedAt).toISOString(),
+            }
+          : null,
         page_scan: pageScan
           ? {
               scanned_url: pageScan.scannedUrl,
@@ -239,6 +258,11 @@ export const disconnect = mutation({
     const statuses = await ctx.db.query("siteSearchPropertyStatus").collect();
     for (const s of statuses) {
       if (s.source === "google") await ctx.db.delete(s._id);
+    }
+
+    const coverage = await ctx.db.query("siteIndexCoverage").collect();
+    for (const c of coverage) {
+      await ctx.db.delete(c._id);
     }
   },
 });
@@ -470,6 +494,50 @@ export const upsertQueries = internalMutation({
   },
 });
 
+export const upsertIndexCoverage = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+    gscPropertyUrl: v.string(),
+    totalPages: v.number(),
+    indexedCount: v.number(),
+    notIndexedCount: v.number(),
+    inspectedCount: v.number(),
+    intentionalNoindexSkipped: v.number(),
+    percentIndexed: v.number(),
+    partial: v.boolean(),
+    detail: v.optional(v.string()),
+    syncedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("siteIndexCoverage")
+      .withIndex("by_site", (q) => q.eq("siteId", args.siteId))
+      .unique();
+
+    const fields = {
+      gscPropertyUrl: args.gscPropertyUrl,
+      totalPages: args.totalPages,
+      indexedCount: args.indexedCount,
+      notIndexedCount: args.notIndexedCount,
+      inspectedCount: args.inspectedCount,
+      intentionalNoindexSkipped: args.intentionalNoindexSkipped,
+      percentIndexed: args.percentIndexed,
+      partial: args.partial,
+      detail: args.detail,
+      syncedAt: args.syncedAt,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, fields);
+      return existing._id;
+    }
+    return await ctx.db.insert("siteIndexCoverage", {
+      siteId: args.siteId,
+      ...fields,
+    });
+  },
+});
+
 export const upsertPropertyStatus = internalMutation({
   args: {
     siteId: v.id("sites"),
@@ -520,6 +588,12 @@ export const clearSiteMetrics = internalMutation({
       .withIndex("by_site_period", (q) => q.eq("siteId", args.siteId))
       .collect();
     for (const q of queries) await ctx.db.delete(q._id);
+
+    const coverage = await ctx.db
+      .query("siteIndexCoverage")
+      .withIndex("by_site", (q) => q.eq("siteId", args.siteId))
+      .collect();
+    for (const c of coverage) await ctx.db.delete(c._id);
   },
 });
 

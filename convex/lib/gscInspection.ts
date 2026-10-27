@@ -32,3 +32,25 @@ export function parseSitemapLocs(xml: string): string[] {
   }
   return locs;
 }
+
+/** Google URL Inspection `verdict` — PASS means indexed / indexable success. */
+export function isIndexedVerdict(verdict?: string | null): boolean {
+  return verdict === "PASS";
+}
+
+/** Aggregate inspection results into coverage counts. */
+export function summarizeIndexCoverage(results: { ok: boolean; verdict?: string }[]): {
+  indexedCount: number;
+  notIndexedCount: number;
+  inspectedCount: number;
+  percentIndexed: number;
+} {
+  const inspectedCount = results.length;
+  const indexedCount = results.filter(
+    (r) => r.ok && isIndexedVerdict(r.verdict)
+  ).length;
+  const notIndexedCount = inspectedCount - indexedCount;
+  const percentIndexed =
+    inspectedCount > 0 ? (indexedCount / inspectedCount) * 100 : 0;
+  return { indexedCount, notIndexedCount, inspectedCount, percentIndexed };
+}

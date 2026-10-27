@@ -345,6 +345,25 @@ export default defineSchema({
     syncedAt: v.number(),
   }).index("by_site_source", ["siteId", "source"]),
 
+  /**
+   * GSC URL Inspection coverage summary per site (from sitemap inspection).
+   * totalPages = eligible sitemap URLs (intentional noindex excluded).
+   * percentIndexed uses inspectedCount as denominator until a full run finishes.
+   */
+  siteIndexCoverage: defineTable({
+    siteId: v.id("sites"),
+    gscPropertyUrl: v.string(),
+    totalPages: v.number(),
+    indexedCount: v.number(),
+    notIndexedCount: v.number(),
+    inspectedCount: v.number(),
+    intentionalNoindexSkipped: v.number(),
+    percentIndexed: v.number(),
+    partial: v.boolean(),
+    detail: v.optional(v.string()),
+    syncedAt: v.number(),
+  }).index("by_site", ["siteId"]),
+
   /** Singleton row tracking the last Bing Webmaster sync. */
   bingSyncState: defineTable({
     lastSyncAt: v.optional(v.number()),

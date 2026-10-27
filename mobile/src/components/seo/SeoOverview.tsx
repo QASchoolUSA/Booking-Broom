@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import {
+  CheckCircle2,
   Eye,
+  Files,
   Hash,
   MousePointerClick,
   Percent,
@@ -24,10 +26,21 @@ type Delta = {
   position: number;
 };
 
+export type SeoIndexCoverage = {
+  total_pages: number;
+  indexed_count: number;
+  not_indexed_count: number;
+  inspected_count: number;
+  percent_indexed: number;
+  partial: boolean;
+  detail?: string | null;
+};
+
 export type SeoMetricRow = {
   site: { slug: string; name: string };
   metrics: Metric | null;
   delta?: Delta | null;
+  index_coverage?: SeoIndexCoverage | null;
   top_queries?: {
     query: string;
     clicks: number;
@@ -88,12 +101,14 @@ function deltaColor(
 type Props = {
   rows: SeoMetricRow[];
   showPosition?: boolean;
+  showIndexCoverage?: boolean;
   periodLabel?: string;
 };
 
 export function SeoOverview({
   rows,
   showPosition = true,
+  showIndexCoverage = false,
   periodLabel = "28d",
 }: Props) {
   const { colors } = useTheme();
@@ -157,6 +172,23 @@ export function SeoOverview({
       }
     }
 
+    const withCoverage = rows.filter((r) => r.index_coverage);
+    const totalIndexed = withCoverage.reduce(
+      (s, r) => s + (r.index_coverage?.indexed_count ?? 0),
+      0
+    );
+    const totalPages = withCoverage.reduce(
+      (s, r) => s + (r.index_coverage?.total_pages ?? 0),
+      0
+    );
+    const totalInspected = withCoverage.reduce(
+      (s, r) => s + (r.index_coverage?.inspected_count ?? 0),
+      0
+    );
+    const fleetPercent =
+      totalInspected > 0 ? (totalIndexed / totalInspected) * 100 : 0;
+    const anyPartial = withCoverage.some((r) => r.index_coverage?.partial);
+
     return {
       sitesWithData: withMetrics.length,
       stats: [
@@ -206,8 +238,28 @@ export function SeoOverview({
             ]
           : []),
       ],
+      indexStats:
+        showIndexCoverage && withCoverage.length > 0
+          ? [
+              {
+                label: "Indexed",
+                value: formatNumber(totalIndexed),
+                Icon: CheckCircle2,
+              },
+              {
+                label: "Total pages",
+                value: formatNumber(totalPages),
+                Icon: Files,
+              },
+              {
+                label: anyPartial ? "% indexed (partial)" : "% indexed",
+                value: `${fleetPercent.toFixed(0)}%`,
+                Icon: Percent,
+              },
+            ]
+          : [],
     };
-  }, [rows, showPosition]);
+  }, [rows, showPosition, showIndexCoverage]);
 
   if (rows.length === 0) return null;
 
@@ -253,6 +305,25 @@ export function SeoOverview({
           )
         )}
       </View>
+      {overview.indexStats.length > 0 ? (
+        <View style={styles.grid}>
+          {overview.indexStats.map(({ label, value, Icon }) => (
+            <Card key={label} style={styles.statCard}>
+              <View
+                style={[styles.iconWrap, { backgroundColor: colors.muted }]}
+              >
+                <Icon size={18} color={colors.primary} />
+              </View>
+              <AppText weight="bold" size={22} style={styles.value}>
+                {value}
+              </AppText>
+              <AppText muted size={12} style={{ marginTop: 4 }}>
+                {label}
+              </AppText>
+            </Card>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
