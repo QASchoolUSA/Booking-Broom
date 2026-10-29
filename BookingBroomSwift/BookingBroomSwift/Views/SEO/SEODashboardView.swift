@@ -154,9 +154,6 @@ public struct SEODashboardView: View {
             }
             .padding(AppSpacing.md)
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            EmptyView()
-        }
     }
 
     // MARK: - Shared blocks
