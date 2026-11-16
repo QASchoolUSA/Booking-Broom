@@ -3,16 +3,18 @@
  */
 
 /**
- * Celebration city×service pages are intentionally noindex and must not be
+ * City×service matrix pages that are intentionally noindex must not be
  * treated as indexing failures. City hubs (`/cleaning-services/{city}`) stay.
  */
+const MATRIX_CITY_SERVICE_NOINDEX = new Set(["celebration", "lakeland"]);
+
 export function isIntentionalNoindexUrl(
   url: string,
   siteSlug?: string
 ): boolean {
   try {
     const path = new URL(url).pathname.replace(/\/+$/, "") || "/";
-    if (siteSlug === "celebration") {
+    if (MATRIX_CITY_SERVICE_NOINDEX.has(siteSlug ?? "")) {
       return /^\/cleaning-services\/[^/]+\/[^/]+$/.test(path);
     }
     return false;

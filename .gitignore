@@ -44,6 +44,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Local jev-seo clone + raw audit runs (API keys may live under here)
+.tmp-jev-seo/
+
 # vercel
 .vercel
 

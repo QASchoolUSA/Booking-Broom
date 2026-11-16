@@ -10,7 +10,7 @@ import {
 } from "./gscInspection";
 
 describe("isIntentionalNoindexUrl", () => {
-  it("flags celebration city×service paths only", () => {
+  it("flags celebration and lakeland city×service paths", () => {
     assert.equal(
       isIntentionalNoindexUrl(
         "https://celebrationcleaning.com/cleaning-services/orlando/deep-cleaning",
@@ -20,8 +20,22 @@ describe("isIntentionalNoindexUrl", () => {
     );
     assert.equal(
       isIntentionalNoindexUrl(
+        "https://cleaninglakeland.com/cleaning-services/lakeland/deep-cleaning",
+        "lakeland"
+      ),
+      true
+    );
+    assert.equal(
+      isIntentionalNoindexUrl(
         "https://celebrationcleaning.com/cleaning-services/orlando",
         "celebration"
+      ),
+      false
+    );
+    assert.equal(
+      isIntentionalNoindexUrl(
+        "https://cleaninglakeland.com/cleaning-services/lakeland",
+        "lakeland"
       ),
       false
     );
