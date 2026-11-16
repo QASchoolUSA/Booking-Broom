@@ -72,6 +72,61 @@ export const bookingAttribution = v.object({
 /** Whether the customer asked to book or was only price shopping. */
 export const bookingIntent = v.union(v.literal("quote"), v.literal("book"));
 
+/** Jev (TypeSafe System One) judgments on a booking or partial lead. */
+export const leadJevScore = v.object({
+  hotness: v.optional(v.number()),
+  hotnessConfidence: v.optional(v.number()),
+  urgency: v.optional(
+    v.union(
+      v.literal("today"),
+      v.literal("this_week"),
+      v.literal("flexible"),
+      v.literal("unknown")
+    )
+  ),
+  urgencyConfidence: v.optional(v.number()),
+  isSpamOrBot: v.optional(v.number()),
+  isVendorOffer: v.optional(v.number()),
+  jobFit: v.optional(v.number()),
+  valueBand: v.optional(
+    v.union(
+      v.literal("small"),
+      v.literal("standard"),
+      v.literal("large"),
+      v.literal("unknown")
+    )
+  ),
+  valueBandConfidence: v.optional(v.number()),
+  /** Partial leads only — worth chasing. */
+  recoverability: v.optional(v.number()),
+  recoverabilityConfidence: v.optional(v.number()),
+  bestChannel: v.optional(
+    v.union(
+      v.literal("call"),
+      v.literal("sms"),
+      v.literal("email"),
+      v.literal("none")
+    )
+  ),
+  bestChannelConfidence: v.optional(v.number()),
+  /** Decisive junk: spam/bot or vendor pitch (computed in code). */
+  isJunk: v.optional(v.boolean()),
+  /** Decisive hot lead (computed in code). */
+  isHot: v.optional(v.boolean()),
+  model: v.optional(v.string()),
+  scoredAt: v.number(),
+});
+
+export const emailJevBucket = v.union(
+  v.literal("reply_today"),
+  v.literal("booking_related"),
+  v.literal("vendor"),
+  v.literal("newsletter"),
+  v.literal("spam"),
+  v.literal("noise"),
+  v.literal("unknown")
+);
+
 export const reminderStatus = v.union(
   v.literal("pending"),
   v.literal("sent"),
@@ -148,6 +203,8 @@ export default defineSchema({
     telegramNotifiedAt: v.optional(v.number()),
     /** Soft-archive timestamp; active lists exclude docs where this is set. */
     archivedAt: v.optional(v.number()),
+    /** Jev lead judgments (async after createPublic). */
+    jev: v.optional(leadJevScore),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -188,6 +245,8 @@ export default defineSchema({
     pushNotifiedAt: v.optional(v.number()),
     /** Idempotent Telegram claim. */
     telegramNotifiedAt: v.optional(v.number()),
+    /** Jev lead / recovery judgments (async after first upsert). */
+    jev: v.optional(leadJevScore),
   })
     .index("by_site_session", ["siteId", "sessionKey"])
     .index("by_site_updated", ["siteId", "updatedAt"])
@@ -648,6 +707,12 @@ export default defineSchema({
     lastSnippet: v.string(),
     unreadCount: v.number(),
     messageCount: v.number(),
+    /** Jev inbox triage bucket. */
+    jevBucket: v.optional(emailJevBucket),
+    jevBucketConfidence: v.optional(v.number()),
+    jevNeedsReply: v.optional(v.number()),
+    jevIsSpam: v.optional(v.boolean()),
+    jevScoredAt: v.optional(v.number()),
   })
     .index("by_mailbox_and_lastMessageAt", ["mailboxId", "lastMessageAt"])
     .index("by_mailbox_and_threadKey", ["mailboxId", "threadKey"]),

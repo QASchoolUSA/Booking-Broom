@@ -13,7 +13,10 @@ import {
 import { usePageVisible } from "@/lib/hooks/usePageVisible";
 import { useShellPage } from "@/components/layout/ShellChromeContext";
 import { MailboxSidebar } from "@/components/email/MailboxSidebar";
-import { MailboxFilterChips } from "@/components/email/MailboxFilterChips";
+import {
+  ALL_MAILBOXES_ID,
+  MailboxFilterChips,
+} from "@/components/email/MailboxFilterChips";
 import { EmailSyncBanner } from "@/components/email/EmailSyncBanner";
 import { EmailThreadList } from "@/components/email/EmailThreadList";
 import { EmailMessageSkeleton } from "@/components/loading/skeletons";
@@ -66,9 +69,9 @@ function writeStoredMailboxId(id: string) {
 function pickDefaultMailbox(mailboxes: EmailMailbox[]): string | null {
   if (mailboxes.length === 0) return null;
   const stored = readStoredMailboxId();
+  if (stored === ALL_MAILBOXES_ID) return ALL_MAILBOXES_ID;
   if (stored && mailboxes.some((m) => m.id === stored)) return stored;
-  const withUnread = mailboxes.find((m) => m.unread_count > 0);
-  return withUnread?.id ?? mailboxes[0]!.id;
+  return ALL_MAILBOXES_ID;
 }
 
 export default function EmailPage() {
@@ -82,6 +85,7 @@ export default function EmailPage() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [hideSpam, setHideSpam] = useState(true);
   const isMobile = useIsMobileMd();
 
   const syncState = useQuery(
@@ -117,18 +121,28 @@ export default function EmailPage() {
     setSelectedThreadId(null);
   };
 
+  const viewingAllMailboxes = selectedMailboxId === ALL_MAILBOXES_ID;
   const activeMailbox = useMemo(
-    () => mailboxes.find((m) => m.id === selectedMailboxId) ?? null,
-    [mailboxes, selectedMailboxId]
+    () =>
+      viewingAllMailboxes
+        ? null
+        : (mailboxes.find((m) => m.id === selectedMailboxId) ?? null),
+    [mailboxes, selectedMailboxId, viewingAllMailboxes]
   );
 
   const threadsRaw = useQuery(
     api.email.listThreads,
     live && selectedMailboxId
-      ? { mailboxId: selectedMailboxId as Id<"emailMailboxes"> }
+      ? viewingAllMailboxes
+        ? { hideSpam }
+        : {
+            mailboxId: selectedMailboxId as Id<"emailMailboxes">,
+            hideSpam,
+          }
       : "skip"
   );
   const threads = (threadsRaw ?? []) as EmailThread[];
+  const totalUnread = mailboxes.reduce((sum, m) => sum + m.unread_count, 0);
 
   const selectedThread = useMemo(
     () =>
@@ -137,6 +151,12 @@ export default function EmailPage() {
         : null,
     [threads, selectedThreadId]
   );
+
+  const composeMailboxId =
+    activeMailbox?.id ??
+    selectedThread?.mailbox_id ??
+    mailboxes[0]?.id ??
+    null;
 
   const messagesRaw = useQuery(
     api.email.listMessages,
@@ -152,8 +172,9 @@ export default function EmailPage() {
     : false;
   const mobileInThread = Boolean(selectedThreadId);
   const iosChatShell = isMobile && mobileInThread;
-  const siteLabel =
-    activeMailbox?.site_name || activeMailbox?.email || "Email";
+  const siteLabel = viewingAllMailboxes
+    ? "All mailboxes"
+    : activeMailbox?.site_name || activeMailbox?.email || "Email";
 
   useChatVisualViewport(iosChatShell);
 
@@ -191,12 +212,22 @@ export default function EmailPage() {
                 </h2>
               </div>
               <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                {activeMailbox
-                  ? activeMailbox.email
-                  : "Select a site mailbox to read and reply"}
+                {viewingAllMailboxes
+                  ? "Recent threads across every connected site"
+                  : activeMailbox
+                    ? activeMailbox.email
+                    : "Select a site mailbox to read and reply"}
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
+              <Button
+                type="button"
+                variant={hideSpam ? "default" : "outline"}
+                size="sm"
+                onClick={() => setHideSpam((v) => !v)}
+              >
+                {hideSpam ? "Spam hidden" : "Showing spam"}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -210,7 +241,7 @@ export default function EmailPage() {
                 size="sm"
                 className="gap-1.5"
                 onClick={() => setComposeOpen(true)}
-                disabled={!selectedMailboxId}
+                disabled={!composeMailboxId}
               >
                 <Plus size={16} weight="bold" />
                 New email
@@ -220,7 +251,7 @@ export default function EmailPage() {
           <EmailSyncBanner
             syncState={syncState}
             hasMailboxes={mailboxes.length > 0}
-            mailboxId={selectedMailboxId}
+            mailboxId={viewingAllMailboxes ? null : selectedMailboxId}
             onConnect={() => setConnectOpen(true)}
           />
         </div>
@@ -246,7 +277,9 @@ export default function EmailPage() {
                   <EmailSyncBanner
                     syncState={syncState}
                     hasMailboxes={mailboxes.length > 0}
-                    mailboxId={selectedMailboxId}
+                    mailboxId={
+                      viewingAllMailboxes ? null : selectedMailboxId
+                    }
                     onConnect={() => setConnectOpen(true)}
                     compact
                     className="min-w-0 flex-1"
@@ -256,7 +289,7 @@ export default function EmailPage() {
                     size="icon"
                     className="h-9 w-9 shrink-0"
                     onClick={() => setComposeOpen(true)}
-                    disabled={!selectedMailboxId}
+                    disabled={!composeMailboxId}
                     aria-label="New email"
                   >
                     <Plus size={18} weight="bold" />
@@ -266,15 +299,25 @@ export default function EmailPage() {
                   mailboxes={mailboxes}
                   selectedMailboxId={selectedMailboxId}
                   onSelect={selectMailbox}
+                  totalUnread={totalUnread}
                 />
+                <button
+                  type="button"
+                  className="text-left text-[11px] font-medium text-muted-foreground underline-offset-2 hover:underline md:hidden"
+                  onClick={() => setHideSpam((v) => !v)}
+                >
+                  {hideSpam ? "Spam hidden — tap to show" : "Showing spam — tap to hide"}
+                </button>
               </div>
 
               <div className="hidden shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-2.5 md:flex">
                 <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Inbox
-                  {activeMailbox
-                    ? ` · ${activeMailbox.site_name || activeMailbox.email}`
-                    : ""}
+                  {viewingAllMailboxes
+                    ? " · All"
+                    : activeMailbox
+                      ? ` · ${activeMailbox.site_name || activeMailbox.email}`
+                      : ""}
                 </p>
                 <Button
                   type="button"
@@ -282,7 +325,7 @@ export default function EmailPage() {
                   size="sm"
                   className="h-8 gap-1 px-2 text-xs"
                   onClick={() => setComposeOpen(true)}
-                  disabled={!selectedMailboxId}
+                  disabled={!composeMailboxId}
                 >
                   <Plus size={14} weight="bold" />
                   New
@@ -294,7 +337,11 @@ export default function EmailPage() {
                   threads={threads}
                   selectedId={selectedThreadId}
                   loading={threadsLoading}
-                  siteName={activeMailbox?.site_name || activeMailbox?.email}
+                  siteName={
+                    viewingAllMailboxes
+                      ? "All mailboxes"
+                      : activeMailbox?.site_name || activeMailbox?.email
+                  }
                   onSelect={(thread) => setSelectedThreadId(thread.id)}
                 />
               </div>
@@ -339,8 +386,8 @@ export default function EmailPage() {
         open={composeOpen}
         onOpenChange={setComposeOpen}
         mailboxes={mailboxes}
-        defaultMailboxId={selectedMailboxId}
-        lockMailbox
+        defaultMailboxId={composeMailboxId}
+        lockMailbox={!viewingAllMailboxes}
         onSent={(threadId) => {
           setSelectedThreadId(threadId);
         }}

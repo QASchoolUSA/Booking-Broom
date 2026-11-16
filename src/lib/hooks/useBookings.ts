@@ -14,6 +14,9 @@ export function useBookings(
   const { isLoading: authLoading, isAuthenticated } = useConvexAuth();
   const connectionState = useConnectionState();
   const includeArchived = options?.includeArchived === true;
+  // Fetch the full list (capped server-side). Client filters by siteSlug so
+  // SiteSwitcher counts still see every site. Pass siteSlug to bookings.list
+  // only from callers that do not need cross-site counts (e.g. Swift).
   const allBookingsRaw = useQuery(
     api.bookings.list,
     isAuthenticated

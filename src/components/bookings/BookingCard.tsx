@@ -5,6 +5,7 @@ import { CalendarBlank, House, MapPin, Phone, User } from "@phosphor-icons/react
 import type { BookingQuote, BookingWithSite } from "@/lib/types";
 import { SiteBadge } from "@/components/bookings/SiteBadge";
 import { StatusBadge } from "@/components/bookings/StatusBadge";
+import { JevBadge } from "@/components/bookings/JevBadge";
 import { formatMoney, resolveBookingDetails } from "@/lib/booking-details";
 import { cn } from "@/lib/utils";
 
@@ -81,6 +82,7 @@ export function BookingCard({ booking, onSelect, className }: BookingCardProps) 
                 Quote only
               </span>
             )}
+            <JevBadge jev={booking.jev} />
           </div>
 
           <div>

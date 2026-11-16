@@ -82,6 +82,27 @@ function mapPartialLead(doc: Doc<"partialLeads">, site?: Doc<"sites">) {
       : null,
     intent: doc.intent ?? null,
     last_step: doc.lastStep ?? null,
+    jev: doc.jev
+      ? {
+          hotness: doc.jev.hotness ?? null,
+          hotness_confidence: doc.jev.hotnessConfidence ?? null,
+          urgency: doc.jev.urgency ?? null,
+          urgency_confidence: doc.jev.urgencyConfidence ?? null,
+          is_spam_or_bot: doc.jev.isSpamOrBot ?? null,
+          is_vendor_offer: doc.jev.isVendorOffer ?? null,
+          job_fit: doc.jev.jobFit ?? null,
+          value_band: doc.jev.valueBand ?? null,
+          value_band_confidence: doc.jev.valueBandConfidence ?? null,
+          recoverability: doc.jev.recoverability ?? null,
+          recoverability_confidence: doc.jev.recoverabilityConfidence ?? null,
+          best_channel: doc.jev.bestChannel ?? null,
+          best_channel_confidence: doc.jev.bestChannelConfidence ?? null,
+          is_junk: doc.jev.isJunk ?? null,
+          is_hot: doc.jev.isHot ?? null,
+          model: doc.jev.model ?? null,
+          scored_at: new Date(doc.jev.scoredAt).toISOString(),
+        }
+      : null,
     converted_at: doc.convertedAt
       ? new Date(doc.convertedAt).toISOString()
       : null,
@@ -197,45 +218,11 @@ export const upsertPublic = mutation({
       createdAt: now,
     });
 
-    const customerName =
-      fields.customerName ||
-      fields.email ||
-      fields.phone ||
-      "Unknown visitor";
-
+    // Score with Jev (async) then notify — keeps marketing sites fast.
     await ctx.scheduler.runAfter(
       0,
-      internal.pushActions.notifyNewBookingInternal,
-      {
-        siteSlug: args.siteSlug,
-        customerName,
-        serviceType: fields.serviceType,
-        kind: "abandoned",
-        intent: args.intent,
-        leadId: id,
-      }
-    );
-
-    await ctx.scheduler.runAfter(
-      0,
-      internal.telegramActions.notifyNewBookingInternal,
-      {
-        siteSlug: args.siteSlug,
-        customerName,
-        email: fields.email,
-        phone: fields.phone,
-        address: fields.address,
-        serviceType: fields.serviceType,
-        preferredDate: fields.preferredDate,
-        preferredTime: fields.preferredTime,
-        notes: fields.notes,
-        intent: args.intent,
-        quoteEstimate: args.quote?.estimate,
-        quoteCurrency: args.quote?.currency,
-        quoteFrequency: args.quote?.frequency,
-        kind: "abandoned",
-        leadId: id,
-      }
+      internal.jevActions.scorePartialLeadAndNotifyInternal,
+      { leadId: id }
     );
 
     return { id, converted: false as const };
@@ -337,6 +324,122 @@ export const get = query({
     if (!lead) return null;
     const site = await ctx.db.get(lead.siteId);
     return mapPartialLead(lead, site ?? undefined);
+  },
+});
+
+/**
+ * Abandoned leads worth recovering — non-converted, has contact, not Jev junk.
+ * Sorted by recoverability × quote estimate (unscored last).
+ */
+export const listRecovery = query({
+  args: {
+    siteSlug: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    /** When false, include unscored leads (default true hides only decisive junk). */
+    hideJunk: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 100);
+    const hideJunk = args.hideJunk !== false;
+
+    let siteId: Id<"sites"> | undefined;
+    if (args.siteSlug) {
+      const site = await ctx.db
+        .query("sites")
+        .withIndex("by_slug", (q) => q.eq("slug", args.siteSlug!))
+        .unique();
+      if (!site) return [];
+      siteId = site._id;
+    }
+
+    const rows = siteId
+      ? await ctx.db
+          .query("partialLeads")
+          .withIndex("by_site_updated", (q) => q.eq("siteId", siteId!))
+          .order("desc")
+          .take(200)
+      : await ctx.db
+          .query("partialLeads")
+          .withIndex("by_updated")
+          .order("desc")
+          .take(200);
+
+    const candidates = rows.filter((r) => {
+      if (r.convertedAt != null) return false;
+      const hasContact =
+        Boolean(r.email?.trim()) || Boolean(r.phone?.trim());
+      if (!hasContact) return false;
+      if (hideJunk && r.jev?.isJunk === true) return false;
+      if (r.jev?.bestChannel === "none" && (r.jev.bestChannelConfidence ?? 0) >= 0.8) {
+        return false;
+      }
+      return true;
+    });
+
+    const ranked = candidates
+      .map((r) => {
+        const recover = r.jev?.recoverability ?? 0.35;
+        const estimate =
+          r.quote?.estimate ??
+          r.quote?.estimateHigh ??
+          r.quote?.estimateLow ??
+          0;
+        const rank = recover * (1 + Math.min(estimate, 2000) / 2000);
+        return { r, rank };
+      })
+      .sort((a, b) => b.rank - a.rank)
+      .slice(0, limit)
+      .map(({ r }) => r);
+
+    const siteIds = [...new Set(ranked.map((r) => r.siteId))];
+    const siteEntries = await Promise.all(
+      siteIds.map(async (id) => {
+        const site = await ctx.db.get(id);
+        return site ? ([id, site] as const) : null;
+      }),
+    );
+    const siteMap = new Map(
+      siteEntries.filter((e): e is NonNullable<typeof e> => e != null),
+    );
+
+    return ranked.map((lead) =>
+      mapPartialLead(lead, siteMap.get(lead.siteId)),
+    );
+  },
+});
+
+/** Queue Jev scoring for unscored recovery candidates (manager-triggered). */
+export const enqueueRecoveryScoring = mutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const limit = Math.min(Math.max(args.limit ?? 20, 1), 40);
+    const rows = await ctx.db
+      .query("partialLeads")
+      .withIndex("by_updated")
+      .order("desc")
+      .take(120);
+
+    let queued = 0;
+    for (const r of rows) {
+      if (queued >= limit) break;
+      if (r.convertedAt != null || r.jev) continue;
+      const hasContact =
+        Boolean(r.email?.trim()) || Boolean(r.phone?.trim());
+      if (!hasContact) continue;
+      await ctx.scheduler.runAfter(
+        0,
+        internal.jevActions.scorePartialLeadInternal,
+        { leadId: r._id },
+      );
+      queued += 1;
+    }
+    return { queued };
   },
 });
 

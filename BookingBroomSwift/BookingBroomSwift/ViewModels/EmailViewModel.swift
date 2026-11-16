@@ -5,7 +5,10 @@ import Observation
 @Observable
 public final class EmailViewModel {
     public var mailboxes: [EmailMailbox] = [] { didSet { totalUnreadCount = mailboxes.reduce(0) { $0 + $1.unreadCount } } }
+    /// `nil` means All mailboxes (merged inbox).
     public var selectedMailbox: EmailMailbox? = nil
+    public var viewingAllMailboxes: Bool = true
+    public var hideSpam: Bool = true
     public var threads: [EmailThread] = []
     public var activeThread: EmailThread? = nil
     public var activeMessages: [EmailMessage] = []
@@ -50,8 +53,8 @@ public final class EmailViewModel {
             return
         }
         if let last = lastLoadedAt, Date().timeIntervalSince(last) < seconds { return }
-        if let mb = selectedMailbox {
-            loadThreads(mailboxId: mb.id)
+        if viewingAllMailboxes || selectedMailbox != nil {
+            loadThreads(mailboxId: viewingAllMailboxes ? nil : selectedMailbox?.id)
         } else {
             loadMailboxes()
         }
@@ -67,6 +70,8 @@ public final class EmailViewModel {
         messagesLoadedAt = [:]
         mailboxes = []
         selectedMailbox = nil
+        viewingAllMailboxes = true
+        hideSpam = true
         threads = []
         activeThread = nil
         activeMessages = []
@@ -102,15 +107,20 @@ public final class EmailViewModel {
             let list = try await ConvexAPIService.shared.fetchEmailMailboxes()
             if list != mailboxes { mailboxes = list }
             syncError = nil
-            if let current = selectedMailbox, let refreshed = list.first(where: { $0.id == current.id }) {
+            if list.isEmpty {
+                selectedMailbox = nil
+                viewingAllMailboxes = true
+                threads = []
+            } else if viewingAllMailboxes {
+                selectedMailbox = nil
+                await loadThreadsAndWait(mailboxId: nil)
+            } else if let current = selectedMailbox, let refreshed = list.first(where: { $0.id == current.id }) {
                 selectedMailbox = refreshed
                 await loadThreadsAndWait(mailboxId: refreshed.id)
-            } else if let first = list.first {
-                selectedMailbox = first
-                await loadThreadsAndWait(mailboxId: first.id)
             } else {
+                viewingAllMailboxes = true
                 selectedMailbox = nil
-                threads = []
+                await loadThreadsAndWait(mailboxId: nil)
             }
             lastLoadedAt = Date()
         } catch let error as ConvexError where error.isCancelled {
@@ -124,34 +134,48 @@ public final class EmailViewModel {
     }
     
     public func selectMailbox(_ mailbox: EmailMailbox) {
-        guard selectedMailbox?.id != mailbox.id else { return }
+        if !viewingAllMailboxes, selectedMailbox?.id == mailbox.id { return }
+        viewingAllMailboxes = false
         selectedMailbox = mailbox
         threads = []
         loadThreads(mailboxId: mailbox.id)
     }
+
+    public func selectAllMailboxes() {
+        if viewingAllMailboxes, selectedMailbox == nil, !threads.isEmpty { return }
+        viewingAllMailboxes = true
+        selectedMailbox = nil
+        threads = []
+        loadThreads(mailboxId: nil)
+    }
     
-    public func loadThreads(mailboxId: String) {
+    public func loadThreads(mailboxId: String?) {
         Task { await loadThreadsAndWait(mailboxId: mailboxId) }
     }
     
-    /// Pull-to-refresh: reload the selected mailbox's threads from Convex (mailbox list if nothing is selected).
+    /// Pull-to-refresh: reload All or the selected mailbox.
     public func refreshCurrentMailboxAndWait() async {
-        if let mailboxId = selectedMailbox?.id {
-            await loadThreadsAndWait(mailboxId: mailboxId)
+        if viewingAllMailboxes || selectedMailbox != nil {
+            await loadThreadsAndWait(mailboxId: viewingAllMailboxes ? nil : selectedMailbox?.id)
         } else {
             await loadMailboxesAndWait()
         }
     }
     
-    public func loadThreadsAndWait(mailboxId: String) async {
+    public func loadThreadsAndWait(mailboxId: String?) async {
         threadsGeneration &+= 1
         let generation = threadsGeneration
         if threads.isEmpty { isLoading = true }
         do {
-            let tList = try await ConvexAPIService.shared.fetchEmailThreads(mailboxId: mailboxId)
-            guard generation == threadsGeneration, selectedMailbox?.id == mailboxId else { return }
+            let tList = try await ConvexAPIService.shared.fetchEmailThreads(
+                mailboxId: mailboxId,
+                hideSpam: hideSpam
+            )
+            let stillAll = mailboxId == nil && viewingAllMailboxes
+            let stillOne = mailboxId != nil && selectedMailbox?.id == mailboxId && !viewingAllMailboxes
+            guard generation == threadsGeneration, stillAll || stillOne else { return }
             if tList != threads { threads = tList }
-            threadsLoadedAt[mailboxId] = Date()
+            threadsLoadedAt[mailboxId ?? "__all__"] = Date()
             lastLoadedAt = Date()
         } catch let error as ConvexError where error.isCancelled {
             // superseded
@@ -189,7 +213,8 @@ public final class EmailViewModel {
             if let idx = threads.firstIndex(where: { $0.id == thread.id }) {
                 threads[idx].unreadCount = 0
             }
-            if let mb = selectedMailbox, let mbIdx = mailboxes.firstIndex(where: { $0.id == mb.id }) {
+            let mailboxId = selectedMailbox?.id ?? thread.mailboxId
+            if let mbIdx = mailboxes.firstIndex(where: { $0.id == mailboxId }) {
                 mailboxes[mbIdx].unreadCount = max(0, mailboxes[mbIdx].unreadCount - thread.unreadCount)
             }
             Task {

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -7,13 +7,15 @@ import { APP_URL } from "@/lib/app-url";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// Self-hosted to avoid next/font/google CI flakes when Google returns
+// extensionless /l/font?kit= URLs (Next 16.2.x crash in google/loader.js).
+const jakarta = localFont({
+  src: "./fonts/PlusJakartaSans-Variable.woff2",
   variable: "--font-jakarta",
   display: "swap",
+  weight: "400 700",
   preload: true,
-  adjustFontFallback: true,
+  adjustFontFallback: "Arial",
 });
 
 export const metadata: Metadata = {

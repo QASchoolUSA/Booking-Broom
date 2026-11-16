@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { X } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import type { EmailMailbox } from "@/lib/types";
+import { ALL_MAILBOXES_ID } from "@/components/email/MailboxFilterChips";
 
 interface MailboxSidebarProps {
   mailboxes: EmailMailbox[];
@@ -20,6 +21,9 @@ export function MailboxSidebar({
   onSelect,
 }: MailboxSidebarProps) {
   const disconnect = useAction(api.emailActions.disconnectMailbox);
+  const totalUnread = mailboxes.reduce((sum, m) => sum + m.unread_count, 0);
+  const allActive =
+    selectedMailboxId === ALL_MAILBOXES_ID || selectedMailboxId === null;
 
   const handleDisconnect = async (
     e: React.MouseEvent,
@@ -46,6 +50,25 @@ export function MailboxSidebar({
       <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Sites
       </p>
+      <button
+        type="button"
+        onClick={() => onSelect(ALL_MAILBOXES_ID)}
+        className={cn(
+          "relative flex w-full flex-col gap-0.5 rounded-lg py-2.5 pl-3.5 pr-3 text-left transition-colors",
+          allActive
+            ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+            : "text-sidebar-foreground hover:bg-muted/60"
+        )}
+      >
+        <span className="flex items-center gap-2 truncate text-sm font-semibold">
+          <span className="truncate">All mailboxes</span>
+          {totalUnread > 0 && (
+            <span className="ml-auto shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary-foreground">
+              {totalUnread > 99 ? "99+" : totalUnread}
+            </span>
+          )}
+        </span>
+      </button>
       {mailboxes.map((box) => {
         const active = selectedMailboxId === box.id;
         const unread = box.unread_count > 0;

@@ -122,6 +122,9 @@ function buildTelegramHtml(args: {
   notes?: string;
   money?: string;
   frequency?: string;
+  jevLabel?: string;
+  jevUrgency?: string;
+  jevQuiet?: boolean;
 }): string {
   const intentTitle =
     args.kind === "quote"
@@ -134,8 +137,23 @@ function buildTelegramHtml(args: {
   const customer = args.customerName.trim() || "—";
   const address = args.address?.trim();
 
+  const flags: string[] = [];
+  if (args.jevQuiet || args.jevLabel === "SPAM" || args.jevLabel === "VENDOR") {
+    flags.push(args.jevLabel === "VENDOR" ? "IGNORE · VENDOR" : "IGNORE · SPAM");
+  } else if (args.jevLabel === "HOT") {
+    flags.push("HOT");
+  }
+  if (
+    args.jevUrgency === "today" ||
+    args.jevUrgency === "this_week"
+  ) {
+    flags.push(args.jevUrgency === "today" ? "TODAY" : "THIS WEEK");
+  }
+
   const header = [
-    `<b>${escapeHtml(intentTitle)}</b>`,
+    flags.length > 0
+      ? `<b>${escapeHtml(flags.join(" · "))} · ${escapeHtml(intentTitle)}</b>`
+      : `<b>${escapeHtml(intentTitle)}</b>`,
     `<i>${escapeHtml(args.siteName)}</i>`,
   ].join("\n");
 
@@ -208,6 +226,9 @@ async function notifyNewBookingHandler(
     kind?: "quote" | "book" | "abandoned";
     /** Skip once-only claim (manager “Send to Telegram” / resend). */
     force?: boolean;
+    jevLabel?: string;
+    jevUrgency?: string;
+    jevQuiet?: boolean;
   },
 ): Promise<NotifyResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -279,6 +300,9 @@ async function notifyNewBookingHandler(
     notes: args.notes,
     money,
     frequency: args.quoteFrequency,
+    jevLabel: args.jevLabel,
+    jevUrgency: args.jevUrgency,
+    jevQuiet: args.jevQuiet,
   });
 
   const controller = new AbortController();
@@ -352,6 +376,9 @@ const notifyArgs = {
     v.union(v.literal("quote"), v.literal("book"), v.literal("abandoned")),
   ),
   force: v.optional(v.boolean()),
+  jevLabel: v.optional(v.string()),
+  jevUrgency: v.optional(v.string()),
+  jevQuiet: v.optional(v.boolean()),
 };
 
 /**

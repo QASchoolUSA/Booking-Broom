@@ -299,6 +299,8 @@ type NotifyBookingArgs = {
   leadId?: string;
   intent?: "quote" | "book";
   kind?: "quote" | "book" | "abandoned";
+  jevLabel?: string;
+  jevUrgency?: string;
 };
 
 function resolveNotifyKind(
@@ -411,7 +413,13 @@ async function notifyNewBookingHandler(
           ? `/bookings?site=${site.slug}`
           : "/bookings";
 
-  const title = `${kindTitleLabel(kind)} · ${siteName}`;
+  const flagParts: string[] = [];
+  if (args.jevLabel === "HOT") flagParts.push("HOT");
+  if (args.jevUrgency === "today") flagParts.push("TODAY");
+  else if (args.jevUrgency === "this_week") flagParts.push("THIS WEEK");
+  const titlePrefix =
+    flagParts.length > 0 ? `${flagParts.join(" · ")} · ` : "";
+  const title = `${titlePrefix}${kindTitleLabel(kind)} · ${siteName}`;
   const body =
     kind === "abandoned"
       ? `${customer} left before finishing — ${service}`
@@ -446,6 +454,8 @@ const notifyArgs = {
   kind: v.optional(
     v.union(v.literal("quote"), v.literal("book"), v.literal("abandoned"))
   ),
+  jevLabel: v.optional(v.string()),
+  jevUrgency: v.optional(v.string()),
 };
 
 /**

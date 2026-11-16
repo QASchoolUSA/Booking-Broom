@@ -322,6 +322,26 @@ export interface BookingAttribution {
 
 export type BookingIntent = "quote" | "book";
 
+export interface LeadJevScore {
+  hotness: number | null;
+  hotness_confidence: number | null;
+  urgency: "today" | "this_week" | "flexible" | "unknown" | null;
+  urgency_confidence: number | null;
+  is_spam_or_bot: number | null;
+  is_vendor_offer: number | null;
+  job_fit: number | null;
+  value_band: "small" | "standard" | "large" | "unknown" | null;
+  value_band_confidence: number | null;
+  recoverability: number | null;
+  recoverability_confidence: number | null;
+  best_channel: "call" | "sms" | "email" | "none" | null;
+  best_channel_confidence: number | null;
+  is_junk: boolean | null;
+  is_hot: boolean | null;
+  model: string | null;
+  scored_at: string;
+}
+
 export interface BookingQuote {
   estimate: number | null;
   estimate_low: number | null;
@@ -359,6 +379,7 @@ export interface Booking {
   quote: BookingQuote | null;
   attribution: BookingAttribution | null;
   intent: BookingIntent | null;
+  jev: LeadJevScore | null;
   /** ISO timestamp when a Telegram chat alert was sent (auto or manual). */
   telegram_notified_at: string | null;
   created_at: string;
@@ -510,6 +531,7 @@ export interface PartialLeadWithSite {
   attribution: BookingAttribution | null;
   intent: "quote" | "book" | null;
   last_step: string | null;
+  jev: LeadJevScore | null;
   converted_at: string | null;
   converted_booking_id: string | null;
   created_at: string;
@@ -600,6 +622,19 @@ export interface EmailThread {
   message_count: number;
   mailbox_email: string | null;
   site_name: string | null;
+  jev_bucket:
+    | "reply_today"
+    | "booking_related"
+    | "vendor"
+    | "newsletter"
+    | "spam"
+    | "noise"
+    | "unknown"
+    | null;
+  jev_bucket_confidence: number | null;
+  jev_needs_reply: number | null;
+  jev_is_spam: boolean | null;
+  jev_scored_at: string | null;
   site_slug: string | null;
 }
 

@@ -120,6 +120,27 @@ function mapBooking(doc: Doc<"bookings">, site?: Doc<"sites">) {
         }
       : null,
     intent: doc.intent ?? null,
+    jev: doc.jev
+      ? {
+          hotness: doc.jev.hotness ?? null,
+          hotness_confidence: doc.jev.hotnessConfidence ?? null,
+          urgency: doc.jev.urgency ?? null,
+          urgency_confidence: doc.jev.urgencyConfidence ?? null,
+          is_spam_or_bot: doc.jev.isSpamOrBot ?? null,
+          is_vendor_offer: doc.jev.isVendorOffer ?? null,
+          job_fit: doc.jev.jobFit ?? null,
+          value_band: doc.jev.valueBand ?? null,
+          value_band_confidence: doc.jev.valueBandConfidence ?? null,
+          recoverability: doc.jev.recoverability ?? null,
+          recoverability_confidence: doc.jev.recoverabilityConfidence ?? null,
+          best_channel: doc.jev.bestChannel ?? null,
+          best_channel_confidence: doc.jev.bestChannelConfidence ?? null,
+          is_junk: doc.jev.isJunk ?? null,
+          is_hot: doc.jev.isHot ?? null,
+          model: doc.jev.model ?? null,
+          scored_at: new Date(doc.jev.scoredAt).toISOString(),
+        }
+      : null,
     telegram_notified_at: doc.telegramNotifiedAt
       ? new Date(doc.telegramNotifiedAt).toISOString()
       : null,
@@ -145,6 +166,8 @@ export const list = query({
   args: {
     includeArchived: v.optional(v.boolean()),
     limit: v.optional(v.number()),
+    /** When set, only bookings for this site slug (avoids over-fetch + client filter). */
+    siteSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -152,18 +175,42 @@ export const list = query({
 
     const includeArchived = args.includeArchived === true;
     const limit = Math.min(Math.max(Math.floor(args.limit ?? 200), 1), 500);
+
+    let siteFilterId: Id<"sites"> | null = null;
+    if (args.siteSlug?.trim()) {
+      const site = await ctx.db
+        .query("sites")
+        .withIndex("by_slug", (q) => q.eq("slug", args.siteSlug!.trim()))
+        .unique();
+      if (!site) return [];
+      siteFilterId = site._id;
+    }
+
     // Filter archived/active *before* the cap so the Archived tab is never
     // truncated by a large active set (and vice versa).
-    const filtered = await ctx.db
-      .query("bookings")
-      .withIndex("by_created")
-      .order("desc")
-      .filter((q) =>
-        includeArchived
-          ? q.neq(q.field("archivedAt"), undefined)
-          : q.eq(q.field("archivedAt"), undefined),
-      )
-      .take(limit);
+    const filtered = siteFilterId
+      ? (
+          await ctx.db
+            .query("bookings")
+            .withIndex("by_site", (q) => q.eq("siteId", siteFilterId!))
+            .order("desc")
+            .filter((q) =>
+              includeArchived
+                ? q.neq(q.field("archivedAt"), undefined)
+                : q.eq(q.field("archivedAt"), undefined),
+            )
+            .take(limit)
+        ).sort((a, b) => b.createdAt - a.createdAt)
+      : await ctx.db
+          .query("bookings")
+          .withIndex("by_created")
+          .order("desc")
+          .filter((q) =>
+            includeArchived
+              ? q.neq(q.field("archivedAt"), undefined)
+              : q.eq(q.field("archivedAt"), undefined),
+          )
+          .take(limit);
 
     const siteIds = [...new Set(filtered.map((b) => b.siteId))];
     const siteEntries = await Promise.all(
@@ -497,17 +544,11 @@ export const createPublic = mutation({
       updatedAt: now,
     });
 
+    // Jev scores first (async), then push/Telegram — never on the marketing HTTP path.
     await ctx.scheduler.runAfter(
       0,
-      internal.pushActions.notifyNewBookingInternal,
-      {
-        siteSlug: args.siteSlug,
-        customerName: args.customerName,
-        serviceType: args.serviceType,
-        bookingId: id,
-        intent: args.intent,
-        kind: args.intent === "quote" ? "quote" : "book",
-      }
+      internal.jevActions.scoreBookingAndNotifyInternal,
+      { bookingId: id }
     );
 
     await ctx.scheduler.runAfter(
@@ -539,29 +580,6 @@ export const createPublic = mutation({
         service_type: args.serviceType,
         preferred_date: args.preferredDate,
         bookingId: id,
-      }
-    );
-
-    // Telegram is best-effort and async — never on the marketing-site HTTP path.
-    await ctx.scheduler.runAfter(
-      0,
-      internal.telegramActions.notifyNewBookingInternal,
-      {
-        siteSlug: args.siteSlug,
-        customerName: args.customerName,
-        email: args.email,
-        phone: args.phone,
-        address: args.address,
-        serviceType: args.serviceType,
-        preferredDate: args.preferredDate,
-        preferredTime: args.preferredTime,
-        notes: args.notes,
-        intent: args.intent,
-        quoteEstimate: args.quote?.estimate,
-        quoteCurrency: args.quote?.currency,
-        quoteFrequency: args.quote?.frequency,
-        bookingId: id,
-        kind: args.intent === "quote" ? "quote" : "book",
       }
     );
 

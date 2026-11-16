@@ -1056,11 +1056,18 @@ public actor ConvexAPIService {
         }
     }
     
-    public func fetchEmailThreads(mailboxId: String) async throws -> [EmailThread] {
+    /// Pass `nil` mailboxId for All mailboxes (merged recent threads).
+    public func fetchEmailThreads(mailboxId: String?, hideSpam: Bool = true) async throws -> [EmailThread] {
         if useMockData {
-            return MockDataService.shared.sampleEmailThreads.filter { $0.mailboxId == mailboxId }
+            let all = MockDataService.shared.sampleEmailThreads
+            guard let mailboxId else { return all }
+            return all.filter { $0.mailboxId == mailboxId }
         }
-        let raw = listValue(try await query("email:listThreads", args: ["mailboxId": mailboxId]))
+        var args: [String: Any] = ["hideSpam": hideSpam]
+        if let mailboxId {
+            args["mailboxId"] = mailboxId
+        }
+        let raw = listValue(try await query("email:listThreads", args: args))
         return await Task.detached(priority: .userInitiated) {
             raw.compactMap { t -> EmailThread? in
                 guard let id = t["id"] as? String,

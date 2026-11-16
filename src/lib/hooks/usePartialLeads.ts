@@ -1,23 +1,39 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { PartialLeadWithSite, Site } from "@/lib/types";
 import { useConnectionState } from "@/lib/hooks/useConnectionState";
 
-export function usePartialLeads(siteSlug?: string) {
+export function usePartialLeads(
+  siteSlug?: string,
+  options?: { mode?: "abandoned" | "recovery" }
+) {
   const { isLoading: authLoading, isAuthenticated } = useConvexAuth();
   const connectionState = useConnectionState();
-  const leadsRaw = useQuery(
+  const mode = options?.mode ?? "abandoned";
+
+  const abandonedRaw = useQuery(
     api.partialLeads.list,
-    isAuthenticated
+    isAuthenticated && mode === "abandoned"
       ? siteSlug
         ? { siteSlug }
         : {}
       : "skip"
   );
+  const recoveryRaw = useQuery(
+    api.partialLeads.listRecovery,
+    isAuthenticated && mode === "recovery"
+      ? siteSlug
+        ? { siteSlug, hideJunk: true }
+        : { hideJunk: true }
+      : "skip"
+  );
   const sitesRaw = useQuery(api.sites.list, isAuthenticated ? {} : "skip");
+  const enqueueScoring = useMutation(api.partialLeads.enqueueRecoveryScoring);
+
+  const leadsRaw = mode === "recovery" ? recoveryRaw : abandonedRaw;
 
   const loading =
     authLoading ||
@@ -32,5 +48,8 @@ export function usePartialLeads(siteSlug?: string) {
     loading,
     connectionState,
     refresh: async () => {},
+    enqueueRecoveryScoring: async () => {
+      await enqueueScoring({});
+    },
   };
 }

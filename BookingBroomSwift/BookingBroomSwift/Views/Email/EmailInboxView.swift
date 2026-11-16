@@ -153,7 +153,9 @@ public struct EmailInboxView: View {
                 .font(AppTypography.pageTitle)
             Text(
                 emailVM.searchText.isEmpty
-                    ? "Synced SpaceMail threads for this mailbox will appear here."
+                    ? (emailVM.viewingAllMailboxes
+                        ? "Synced SpaceMail threads across your mailboxes will appear here."
+                        : "Synced SpaceMail threads for this mailbox will appear here.")
                     : "Try a different search term."
             )
             .font(AppTypography.meta)

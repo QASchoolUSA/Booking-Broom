@@ -77,8 +77,11 @@ export function EmailThreadList({
                 </span>
               </div>
               <p className="truncate text-xs text-muted-foreground">
+                {thread.site_name ? `${thread.site_name} · ` : ""}
                 {fromLabel}
                 {unread ? ` · ${thread.unread_count} unread` : ""}
+                {thread.jev_bucket === "reply_today" ? " · Reply today" : ""}
+                {thread.jev_is_spam ? " · Spam" : ""}
               </p>
               <p className="mt-0.5 flex items-center gap-1 truncate text-sm text-foreground/75">
                 {thread.last_snippet.includes("📎") && (

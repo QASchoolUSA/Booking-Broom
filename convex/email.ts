@@ -5,6 +5,7 @@ import {
   internalMutation,
 } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { SPACEMAIL_DEFAULTS, clampMessageBodies } from "./lib/spacemail";
 
@@ -52,6 +53,13 @@ function mapThread(
     mailbox_email: mailbox?.email ?? null,
     site_name: site?.name ?? null,
     site_slug: site?.slug ?? null,
+    jev_bucket: doc.jevBucket ?? null,
+    jev_bucket_confidence: doc.jevBucketConfidence ?? null,
+    jev_needs_reply: doc.jevNeedsReply ?? null,
+    jev_is_spam: doc.jevIsSpam ?? null,
+    jev_scored_at: doc.jevScoredAt
+      ? new Date(doc.jevScoredAt).toISOString()
+      : null,
   };
 }
 
@@ -252,10 +260,14 @@ export const listSitesForConnect = query({
 export const listThreads = query({
   args: {
     mailboxId: v.optional(v.id("emailMailboxes")),
+    /** When true (default), hide threads Jev marked as spam/vendor/newsletter. */
+    hideSpam: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
+
+    const hideSpam = args.hideSpam !== false;
 
     let threads: Doc<"emailThreads">[];
     if (args.mailboxId) {
@@ -282,6 +294,10 @@ export const listThreads = query({
       }
       all.sort((a, b) => b.lastMessageAt - a.lastMessageAt);
       threads = all.slice(0, 250);
+    }
+
+    if (hideSpam) {
+      threads = threads.filter((t) => t.jevIsSpam !== true);
     }
 
     const boxes = await ctx.db.query("emailMailboxes").collect();
@@ -977,6 +993,13 @@ export const upsertSyncedMessageInternal = internalMutation({
 
     if (createdThread) {
       // Thread row already has messageCount/unreadCount for this first message.
+      if (args.direction === "in") {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.jevActions.classifyEmailThreadInternal,
+          { threadId: thread._id }
+        );
+      }
       return { messageId: messageDocId, threadId: thread._id, created: true };
     }
 

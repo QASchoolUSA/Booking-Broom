@@ -4,6 +4,7 @@ import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { CalendarBlank, House, MapPin, Phone, User } from "@phosphor-icons/react";
 import type { BookingQuote, PartialLeadWithSite } from "@/lib/types";
 import { SiteBadge } from "@/components/bookings/SiteBadge";
+import { JevBadge } from "@/components/bookings/JevBadge";
 import { formatMoney } from "@/lib/booking-details";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +77,12 @@ export function PartialLeadCard({ lead, onSelect, className }: PartialLeadCardPr
             {lead.intent === "quote" && (
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
                 Quote only
+              </span>
+            )}
+            <JevBadge jev={lead.jev} />
+            {lead.jev?.best_channel && lead.jev.best_channel !== "none" && (
+              <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {lead.jev.best_channel}
               </span>
             )}
             {lead.intent === "book" && (

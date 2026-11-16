@@ -40,7 +40,7 @@ const STATUS_FILTERS: { value: BookingStatus | "all"; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-type ListMode = "active" | "archived" | "abandoned";
+type ListMode = "active" | "archived" | "abandoned" | "recovery";
 
 export function DashboardView({
   siteSlug,
@@ -49,7 +49,9 @@ export function DashboardView({
   emptyDescription,
 }: DashboardViewProps) {
   const [listMode, setListMode] = useState<ListMode>("active");
+  const isLeadMode = listMode === "abandoned" || listMode === "recovery";
   const isAbandoned = listMode === "abandoned";
+  const isRecovery = listMode === "recovery";
 
   const {
     bookings,
@@ -71,7 +73,10 @@ export function DashboardView({
     loading: leadsLoading,
     connectionState: leadsConnection,
     refresh: refreshLeads,
-  } = usePartialLeads(siteSlug);
+    enqueueRecoveryScoring,
+  } = usePartialLeads(siteSlug, {
+    mode: isRecovery ? "recovery" : "abandoned",
+  });
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "all">("all");
@@ -105,7 +110,19 @@ export function DashboardView({
       });
     }
 
-    return result;
+    // Hot clean leads first; decisive junk last; otherwise keep created order.
+    return [...result].sort((a, b) => {
+      const aJunk = a.jev?.is_junk === true ? 1 : 0;
+      const bJunk = b.jev?.is_junk === true ? 1 : 0;
+      if (aJunk !== bJunk) return aJunk - bJunk;
+      const aHot = a.jev?.is_hot === true ? 1 : 0;
+      const bHot = b.jev?.is_hot === true ? 1 : 0;
+      if (aHot !== bHot) return bHot - aHot;
+      const aScore = a.jev?.hotness ?? 0;
+      const bScore = b.jev?.hotness ?? 0;
+      if (aScore !== bScore) return bScore - aScore;
+      return 0;
+    });
   }, [bookings, search, statusFilter]);
 
   const filteredLeads = useMemo(() => {
@@ -124,24 +141,33 @@ export function DashboardView({
 
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
-    const source = isAbandoned ? leads : allBookings;
+    const source = isLeadMode ? leads : allBookings;
     source.forEach((row) => {
       const slug = row.site?.slug;
       if (slug) map[slug] = (map[slug] ?? 0) + 1;
     });
     return map;
-  }, [allBookings, leads, isAbandoned]);
+  }, [allBookings, leads, isLeadMode]);
 
   const newCount = bookings.filter((b) => b.status === "new").length;
-  const activeConnection = isAbandoned ? leadsConnection : connectionState;
-  const activeRefresh = isAbandoned ? refreshLeads : refresh;
-  const activeLoading = isAbandoned ? leadsLoading : loading;
-  const totalCount = isAbandoned ? leads.length : allBookings.length;
+  const activeConnection = isLeadMode ? leadsConnection : connectionState;
+  const activeRefresh = isLeadMode
+    ? async () => {
+        if (isRecovery) await enqueueRecoveryScoring();
+        await refreshLeads();
+      }
+    : refresh;
+  const activeLoading = isLeadMode ? leadsLoading : loading;
+  const totalCount = isLeadMode ? leads.length : allBookings.length;
 
   useShellPage({
     connectionState: activeConnection,
     onRefresh: activeRefresh,
-    pageTitle: isAbandoned ? "Abandoned leads" : title,
+    pageTitle: isRecovery
+      ? "Recovery"
+      : isAbandoned
+        ? "Abandoned leads"
+        : title,
     sidebar: (
       <SiteSidebar
         sites={sites}
@@ -157,16 +183,24 @@ export function DashboardView({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="hidden min-w-0 md:block">
             <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              {isAbandoned ? "Abandoned leads" : title}
+              {isRecovery
+                ? "Recovery"
+                : isAbandoned
+                  ? "Abandoned leads"
+                  : title}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {isAbandoned
+              {isRecovery
                 ? leads.length > 0
-                  ? `${leads.length} incomplete quote${leads.length === 1 ? "" : "s"} with contact info`
-                  : "No abandoned leads yet — they appear when someone enters email or phone and leaves"
-                : newCount > 0
-                  ? `${newCount} new booking${newCount === 1 ? "" : "s"} need attention`
-                  : "All caught up — no new bookings"}
+                  ? `${leads.length} lead${leads.length === 1 ? "" : "s"} ranked to call or text`
+                  : "No recovery queue yet — refresh to score abandoned leads"
+                : isAbandoned
+                  ? leads.length > 0
+                    ? `${leads.length} incomplete quote${leads.length === 1 ? "" : "s"} with contact info`
+                    : "No abandoned leads yet — they appear when someone enters email or phone and leaves"
+                  : newCount > 0
+                    ? `${newCount} new booking${newCount === 1 ? "" : "s"} need attention`
+                    : "All caught up — no new bookings"}
             </p>
           </div>
           <div className="flex items-center gap-2 sm:shrink-0">
@@ -179,16 +213,23 @@ export function DashboardView({
               <ArrowsClockwise size={16} />
               Refresh
             </Button>
-            {!isAbandoned && (
+            {!isLeadMode && (
               <DevSeedTool sites={sites} onCreated={refresh} />
             )}
           </div>
         </div>
 
-        {!isAbandoned && <StatsCards bookings={bookings} />}
+        {!isLeadMode && <StatsCards bookings={bookings} />}
 
         <div className="flex flex-wrap gap-2">
-          {(["active", "archived", "abandoned"] as const).map((mode) => (
+          {(
+            [
+              "active",
+              "archived",
+              "abandoned",
+              "recovery",
+            ] as const
+          ).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -201,11 +242,13 @@ export function DashboardView({
               )}
             >
               {mode}
-              {mode === "abandoned" && leads.length > 0 && (
-                <span className="ml-1.5 tabular-nums opacity-80">
-                  {leads.length}
-                </span>
-              )}
+              {(mode === "abandoned" || mode === "recovery") &&
+                listMode === mode &&
+                leads.length > 0 && (
+                  <span className="ml-1.5 tabular-nums opacity-80">
+                    {leads.length}
+                  </span>
+                )}
             </button>
           ))}
         </div>
@@ -232,7 +275,7 @@ export function DashboardView({
             />
           </div>
 
-          {!isAbandoned && (
+          {!isLeadMode && (
             <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
               {STATUS_FILTERS.map(({ value, label }) => {
                 const count =
@@ -270,7 +313,7 @@ export function DashboardView({
           )}
         </div>
 
-        {error && !isAbandoned && (
+        {error && !isLeadMode && (
           <div
             role="alert"
             className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200"
@@ -292,7 +335,7 @@ export function DashboardView({
           </div>
         )}
 
-        {isAbandoned ? (
+        {isLeadMode ? (
           activeLoading ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -305,12 +348,18 @@ export function DashboardView({
                 <Broom size={28} weight="duotone" />
               </div>
               <h3 className="text-base font-semibold">
-                {search ? "No matching abandoned leads" : "No abandoned leads"}
+                {search
+                  ? "No matching leads"
+                  : isRecovery
+                    ? "No recovery leads yet"
+                    : "No abandoned leads"}
               </h3>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
                 {search
                   ? "Try adjusting your search."
-                  : "When someone enters an email or phone in a quote/booking form and leaves, their snapshot shows up here."}
+                  : isRecovery
+                    ? "Ranked abandoned quotes with contact info appear here. Refresh queues Jev scoring for unscored leads. Spam and vendor pitches stay hidden."
+                    : "When someone enters an email or phone in a quote/booking form and leaves, their snapshot shows up here."}
               </p>
             </div>
           ) : (
