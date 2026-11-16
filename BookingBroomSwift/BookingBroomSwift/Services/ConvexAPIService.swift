@@ -1057,15 +1057,21 @@ public actor ConvexAPIService {
     }
     
     /// Pass `nil` mailboxId for All mailboxes (merged recent threads).
+    /// Only send `hideSpam: false` when showing junk — omitting it keeps older
+    /// Convex deployments working (unknown args are rejected) and lets new
+    /// deployments default to hiding spam.
     public func fetchEmailThreads(mailboxId: String?, hideSpam: Bool = true) async throws -> [EmailThread] {
         if useMockData {
             let all = MockDataService.shared.sampleEmailThreads
             guard let mailboxId else { return all }
             return all.filter { $0.mailboxId == mailboxId }
         }
-        var args: [String: Any] = ["hideSpam": hideSpam]
+        var args: [String: Any] = [:]
         if let mailboxId {
             args["mailboxId"] = mailboxId
+        }
+        if !hideSpam {
+            args["hideSpam"] = false
         }
         let raw = listValue(try await query("email:listThreads", args: args))
         return await Task.detached(priority: .userInitiated) {

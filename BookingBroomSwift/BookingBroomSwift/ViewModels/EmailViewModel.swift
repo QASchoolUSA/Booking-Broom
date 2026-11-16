@@ -174,16 +174,16 @@ public final class EmailViewModel {
             let stillAll = mailboxId == nil && viewingAllMailboxes
             let stillOne = mailboxId != nil && selectedMailbox?.id == mailboxId && !viewingAllMailboxes
             guard generation == threadsGeneration, stillAll || stillOne else { return }
-            if tList != threads { threads = tList }
+            // Always assign so a successful empty→non-empty (and retries) refresh the UI.
+            threads = tList
+            syncError = nil
             threadsLoadedAt[mailboxId ?? "__all__"] = Date()
             lastLoadedAt = Date()
         } catch let error as ConvexError where error.isCancelled {
             // superseded
         } catch {
             guard generation == threadsGeneration else { return }
-            if threads.isEmpty {
-                syncError = error.localizedDescription
-            }
+            syncError = error.localizedDescription
         }
         if generation == threadsGeneration {
             isLoading = false
@@ -291,19 +291,36 @@ public final class EmailViewModel {
     }
     
     /// IMAP pull (external) then reload. Toolbar / ⌘R only — never pull-to-refresh.
+    /// Works for a single mailbox or All (syncs each connected box, then reloads).
     public func syncCurrentMailbox() {
-        guard let mb = selectedMailbox, !isSyncing else { return }
+        guard !isSyncing else { return }
+        let mailboxIds: [String]
+        if viewingAllMailboxes {
+            mailboxIds = mailboxes.map(\.id)
+        } else if let mb = selectedMailbox {
+            mailboxIds = [mb.id]
+        } else {
+            return
+        }
+        guard !mailboxIds.isEmpty else { return }
+
         isSyncing = true
         syncError = nil
         Task {
-            do {
-                try await ConvexAPIService.shared.syncEmailMailbox(mailboxId: mb.id)
-            } catch {
-                self.syncError = error.localizedDescription
+            var lastError: String?
+            for id in mailboxIds {
+                do {
+                    try await ConvexAPIService.shared.syncEmailMailbox(mailboxId: id)
+                } catch {
+                    lastError = error.localizedDescription
+                }
             }
-            // Refresh threads for the current mailbox only (avoid re-select storm).
+            if let lastError {
+                self.syncError = lastError
+            }
             self.messagesLoadedAt = [:]
-            await self.loadThreadsAndWait(mailboxId: mb.id)
+            let reloadId: String? = self.viewingAllMailboxes ? nil : mailboxIds.first
+            await self.loadThreadsAndWait(mailboxId: reloadId)
             if let active = self.activeThread {
                 self.loadMessages(threadId: active.id, force: true)
             }
